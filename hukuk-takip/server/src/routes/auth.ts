@@ -77,6 +77,15 @@ function setTokenCookies(res: import('express').Response, accessToken: string, r
   })
 }
 
+function getRefreshTokenFromRequest(req: import('express').Request) {
+  const refreshTokenFromBody =
+    typeof req.body?.refreshToken === 'string' && req.body.refreshToken.trim().length > 0
+      ? req.body.refreshToken.trim()
+      : null
+
+  return refreshTokenFromBody || req.cookies?.refresh_token || null
+}
+
 // ─── POST /api/auth/login ─────────────────────────────────────────────────────
 
 router.post('/login', validate(loginSchema), async (req, res) => {
@@ -111,6 +120,8 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   setTokenCookies(res, accessToken, refreshToken)
 
   res.json({
+    accessToken,
+    refreshToken,
     user: {
       id: user.id,
       email: user.email,
@@ -124,7 +135,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
 // ─── POST /api/auth/refresh ───────────────────────────────────────────────────
 
 router.post('/refresh', async (req, res) => {
-  const refreshToken = req.cookies?.refresh_token
+  const refreshToken = getRefreshTokenFromRequest(req)
 
   if (!refreshToken) {
     res.status(401).json({ error: 'Oturum süresi doldu.' })
@@ -153,7 +164,11 @@ router.post('/refresh', async (req, res) => {
 
     setTokenCookies(res, newAccessToken, newRefreshToken)
 
-    res.json({ message: 'Token yenilendi.' })
+    res.json({
+      message: 'Token yenilendi.',
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    })
   } catch {
     res.status(401).json({ error: 'Oturum süresi doldu. Tekrar giriş yapın.' })
     return

@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express'
+import { type NextFunction, type Request, type Response } from 'express'
 import jwt from 'jsonwebtoken'
 
 export interface JwtPayload {
@@ -6,7 +6,6 @@ export interface JwtPayload {
   email: string
 }
 
-// Express Request'e user ekle
 declare global {
   namespace Express {
     interface Request {
@@ -15,11 +14,21 @@ declare global {
   }
 }
 
+function extractBearerToken(req: Request) {
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null
+  }
+
+  const token = authHeader.slice('Bearer '.length).trim()
+  return token.length > 0 ? token : null
+}
+
 export function authenticate(req: Request, res: Response, next: NextFunction) {
-  const token = req.cookies?.access_token
+  const token = extractBearerToken(req) || req.cookies?.access_token
 
   if (!token) {
-    res.status(401).json({ error: 'Oturum açmanız gerekiyor.' })
+    res.status(401).json({ error: 'Oturum acmaniz gerekiyor.' })
     return
   }
 
@@ -28,7 +37,6 @@ export function authenticate(req: Request, res: Response, next: NextFunction) {
     req.user = payload
     next()
   } catch {
-    res.status(401).json({ error: 'Oturum süresi doldu. Tekrar giriş yapın.' })
-    return
+    res.status(401).json({ error: 'Oturum suresi doldu. Tekrar giris yapin.' })
   }
 }

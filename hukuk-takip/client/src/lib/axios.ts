@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { toast } from 'sonner'
+import { clearAuthTokens, getAccessToken, getRefreshToken, setAuthTokens } from './authTokens'
 
 const rawApiBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
 const apiBaseUrl =
@@ -22,6 +23,11 @@ export const api = axios.create({
 api.interceptors.request.use((config) => {
   if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
     delete config.headers['Content-Type']
+  }
+
+  const accessToken = getAccessToken()
+  if (accessToken) {
+    config.headers.Authorization = `Bearer ${accessToken}`
   }
 
   return config
@@ -63,11 +69,23 @@ api.interceptors.response.use(
       isRefreshing = true
 
       try {
-        await axios.post(buildApiUrl('/auth/refresh'), {}, { withCredentials: true })
+        const refreshToken = getRefreshToken()
+        const refreshResponse = await axios.post(
+          buildApiUrl('/auth/refresh'),
+          { refreshToken },
+          { withCredentials: true }
+        )
+        if (refreshResponse.data?.accessToken || refreshResponse.data?.refreshToken) {
+          setAuthTokens({
+            accessToken: refreshResponse.data.accessToken,
+            refreshToken: refreshResponse.data.refreshToken,
+          })
+        }
         processQueue(null)
         return api(originalRequest)
       } catch (refreshError) {
         processQueue(refreshError)
+        clearAuthTokens()
         if (window.location.pathname !== '/login') {
           toast.error('Oturum suresi doldu. Tekrar giris yapin.')
           window.location.href = '/login'

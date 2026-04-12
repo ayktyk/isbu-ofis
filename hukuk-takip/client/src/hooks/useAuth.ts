@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '@/lib/axios'
 import { toast } from 'sonner'
 import type { LoginInput } from '@hukuk-takip/shared'
+import { clearAuthTokens, setAuthTokens } from '@/lib/authTokens'
 
 export function useAuth() {
   const { data: user, isLoading, isError } = useQuery({
@@ -25,6 +26,10 @@ export function useLogin() {
   return useMutation({
     mutationFn: (data: LoginInput) => api.post('/auth/login', data),
     onSuccess: (res) => {
+      setAuthTokens({
+        accessToken: res.data.accessToken,
+        refreshToken: res.data.refreshToken,
+      })
       queryClient.setQueryData(['auth', 'me'], res.data.user)
       navigate('/dashboard', { replace: true })
     },
@@ -47,6 +52,7 @@ export function useLogout() {
   return useMutation({
     mutationFn: () => api.post('/auth/logout'),
     onSuccess: () => {
+      clearAuthTokens()
       queryClient.clear()
       navigate('/login', { replace: true })
     },
