@@ -1,83 +1,100 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { PageHeader } from '@/components/shared/PageHeader'
 import { formatCurrency } from '@/lib/utils'
 import {
-  Home,
-  Car,
-  Banknote,
-  Package,
+  Users,
   Plus,
   Trash2,
-  ChevronDown,
-  Users,
-  Shield,
-  RotateCcw,
   Calculator,
-  MapPin,
-  X,
+  Info,
+  ChevronDown,
+  ChevronRight,
+  RotateCcw,
+  Scale,
+  Shield,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-type AssetType = 'nakit' | 'tasinmaz' | 'arac' | 'diger'
-type TasinmazType = 'arsa' | 'arazi' | 'konut' | 'isyeri' | 'tarla'
-
-interface AssetBase {
+interface Child {
   id: string
-  type: AssetType
-  value: number
-  divisible: boolean
+  name: string
+  alive: boolean
+  hasChildren: boolean
+  grandchildren: Grandchild[]
 }
 
-interface NakitAsset extends AssetBase {
-  type: 'nakit'
+interface Grandchild {
+  id: string
+  name: string
 }
 
-interface TasinmazAsset extends AssetBase {
-  type: 'tasinmaz'
-  ada: string
-  parsel: string
-  metrekare: number
-  tasinmazType: TasinmazType
+interface ParentSide {
+  alive: boolean
+  descendants: SiblingOrDescendant[]
 }
 
-interface AracAsset extends AssetBase {
-  type: 'arac'
-  plaka: string
-  markaModel: string
+interface SiblingOrDescendant {
+  id: string
+  name: string
+  alive: boolean
+  children: NephewNiece[]
 }
 
-interface DigerAsset extends AssetBase {
-  type: 'diger'
-  description: string
+interface NephewNiece {
+  id: string
+  name: string
 }
 
-type Asset = NakitAsset | TasinmazAsset | AracAsset | DigerAsset
+interface GrandparentPerson {
+  alive: boolean
+  descendants: AuntUncle[]
+}
 
-interface HeirState {
-  spouse: boolean
-  children: string[]
-  mother: boolean
-  father: boolean
+interface AuntUncle {
+  id: string
+  name: string
+  alive: boolean
+  children: Cousin[]
+}
+
+interface Cousin {
+  id: string
+  name: string
+}
+
+interface GrandparentSide {
+  grandmother: GrandparentPerson
+  grandfather: GrandparentPerson
+}
+
+interface FormState {
+  deceasedName: string
+  estateValue: number
+  debts: number
+  hasSpouse: boolean
+  children: Child[]
+  mother: ParentSide
+  father: ParentSide
+  maternalGrandparents: GrandparentSide
+  paternalGrandparents: GrandparentSide
 }
 
 interface ShareResult {
   name: string
   zumre: string
   percentage: number
-  amount: number
   fraction: string
+  amount: number
 }
 
-interface ProtectedShare {
+interface ProtectedShareResult {
   name: string
-  legalShare: number
   legalFraction: string
+  legalAmount: number
   protectedRatio: string
-  protectedShare: number
-  protectedFraction: string
   protectedAmount: number
 }
 
@@ -91,17 +108,23 @@ function gcd(a: number, b: number): number {
   return b === 0 ? a : gcd(b, a % b)
 }
 
-function toFraction(percentage: number): string {
-  if (percentage === 0) return '0'
-  if (percentage === 100) return '1/1'
+function toFraction(numerator: number, denominator: number): string {
+  if (numerator === 0) return '0'
+  if (denominator === 0) return '0'
+  const g = gcd(Math.round(numerator), Math.round(denominator))
+  const n = Math.round(numerator) / g
+  const d = Math.round(denominator) / g
+  if (d === 1) return `${n}`
+  return `${n}/${d}`
+}
 
-  const precision = 1000
-  let numerator = Math.round(percentage * precision)
-  let denominator = 100 * precision
-  const g = gcd(numerator, denominator)
-  numerator /= g
-  denominator /= g
-  return `${numerator}/${denominator}`
+function percentageToFraction(pct: number): string {
+  if (pct === 0) return '0'
+  if (pct === 100) return '1/1'
+  const precision = 10000
+  const num = Math.round(pct * precision)
+  const den = 100 * precision
+  return toFraction(num, den)
 }
 
 // ---------------------------------------------------------------------------
@@ -109,1096 +132,1878 @@ function toFraction(percentage: number): string {
 // ---------------------------------------------------------------------------
 
 let _idCounter = 0
-function uniqueId(): string {
+function uid(): string {
   _idCounter += 1
-  return `asset_${Date.now()}_${_idCounter}`
+  return `heir_${Date.now()}_${_idCounter}`
 }
 
 // ---------------------------------------------------------------------------
-// Share calculation (unchanged logic, added fraction)
+// Initial state factory
 // ---------------------------------------------------------------------------
 
-function calculateShares(heirs: HeirState, totalAmount: number): ShareResult[] {
-  const results: ShareResult[] = []
-  const hasChildren = heirs.children.length > 0
-  const hasParents = heirs.mother || heirs.father
-  const hasSpouse = heirs.spouse
+function createInitialState(): FormState {
+  return {
+    deceasedName: '',
+    estateValue: 0,
+    debts: 0,
+    hasSpouse: false,
+    children: [],
+    mother: { alive: false, descendants: [] },
+    father: { alive: false, descendants: [] },
+    maternalGrandparents: {
+      grandmother: { alive: false, descendants: [] },
+      grandfather: { alive: false, descendants: [] },
+    },
+    paternalGrandparents: {
+      grandmother: { alive: false, descendants: [] },
+      grandfather: { alive: false, descendants: [] },
+    },
+  }
+}
 
-  if (!hasSpouse && !hasChildren && !hasParents) {
-    results.push({
+// ---------------------------------------------------------------------------
+// Share calculation — TMK m.495-506
+// ---------------------------------------------------------------------------
+
+function calculateInheritanceShares(form: FormState): {
+  shares: ShareResult[]
+  protectedShares: ProtectedShareResult[]
+  activeZumre: number
+  netEstate: number
+  totalProtected: number
+  disposable: number
+} {
+  const netEstate = Math.max(0, form.estateValue - form.debts)
+  const shares: ShareResult[] = []
+
+  // Determine active zumre
+  const has1stZumre = hasFirstZumreHeirs(form)
+  const has2ndZumre = hasSecondZumreHeirs(form)
+  const has3rdZumre = hasThirdZumreHeirs(form)
+
+  let activeZumre = 0
+  if (has1stZumre) activeZumre = 1
+  else if (has2ndZumre) activeZumre = 2
+  else if (has3rdZumre) activeZumre = 3
+
+  const hasSpouse = form.hasSpouse
+  const noHeirs = activeZumre === 0 && !hasSpouse
+
+  // If nobody at all, estate goes to state (Hazine)
+  if (noHeirs) {
+    shares.push({
       name: 'Hazine (Devlet)',
       zumre: '-',
       percentage: 100,
-      amount: totalAmount,
       fraction: '1/1',
+      amount: netEstate,
     })
-    return results
+    return {
+      shares,
+      protectedShares: [],
+      activeZumre: 0,
+      netEstate,
+      totalProtected: 0,
+      disposable: netEstate,
+    }
   }
 
-  let spouseShare = 0
-  let remainingShare = 100
-
+  // Spouse share (fixed)
+  let spousePct = 0
+  let spouseLabel = ''
   if (hasSpouse) {
-    if (hasChildren) {
-      spouseShare = 25
-    } else if (hasParents) {
-      spouseShare = 50
+    if (activeZumre === 1) {
+      spousePct = 25
+      spouseLabel = '1. Zumre ile'
+    } else if (activeZumre === 2) {
+      spousePct = 50
+      spouseLabel = '2. Zumre ile'
+    } else if (activeZumre === 3) {
+      spousePct = 75
+      spouseLabel = '3. Zumre ile'
     } else {
-      spouseShare = 100
+      // No zumre heir at all, spouse takes everything
+      spousePct = 100
+      spouseLabel = 'Tek basina'
     }
-    remainingShare = 100 - spouseShare
-    results.push({
+    shares.push({
       name: 'Sag Kalan Es',
-      zumre: hasChildren ? '1. Zumre ile' : hasParents ? '2. Zumre ile' : 'Tek basina',
-      percentage: spouseShare,
-      amount: (totalAmount * spouseShare) / 100,
-      fraction: toFraction(spouseShare),
+      zumre: spouseLabel,
+      percentage: spousePct,
+      fraction: percentageToFraction(spousePct),
+      amount: (netEstate * spousePct) / 100,
     })
   }
 
-  if (hasChildren) {
-    const childShare = remainingShare / heirs.children.length
-    for (const child of heirs.children) {
-      results.push({
-        name: child,
-        zumre: '1. Zumre (Altsoy)',
-        percentage: childShare,
-        amount: (totalAmount * childShare) / 100,
-        fraction: toFraction(childShare),
-      })
-    }
-    return results
+  const remainingPct = 100 - spousePct
+
+  // Distribute remaining among active zumre
+  if (activeZumre === 1) {
+    distributeFirstZumre(form, shares, remainingPct, netEstate)
+  } else if (activeZumre === 2) {
+    distributeSecondZumre(form, shares, remainingPct, netEstate)
+  } else if (activeZumre === 3) {
+    distributeThirdZumre(form, shares, remainingPct, netEstate)
   }
 
-  if (hasParents) {
-    if (heirs.mother && heirs.father) {
-      const parentShare = remainingShare / 2
-      results.push({
+  // Protected shares (sakli pay) calculation
+  const protectedShares = calculateProtectedShares(
+    shares,
+    activeZumre,
+    hasSpouse,
+    netEstate
+  )
+  const totalProtected = protectedShares.reduce((s, p) => s + p.protectedAmount, 0)
+  const disposable = Math.max(0, netEstate - totalProtected)
+
+  return {
+    shares,
+    protectedShares,
+    activeZumre,
+    netEstate,
+    totalProtected,
+    disposable,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Zumre detection helpers
+// ---------------------------------------------------------------------------
+
+function hasFirstZumreHeirs(form: FormState): boolean {
+  for (const child of form.children) {
+    if (child.alive) return true
+    if (child.hasChildren && child.grandchildren.length > 0) return true
+  }
+  return false
+}
+
+function hasSecondZumreHeirs(form: FormState): boolean {
+  if (form.mother.alive) return true
+  if (form.father.alive) return true
+  // Check mother's descendants (halefiyat)
+  if (form.mother.descendants.some((d) => d.alive || d.children.length > 0))
+    return true
+  // Check father's descendants (halefiyat)
+  if (form.father.descendants.some((d) => d.alive || d.children.length > 0))
+    return true
+  return false
+}
+
+function hasThirdZumreHeirs(form: FormState): boolean {
+  const sides = [form.maternalGrandparents, form.paternalGrandparents]
+  for (const side of sides) {
+    for (const gp of [side.grandmother, side.grandfather]) {
+      if (gp.alive) return true
+      if (gp.descendants.some((d) => d.alive || d.children.length > 0))
+        return true
+    }
+  }
+  return false
+}
+
+// ---------------------------------------------------------------------------
+// 1. Zumre distribution (children + halefiyat to grandchildren)
+// ---------------------------------------------------------------------------
+
+function distributeFirstZumre(
+  form: FormState,
+  shares: ShareResult[],
+  remainingPct: number,
+  netEstate: number
+) {
+  const childCount = form.children.length
+  if (childCount === 0) return
+
+  const perChildPct = remainingPct / childCount
+
+  for (const child of form.children) {
+    if (child.alive) {
+      shares.push({
+        name: child.name || 'Cocuk',
+        zumre: '1. Zumre (Altsoy)',
+        percentage: perChildPct,
+        fraction: percentageToFraction(perChildPct),
+        amount: (netEstate * perChildPct) / 100,
+      })
+    } else if (child.hasChildren && child.grandchildren.length > 0) {
+      // Halefiyat: dead child's share passes to their children
+      const gcCount = child.grandchildren.length
+      const perGcPct = perChildPct / gcCount
+      for (const gc of child.grandchildren) {
+        shares.push({
+          name: gc.name || 'Torun',
+          zumre: '1. Zumre (Halefiyat)',
+          percentage: perGcPct,
+          fraction: percentageToFraction(perGcPct),
+          amount: (netEstate * perGcPct) / 100,
+        })
+      }
+    }
+    // If child is dead with no grandchildren, their share is NOT redistributed
+    // to other children - it simply disappears from that branch.
+    // However, the per-child calculation already accounts for total child count,
+    // so we need to handle this correctly.
+  }
+
+  // Recalculate: if some children are dead with no descendants,
+  // their share should go to other 1st zumre heirs
+  const effectiveHeirs = form.children.filter(
+    (c) => c.alive || (c.hasChildren && c.grandchildren.length > 0)
+  )
+  if (effectiveHeirs.length < childCount && effectiveHeirs.length > 0) {
+    // Need to recalculate - remove previously added and redo
+    const nonZumreShares = shares.filter((s) => s.zumre !== '1. Zumre (Altsoy)' && s.zumre !== '1. Zumre (Halefiyat)')
+    shares.length = 0
+    shares.push(...nonZumreShares)
+
+    const perEffectiveChildPct = remainingPct / effectiveHeirs.length
+    for (const child of effectiveHeirs) {
+      if (child.alive) {
+        shares.push({
+          name: child.name || 'Cocuk',
+          zumre: '1. Zumre (Altsoy)',
+          percentage: perEffectiveChildPct,
+          fraction: percentageToFraction(perEffectiveChildPct),
+          amount: (netEstate * perEffectiveChildPct) / 100,
+        })
+      } else {
+        const gcCount = child.grandchildren.length
+        const perGcPct = perEffectiveChildPct / gcCount
+        for (const gc of child.grandchildren) {
+          shares.push({
+            name: gc.name || 'Torun',
+            zumre: '1. Zumre (Halefiyat)',
+            percentage: perGcPct,
+            fraction: percentageToFraction(perGcPct),
+            amount: (netEstate * perGcPct) / 100,
+          })
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 2. Zumre distribution (parents + halefiyat to siblings)
+// ---------------------------------------------------------------------------
+
+function distributeSecondZumre(
+  form: FormState,
+  shares: ShareResult[],
+  remainingPct: number,
+  netEstate: number
+) {
+  const motherAlive = form.mother.alive
+  const fatherAlive = form.father.alive
+  const motherHasDescendants = form.mother.descendants.some(
+    (d) => d.alive || d.children.length > 0
+  )
+  const fatherHasDescendants = form.father.descendants.some(
+    (d) => d.alive || d.children.length > 0
+  )
+
+  // Each parent gets half. If one parent is dead with no descendants,
+  // their share goes to the other parent (or other parent's line)
+  let motherPct = remainingPct / 2
+  let fatherPct = remainingPct / 2
+
+  // If mother is dead AND has no descendants at all → her share goes to father's side
+  if (!motherAlive && !motherHasDescendants) {
+    fatherPct = remainingPct
+    motherPct = 0
+  }
+  // If father is dead AND has no descendants at all → his share goes to mother's side
+  if (!fatherAlive && !fatherHasDescendants) {
+    motherPct = remainingPct
+    fatherPct = 0
+  }
+  // Edge: both dead with no descendants on either side → should not reach here
+  // (hasSecondZumreHeirs would be false)
+
+  // Distribute mother's side
+  if (motherPct > 0) {
+    if (motherAlive) {
+      shares.push({
         name: 'Anne',
         zumre: '2. Zumre (Ana-Baba)',
-        percentage: parentShare,
-        amount: (totalAmount * parentShare) / 100,
-        fraction: toFraction(parentShare),
+        percentage: motherPct,
+        fraction: percentageToFraction(motherPct),
+        amount: (netEstate * motherPct) / 100,
       })
-      results.push({
+    } else {
+      // Halefiyat: mother's share to her descendants (siblings of deceased)
+      distributeDescendants(
+        form.mother.descendants,
+        motherPct,
+        netEstate,
+        shares,
+        '2. Zumre (Halefiyat - Anne Kolu)'
+      )
+    }
+  }
+
+  // Distribute father's side
+  if (fatherPct > 0) {
+    if (fatherAlive) {
+      shares.push({
         name: 'Baba',
         zumre: '2. Zumre (Ana-Baba)',
-        percentage: parentShare,
-        amount: (totalAmount * parentShare) / 100,
-        fraction: toFraction(parentShare),
+        percentage: fatherPct,
+        fraction: percentageToFraction(fatherPct),
+        amount: (netEstate * fatherPct) / 100,
       })
-    } else if (heirs.mother) {
-      results.push({
-        name: 'Anne',
-        zumre: '2. Zumre (Ana-Baba)',
-        percentage: remainingShare,
-        amount: (totalAmount * remainingShare) / 100,
-        fraction: toFraction(remainingShare),
+    } else {
+      distributeDescendants(
+        form.father.descendants,
+        fatherPct,
+        netEstate,
+        shares,
+        '2. Zumre (Halefiyat - Baba Kolu)'
+      )
+    }
+  }
+}
+
+// Generic descendant distribution with sub-halefiyat
+function distributeDescendants(
+  descendants: SiblingOrDescendant[],
+  totalPct: number,
+  netEstate: number,
+  shares: ShareResult[],
+  zumreLabel: string
+) {
+  const effective = descendants.filter((d) => d.alive || d.children.length > 0)
+  if (effective.length === 0) return
+
+  const perPersonPct = totalPct / effective.length
+
+  for (const person of effective) {
+    if (person.alive) {
+      shares.push({
+        name: person.name || 'Mirascı',
+        zumre: zumreLabel,
+        percentage: perPersonPct,
+        fraction: percentageToFraction(perPersonPct),
+        amount: (netEstate * perPersonPct) / 100,
       })
-    } else if (heirs.father) {
+    } else {
+      // Sub-halefiyat: dead sibling's share to their children
+      const childCount = person.children.length
+      if (childCount === 0) continue
+      const perChildPct = perPersonPct / childCount
+      for (const child of person.children) {
+        shares.push({
+          name: child.name || 'Mirascı',
+          zumre: zumreLabel,
+          percentage: perChildPct,
+          fraction: percentageToFraction(perChildPct),
+          amount: (netEstate * perChildPct) / 100,
+        })
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 3. Zumre distribution (grandparents + halefiyat to aunts/uncles)
+// ---------------------------------------------------------------------------
+
+function distributeThirdZumre(
+  form: FormState,
+  shares: ShareResult[],
+  remainingPct: number,
+  netEstate: number
+) {
+  // 4 grandparents each get 1/4 of remaining
+  // Maternal side = 1/2, Paternal side = 1/2
+  // Within each side: grandmother = 1/2, grandfather = 1/2
+
+  const maternal = form.maternalGrandparents
+  const paternal = form.paternalGrandparents
+
+  const maternalHasHeirs = hasGrandparentSideHeirs(maternal)
+  const paternalHasHeirs = hasGrandparentSideHeirs(paternal)
+
+  let maternalPct = remainingPct / 2
+  let paternalPct = remainingPct / 2
+
+  // If one side has no heirs at all, other side takes all
+  if (!maternalHasHeirs && paternalHasHeirs) {
+    paternalPct = remainingPct
+    maternalPct = 0
+  } else if (maternalHasHeirs && !paternalHasHeirs) {
+    maternalPct = remainingPct
+    paternalPct = 0
+  }
+
+  if (maternalPct > 0) {
+    distributeGrandparentSide(
+      maternal,
+      maternalPct,
+      netEstate,
+      shares,
+      'Anne Tarafi'
+    )
+  }
+  if (paternalPct > 0) {
+    distributeGrandparentSide(
+      paternal,
+      paternalPct,
+      netEstate,
+      shares,
+      'Baba Tarafi'
+    )
+  }
+}
+
+function hasGrandparentSideHeirs(side: GrandparentSide): boolean {
+  for (const gp of [side.grandmother, side.grandfather]) {
+    if (gp.alive) return true
+    if (gp.descendants.some((d) => d.alive || d.children.length > 0))
+      return true
+  }
+  return false
+}
+
+function hasGrandparentPersonHeirs(gp: GrandparentPerson): boolean {
+  if (gp.alive) return true
+  return gp.descendants.some((d) => d.alive || d.children.length > 0)
+}
+
+function distributeGrandparentSide(
+  side: GrandparentSide,
+  sidePct: number,
+  netEstate: number,
+  shares: ShareResult[],
+  sideLabel: string
+) {
+  const gmHasHeirs = hasGrandparentPersonHeirs(side.grandmother)
+  const gfHasHeirs = hasGrandparentPersonHeirs(side.grandfather)
+
+  let gmPct = sidePct / 2
+  let gfPct = sidePct / 2
+
+  if (!gmHasHeirs && gfHasHeirs) {
+    gfPct = sidePct
+    gmPct = 0
+  } else if (gmHasHeirs && !gfHasHeirs) {
+    gmPct = sidePct
+    gfPct = 0
+  }
+
+  if (gmPct > 0) {
+    distributeGrandparent(
+      side.grandmother,
+      gmPct,
+      netEstate,
+      shares,
+      `3. Zumre (${sideLabel} - Buyukanne)`
+    )
+  }
+  if (gfPct > 0) {
+    distributeGrandparent(
+      side.grandfather,
+      gfPct,
+      netEstate,
+      shares,
+      `3. Zumre (${sideLabel} - Buyukbaba)`
+    )
+  }
+}
+
+function distributeGrandparent(
+  gp: GrandparentPerson,
+  gpPct: number,
+  netEstate: number,
+  shares: ShareResult[],
+  zumreLabel: string
+) {
+  if (gp.alive) {
+    const label = zumreLabel.includes('Buyukanne') ? 'Buyukanne' : 'Buyukbaba'
+    const side = zumreLabel.includes('Anne Tarafi') ? '(Anne Tarafi)' : '(Baba Tarafi)'
+    shares.push({
+      name: `${label} ${side}`,
+      zumre: '3. Zumre',
+      percentage: gpPct,
+      fraction: percentageToFraction(gpPct),
+      amount: (netEstate * gpPct) / 100,
+    })
+  } else {
+    // Halefiyat to aunts/uncles
+    const effective = gp.descendants.filter(
+      (d) => d.alive || d.children.length > 0
+    )
+    if (effective.length === 0) return
+    const perPersonPct = gpPct / effective.length
+    for (const person of effective) {
+      if (person.alive) {
+        shares.push({
+          name: person.name || 'Mirascı',
+          zumre: zumreLabel,
+          percentage: perPersonPct,
+          fraction: percentageToFraction(perPersonPct),
+          amount: (netEstate * perPersonPct) / 100,
+        })
+      } else {
+        const childCount = person.children.length
+        if (childCount === 0) continue
+        const perChildPct = perPersonPct / childCount
+        for (const child of person.children) {
+          shares.push({
+            name: child.name || 'Mirascı',
+            zumre: zumreLabel,
+            percentage: perChildPct,
+            fraction: percentageToFraction(perChildPct),
+            amount: (netEstate * perChildPct) / 100,
+          })
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Protected shares (sakli pay) — TMK m.506
+// ---------------------------------------------------------------------------
+
+function calculateProtectedShares(
+  shares: ShareResult[],
+  activeZumre: number,
+  _hasSpouse: boolean,
+  _netEstate: number
+): ProtectedShareResult[] {
+  const results: ProtectedShareResult[] = []
+
+  for (const share of shares) {
+    if (share.name === 'Hazine (Devlet)') continue
+
+    let protectedRatioNum = 0
+    let protectedRatioLabel = ''
+
+    if (share.name === 'Sag Kalan Es') {
+      if (activeZumre === 1) {
+        // Spouse with 1st zumre: sakli pay = yasal payin tamami
+        protectedRatioNum = 1
+        protectedRatioLabel = '1/1 (tamami)'
+      } else if (activeZumre === 2) {
+        // Spouse with 2nd zumre: sakli pay = yasal payin tamami
+        protectedRatioNum = 1
+        protectedRatioLabel = '1/1 (tamami)'
+      } else {
+        // Spouse alone or with 3rd zumre: sakli pay = yasal payin 3/4'u
+        protectedRatioNum = 3 / 4
+        protectedRatioLabel = '3/4'
+      }
+    } else if (activeZumre === 1) {
+      // Altsoy: sakli pay = yasal payin 1/2'si
+      protectedRatioNum = 1 / 2
+      protectedRatioLabel = '1/2 (yarisi)'
+    } else if (activeZumre === 2) {
+      // Anne-Baba: sakli pay = yasal payin 1/4'u
+      protectedRatioNum = 1 / 4
+      protectedRatioLabel = '1/4'
+    } else if (activeZumre === 3) {
+      // 3. zumre mirascilarinin sakli payi yoktur
+      continue
+    }
+
+    if (protectedRatioNum > 0) {
       results.push({
-        name: 'Baba',
-        zumre: '2. Zumre (Ana-Baba)',
-        percentage: remainingShare,
-        amount: (totalAmount * remainingShare) / 100,
-        fraction: toFraction(remainingShare),
+        name: share.name,
+        legalFraction: share.fraction,
+        legalAmount: share.amount,
+        protectedRatio: protectedRatioLabel,
+        protectedAmount: share.amount * protectedRatioNum,
       })
     }
-    return results
   }
 
   return results
 }
 
-function calculateProtectedShares(results: ShareResult[], totalAmount: number): ProtectedShare[] {
-  const protectedShares: ProtectedShare[] = []
-
-  for (const r of results) {
-    if (r.name === 'Hazine (Devlet)') continue
-
-    let protectedRatio = ''
-    let protectedMultiplier = 0
-
-    if (r.name === 'Sag Kalan Es') {
-      protectedRatio = 'Yasal payin tamami'
-      protectedMultiplier = 1
-    } else if (r.zumre.includes('1. Zumre')) {
-      protectedRatio = "Yasal payin 1/2'si"
-      protectedMultiplier = 0.5
-    } else if (r.name === 'Anne' || r.name === 'Baba') {
-      protectedRatio = "Yasal payin 1/4'u"
-      protectedMultiplier = 0.25
-    }
-
-    if (protectedMultiplier > 0) {
-      const protectedPct = r.percentage * protectedMultiplier
-      protectedShares.push({
-        name: r.name,
-        legalShare: r.percentage,
-        legalFraction: r.fraction,
-        protectedRatio,
-        protectedShare: protectedPct,
-        protectedFraction: toFraction(protectedPct),
-        protectedAmount: (totalAmount * protectedPct) / 100,
-      })
-    }
-  }
-
-  return protectedShares
-}
-
 // ---------------------------------------------------------------------------
-// Asset type labels & icons
-// ---------------------------------------------------------------------------
-
-const ASSET_TYPE_LABELS: Record<AssetType, string> = {
-  nakit: 'Nakit',
-  tasinmaz: 'Tasinmaz',
-  arac: 'Arac',
-  diger: 'Diger',
-}
-
-const TASINMAZ_TYPE_LABELS: Record<TasinmazType, string> = {
-  arsa: 'Arsa',
-  arazi: 'Arazi',
-  konut: 'Konut',
-  isyeri: 'Isyeri',
-  tarla: 'Tarla',
-}
-
-function AssetIcon({ type, className }: { type: AssetType; className?: string }) {
-  const cls = className ?? 'h-4 w-4'
-  switch (type) {
-    case 'nakit':
-      return <Banknote className={cls} />
-    case 'tasinmaz':
-      return <Home className={cls} />
-    case 'arac':
-      return <Car className={cls} />
-    case 'diger':
-      return <Package className={cls} />
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Component: Asset Form (inline creation)
-// ---------------------------------------------------------------------------
-
-function AssetForm({
-  type,
-  onAdd,
-  onCancel,
-}: {
-  type: AssetType
-  onAdd: (asset: Asset) => void
-  onCancel: () => void
-}) {
-  const [value, setValue] = useState<number>(0)
-  const [divisible, setDivisible] = useState(true)
-
-  // tasinmaz
-  const [ada, setAda] = useState('')
-  const [parsel, setParsel] = useState('')
-  const [metrekare, setMetrekare] = useState<number>(0)
-  const [tasinmazType, setTasinmazType] = useState<TasinmazType>('konut')
-
-  // arac
-  const [plaka, setPlaka] = useState('')
-  const [markaModel, setMarkaModel] = useState('')
-
-  // diger
-  const [description, setDescription] = useState('')
-
-  const handleSubmit = () => {
-    if (value <= 0) return
-
-    const base = { id: uniqueId(), value, divisible }
-
-    switch (type) {
-      case 'nakit':
-        onAdd({ ...base, type: 'nakit' })
-        break
-      case 'tasinmaz':
-        if (!ada || !parsel) return
-        onAdd({ ...base, type: 'tasinmaz', ada, parsel, metrekare, tasinmazType })
-        break
-      case 'arac':
-        if (!plaka) return
-        onAdd({ ...base, type: 'arac', plaka, markaModel })
-        break
-      case 'diger':
-        if (!description.trim()) return
-        onAdd({ ...base, type: 'diger', description: description.trim() })
-        break
-    }
-  }
-
-  const inputCls =
-    'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-
-  return (
-    <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <AssetIcon type={type} />
-          <span>{ASSET_TYPE_LABELS[type]} Ekle</span>
-        </div>
-        <button
-          type="button"
-          onClick={onCancel}
-          className="w-6 h-6 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
-        >
-          <X className="h-3.5 w-3.5" />
-        </button>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        {/* Type-specific fields */}
-        {type === 'tasinmaz' && (
-          <>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Ada No</label>
-              <input
-                className={inputCls}
-                placeholder="Ornek: 123"
-                value={ada}
-                onChange={(e) => setAda(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Parsel No</label>
-              <input
-                className={inputCls}
-                placeholder="Ornek: 5"
-                value={parsel}
-                onChange={(e) => setParsel(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Tur</label>
-              <select
-                className={inputCls}
-                value={tasinmazType}
-                onChange={(e) => setTasinmazType(e.target.value as TasinmazType)}
-              >
-                {(Object.keys(TASINMAZ_TYPE_LABELS) as TasinmazType[]).map((t) => (
-                  <option key={t} value={t}>
-                    {TASINMAZ_TYPE_LABELS[t]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Metrekare (m2)</label>
-              <input
-                type="number"
-                min={0}
-                className={inputCls}
-                placeholder="120"
-                value={metrekare || ''}
-                onChange={(e) => setMetrekare(Number(e.target.value))}
-              />
-            </div>
-          </>
-        )}
-
-        {type === 'arac' && (
-          <>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Plaka</label>
-              <input
-                className={inputCls}
-                placeholder="34 ABC 123"
-                value={plaka}
-                onChange={(e) => setPlaka(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground">Marka / Model</label>
-              <input
-                className={inputCls}
-                placeholder="BMW 320i"
-                value={markaModel}
-                onChange={(e) => setMarkaModel(e.target.value)}
-              />
-            </div>
-          </>
-        )}
-
-        {type === 'diger' && (
-          <div className="sm:col-span-2">
-            <label className="text-xs font-medium text-muted-foreground">Aciklama</label>
-            <input
-              className={inputCls}
-              placeholder="Ornek: Altin, hisse senedi, vb."
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-        )}
-
-        {/* Value - common */}
-        <div>
-          <label className="text-xs font-medium text-muted-foreground">Tahmini Deger (TL)</label>
-          <input
-            type="number"
-            min={0}
-            className={inputCls}
-            placeholder="0"
-            value={value || ''}
-            onChange={(e) => setValue(Number(e.target.value))}
-          />
-        </div>
-
-        {/* Divisible toggle */}
-        <div className="flex items-end gap-2 pb-1">
-          <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={divisible}
-              onChange={(e) => setDivisible(e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 accent-primary"
-            />
-            Bolunebilir
-          </label>
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={handleSubmit}
-        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        Ekle
-      </button>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Component: Asset Card
-// ---------------------------------------------------------------------------
-
-function AssetCard({ asset, onRemove }: { asset: Asset; onRemove: () => void }) {
-  const label = (key: string, val: string | number) => (
-    <span className="text-xs text-muted-foreground">
-      {key}: <span className="font-medium text-foreground">{val}</span>
-    </span>
-  )
-
-  return (
-    <div className="relative rounded-lg border bg-background p-3 pr-9 space-y-1">
-      <div className="flex items-center gap-2">
-        <AssetIcon type={asset.type} className="h-4 w-4 text-muted-foreground" />
-        <span className="text-sm font-medium">{ASSET_TYPE_LABELS[asset.type]}</span>
-        {!asset.divisible && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-warning/10 text-warning font-medium">
-            Bolunemez
-          </span>
-        )}
-      </div>
-
-      <div className="flex flex-wrap gap-x-4 gap-y-0.5">
-        {asset.type === 'tasinmaz' && (
-          <>
-            {label('Ada', asset.ada)}
-            {label('Parsel', asset.parsel)}
-            {label('Tur', TASINMAZ_TYPE_LABELS[asset.tasinmazType])}
-            {asset.metrekare > 0 && label('m2', asset.metrekare)}
-          </>
-        )}
-        {asset.type === 'arac' && (
-          <>
-            {label('Plaka', asset.plaka)}
-            {asset.markaModel && label('Model', asset.markaModel)}
-          </>
-        )}
-        {asset.type === 'diger' && label('Aciklama', asset.description)}
-        {label('Deger', formatCurrency(asset.value))}
-      </div>
-
-      <button
-        type="button"
-        onClick={onRemove}
-        className="absolute top-2 right-2 w-6 h-6 rounded-full flex items-center justify-center text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
-        aria-label="Varligi kaldir"
-      >
-        <Trash2 className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Component: Property Detail Table
-// ---------------------------------------------------------------------------
-
-function PropertyDetailTable({
-  asset,
-  shares,
-}: {
-  asset: TasinmazAsset
-  shares: ShareResult[]
-}) {
-  return (
-    <div className="rounded-lg border bg-card p-4 space-y-3">
-      <div className="flex items-center gap-2 text-sm font-medium">
-        <MapPin className="h-4 w-4 text-primary" />
-        <span>
-          Ada {asset.ada} Parsel {asset.parsel}
-        </span>
-        <span className="text-muted-foreground">
-          — {TASINMAZ_TYPE_LABELS[asset.tasinmazType]}
-          {asset.metrekare > 0 && ` — ${asset.metrekare} m2`} — Deger:{' '}
-          {formatCurrency(asset.value)}
-        </span>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              <th className="text-left py-2 px-3 font-medium">Mirasci</th>
-              <th className="text-center py-2 px-3 font-medium">Hisse</th>
-              {asset.metrekare > 0 && (
-                <th className="text-right py-2 px-3 font-medium">m2 Karsiligi</th>
-              )}
-              <th className="text-right py-2 px-3 font-medium">Deger Karsiligi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {shares.map((s, i) => (
-              <tr key={i} className="border-b last:border-b-0 hover:bg-muted/50">
-                <td className="py-2 px-3">{s.name}</td>
-                <td className="py-2 px-3 text-center font-mono text-primary font-medium">
-                  {s.fraction}
-                </td>
-                {asset.metrekare > 0 && (
-                  <td className="py-2 px-3 text-right font-mono">
-                    {((asset.metrekare * s.percentage) / 100).toFixed(1)} m2
-                  </td>
-                )}
-                <td className="py-2 px-3 text-right font-mono">
-                  {formatCurrency((asset.value * s.percentage) / 100)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Main Page
+// Component
 // ---------------------------------------------------------------------------
 
 export default function InheritancePage() {
-  const [assets, setAssets] = useState<Asset[]>([])
-  const [heirs, setHeirs] = useState<HeirState>({
-    spouse: false,
-    children: [],
-    mother: false,
-    father: false,
+  const [form, setForm] = useState<FormState>(createInitialState)
+  const [showResults, setShowResults] = useState(false)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({
+    estate: true,
+    spouse: true,
+    zumre1: true,
+    zumre2: true,
+    zumre3: true,
   })
-  const [results, setResults] = useState<ShareResult[] | null>(null)
-  const [showProtected, setShowProtected] = useState(false)
-  const [protectedShares, setProtectedShares] = useState<ProtectedShare[]>([])
-  const [addingType, setAddingType] = useState<AssetType | null>(null)
-  const [showTypeDropdown, setShowTypeDropdown] = useState(false)
 
-  // Computed total
-  const totalEstateValue = useMemo(() => assets.reduce((s, a) => s + a.value, 0), [assets])
-  const totalCash = useMemo(
-    () => assets.filter((a) => a.type === 'nakit').reduce((s, a) => s + a.value, 0),
-    [assets]
-  )
-  const tasinmazAssets = useMemo(
-    () => assets.filter((a): a is TasinmazAsset => a.type === 'tasinmaz'),
-    [assets]
+  const netEstate = Math.max(0, form.estateValue - form.debts)
+
+  const results = useMemo(() => {
+    if (!showResults) return null
+    return calculateInheritanceShares(form)
+  }, [form, showResults])
+
+  const has1stZumre = useMemo(() => hasFirstZumreHeirs(form), [form])
+  const has2ndZumre = useMemo(
+    () => !has1stZumre && hasSecondZumreHeirs(form),
+    [form, has1stZumre]
   )
 
-  // Heir management
-  const addSpouse = () => {
-    if (!heirs.spouse) setHeirs((h) => ({ ...h, spouse: true }))
-  }
+  const toggleSection = useCallback((key: string) => {
+    setExpandedSections((prev) => ({ ...prev, [key]: !prev[key] }))
+  }, [])
 
-  const addChild = () => {
-    const name = prompt('Cocugun adini girin:')
-    if (name && name.trim()) {
-      setHeirs((h) => ({ ...h, children: [...h.children, name.trim()] }))
-    }
-  }
+  const updateForm = useCallback(<K extends keyof FormState>(key: K, value: FormState[K]) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
+    setShowResults(false)
+  }, [])
 
-  const removeChild = (index: number) => {
-    setHeirs((h) => ({ ...h, children: h.children.filter((_, i) => i !== index) }))
-  }
+  // --- Child management ---
+  const addChild = useCallback(() => {
+    setForm((prev) => ({
+      ...prev,
+      children: [
+        ...prev.children,
+        { id: uid(), name: '', alive: true, hasChildren: false, grandchildren: [] },
+      ],
+    }))
+    setShowResults(false)
+  }, [])
 
-  // Asset management
-  const addAsset = (asset: Asset) => {
-    setAssets((prev) => [...prev, asset])
-    setAddingType(null)
-  }
+  const removeChild = useCallback((id: string) => {
+    setForm((prev) => ({
+      ...prev,
+      children: prev.children.filter((c) => c.id !== id),
+    }))
+    setShowResults(false)
+  }, [])
 
-  const removeAsset = (id: string) => {
-    setAssets((prev) => prev.filter((a) => a.id !== id))
-  }
+  const updateChild = useCallback((id: string, updates: Partial<Child>) => {
+    setForm((prev) => ({
+      ...prev,
+      children: prev.children.map((c) =>
+        c.id === id ? { ...c, ...updates } : c
+      ),
+    }))
+    setShowResults(false)
+  }, [])
 
-  // Calculation
-  const handleCalculate = () => {
-    if (totalEstateValue <= 0) return
-    const shareResults = calculateShares(heirs, totalEstateValue)
-    setResults(shareResults)
-    setProtectedShares(calculateProtectedShares(shareResults, totalEstateValue))
-  }
+  const addGrandchild = useCallback((childId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      children: prev.children.map((c) =>
+        c.id === childId
+          ? {
+              ...c,
+              grandchildren: [
+                ...c.grandchildren,
+                { id: uid(), name: '' },
+              ],
+            }
+          : c
+      ),
+    }))
+    setShowResults(false)
+  }, [])
 
-  const handleReset = () => {
-    setAssets([])
-    setHeirs({ spouse: false, children: [], mother: false, father: false })
-    setResults(null)
-    setShowProtected(false)
-    setProtectedShares([])
-    setAddingType(null)
-  }
+  const removeGrandchild = useCallback((childId: string, gcId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      children: prev.children.map((c) =>
+        c.id === childId
+          ? { ...c, grandchildren: c.grandchildren.filter((gc) => gc.id !== gcId) }
+          : c
+      ),
+    }))
+    setShowResults(false)
+  }, [])
 
-  const handleShowProtected = () => {
-    if (!results) {
-      handleCalculate()
-    }
-    setShowProtected(true)
-  }
+  const updateGrandchild = useCallback((childId: string, gcId: string, name: string) => {
+    setForm((prev) => ({
+      ...prev,
+      children: prev.children.map((c) =>
+        c.id === childId
+          ? {
+              ...c,
+              grandchildren: c.grandchildren.map((gc) =>
+                gc.id === gcId ? { ...gc, name } : gc
+              ),
+            }
+          : c
+      ),
+    }))
+    setShowResults(false)
+  }, [])
+
+  // --- 2nd Zumre: parent descendant management ---
+  const addParentDescendant = useCallback((parent: 'mother' | 'father') => {
+    setForm((prev) => ({
+      ...prev,
+      [parent]: {
+        ...prev[parent],
+        descendants: [
+          ...prev[parent].descendants,
+          { id: uid(), name: '', alive: true, children: [] },
+        ],
+      },
+    }))
+    setShowResults(false)
+  }, [])
+
+  const removeParentDescendant = useCallback((parent: 'mother' | 'father', id: string) => {
+    setForm((prev) => ({
+      ...prev,
+      [parent]: {
+        ...prev[parent],
+        descendants: prev[parent].descendants.filter((d) => d.id !== id),
+      },
+    }))
+    setShowResults(false)
+  }, [])
+
+  const updateParentDescendant = useCallback(
+    (parent: 'mother' | 'father', id: string, updates: Partial<SiblingOrDescendant>) => {
+      setForm((prev) => ({
+        ...prev,
+        [parent]: {
+          ...prev[parent],
+          descendants: prev[parent].descendants.map((d) =>
+            d.id === id ? { ...d, ...updates } : d
+          ),
+        },
+      }))
+      setShowResults(false)
+    },
+    []
+  )
+
+  const addNephewNiece = useCallback((parent: 'mother' | 'father', siblingId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      [parent]: {
+        ...prev[parent],
+        descendants: prev[parent].descendants.map((d) =>
+          d.id === siblingId
+            ? { ...d, children: [...d.children, { id: uid(), name: '' }] }
+            : d
+        ),
+      },
+    }))
+    setShowResults(false)
+  }, [])
+
+  const removeNephewNiece = useCallback(
+    (parent: 'mother' | 'father', siblingId: string, nnId: string) => {
+      setForm((prev) => ({
+        ...prev,
+        [parent]: {
+          ...prev[parent],
+          descendants: prev[parent].descendants.map((d) =>
+            d.id === siblingId
+              ? { ...d, children: d.children.filter((c) => c.id !== nnId) }
+              : d
+          ),
+        },
+      }))
+      setShowResults(false)
+    },
+    []
+  )
+
+  const updateNephewNiece = useCallback(
+    (parent: 'mother' | 'father', siblingId: string, nnId: string, name: string) => {
+      setForm((prev) => ({
+        ...prev,
+        [parent]: {
+          ...prev[parent],
+          descendants: prev[parent].descendants.map((d) =>
+            d.id === siblingId
+              ? {
+                  ...d,
+                  children: d.children.map((c) =>
+                    c.id === nnId ? { ...c, name } : c
+                  ),
+                }
+              : d
+          ),
+        },
+      }))
+      setShowResults(false)
+    },
+    []
+  )
+
+  // --- 3rd Zumre: grandparent descendant management ---
+  type GpSide = 'maternalGrandparents' | 'paternalGrandparents'
+  type GpPerson = 'grandmother' | 'grandfather'
+
+  const updateGrandparent = useCallback(
+    (side: GpSide, person: GpPerson, updates: Partial<GrandparentPerson>) => {
+      setForm((prev) => ({
+        ...prev,
+        [side]: {
+          ...prev[side],
+          [person]: { ...prev[side][person], ...updates },
+        },
+      }))
+      setShowResults(false)
+    },
+    []
+  )
+
+  const addGpDescendant = useCallback((side: GpSide, person: GpPerson) => {
+    setForm((prev) => ({
+      ...prev,
+      [side]: {
+        ...prev[side],
+        [person]: {
+          ...prev[side][person],
+          descendants: [
+            ...prev[side][person].descendants,
+            { id: uid(), name: '', alive: true, children: [] },
+          ],
+        },
+      },
+    }))
+    setShowResults(false)
+  }, [])
+
+  const removeGpDescendant = useCallback((side: GpSide, person: GpPerson, id: string) => {
+    setForm((prev) => ({
+      ...prev,
+      [side]: {
+        ...prev[side],
+        [person]: {
+          ...prev[side][person],
+          descendants: prev[side][person].descendants.filter((d) => d.id !== id),
+        },
+      },
+    }))
+    setShowResults(false)
+  }, [])
+
+  const updateGpDescendant = useCallback(
+    (side: GpSide, person: GpPerson, id: string, updates: Partial<AuntUncle>) => {
+      setForm((prev) => ({
+        ...prev,
+        [side]: {
+          ...prev[side],
+          [person]: {
+            ...prev[side][person],
+            descendants: prev[side][person].descendants.map((d) =>
+              d.id === id ? { ...d, ...updates } : d
+            ),
+          },
+        },
+      }))
+      setShowResults(false)
+    },
+    []
+  )
+
+  const addCousin = useCallback((side: GpSide, person: GpPerson, auId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      [side]: {
+        ...prev[side],
+        [person]: {
+          ...prev[side][person],
+          descendants: prev[side][person].descendants.map((d) =>
+            d.id === auId
+              ? { ...d, children: [...d.children, { id: uid(), name: '' }] }
+              : d
+          ),
+        },
+      },
+    }))
+    setShowResults(false)
+  }, [])
+
+  const removeCousin = useCallback(
+    (side: GpSide, person: GpPerson, auId: string, cId: string) => {
+      setForm((prev) => ({
+        ...prev,
+        [side]: {
+          ...prev[side],
+          [person]: {
+            ...prev[side][person],
+            descendants: prev[side][person].descendants.map((d) =>
+              d.id === auId
+                ? { ...d, children: d.children.filter((c) => c.id !== cId) }
+                : d
+            ),
+          },
+        },
+      }))
+      setShowResults(false)
+    },
+    []
+  )
+
+  const updateCousin = useCallback(
+    (side: GpSide, person: GpPerson, auId: string, cId: string, name: string) => {
+      setForm((prev) => ({
+        ...prev,
+        [side]: {
+          ...prev[side],
+          [person]: {
+            ...prev[side][person],
+            descendants: prev[side][person].descendants.map((d) =>
+              d.id === auId
+                ? {
+                    ...d,
+                    children: d.children.map((c) =>
+                      c.id === cId ? { ...c, name } : c
+                    ),
+                  }
+                : d
+            ),
+          },
+        },
+      }))
+      setShowResults(false)
+    },
+    []
+  )
+
+  const handleReset = useCallback(() => {
+    setForm(createInitialState())
+    setShowResults(false)
+  }, [])
+
+  const handleCalculate = useCallback(() => {
+    setShowResults(true)
+  }, [])
+
+  // =========================================================================
+  // RENDER
+  // =========================================================================
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Miras Payi Hesaplama"
-        description="TMK'ya gore kanuni ve sakli miras payi hesaplama — nakit, tasinmaz, arac ve diger varliklar"
-      />
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Tereke Varliklari */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="rounded-lg border bg-card p-6 space-y-5">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold flex items-center gap-2">
-            <Banknote className="h-5 w-5 text-primary" />
-            Tereke Varliklari
-          </h3>
-
-          {/* Toplam */}
-          {assets.length > 0 && (
-            <div className="text-sm">
-              Toplam Tereke:{' '}
-              <span className="font-semibold text-primary">{formatCurrency(totalEstateValue)}</span>
-            </div>
-          )}
-        </div>
-
-        {/* Asset cards */}
-        {assets.length > 0 && (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {assets.map((asset) => (
-              <AssetCard key={asset.id} asset={asset} onRemove={() => removeAsset(asset.id)} />
-            ))}
-          </div>
-        )}
-
-        {assets.length === 0 && !addingType && (
-          <p className="text-sm text-muted-foreground py-2">
-            Henuz varlik eklenmedi. Asagidaki butonla terekeye varlik ekleyin.
-          </p>
-        )}
-
-        {/* Inline form */}
-        {addingType && (
-          <AssetForm
-            type={addingType}
-            onAdd={addAsset}
-            onCancel={() => setAddingType(null)}
-          />
-        )}
-
-        {/* Add button with dropdown */}
-        {!addingType && (
-          <div className="relative inline-block">
-            <button
-              type="button"
-              onClick={() => setShowTypeDropdown((s) => !s)}
-              className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-primary/50 px-3 py-2 text-sm font-medium text-primary hover:bg-primary/5 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Varlik Ekle
-              <ChevronDown className="h-3.5 w-3.5" />
-            </button>
-
-            {showTypeDropdown && (
-              <div className="absolute left-0 top-full mt-1 z-20 w-48 rounded-md border bg-background shadow-md py-1">
-                {(
-                  [
-                    { type: 'nakit' as const, icon: Banknote, label: 'Nakit' },
-                    { type: 'tasinmaz' as const, icon: Home, label: 'Tasinmaz (Gayrimenkul)' },
-                    { type: 'arac' as const, icon: Car, label: 'Arac' },
-                    { type: 'diger' as const, icon: Package, label: 'Diger Varlik' },
-                  ] as const
-                ).map((item) => (
-                  <button
-                    key={item.type}
-                    type="button"
-                    onClick={() => {
-                      setAddingType(item.type)
-                      setShowTypeDropdown(false)
-                    }}
-                    className="flex w-full items-center gap-2 px-3 py-2 text-sm hover:bg-muted transition-colors"
-                  >
-                    <item.icon className="h-4 w-4 text-muted-foreground" />
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Mirascilar */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="rounded-lg border bg-card p-6 space-y-5">
-        <h3 className="text-base font-semibold flex items-center gap-2">
-          <Users className="h-5 w-5 text-primary" />
-          Mirascilar
-        </h3>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={addSpouse}
-            disabled={heirs.spouse}
-            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            Es Ekle
-          </button>
-          <button
-            type="button"
-            onClick={addChild}
-            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent/10 transition-colors"
-          >
-            Cocuk Ekle
-          </button>
-          <button
-            type="button"
-            onClick={() => setHeirs((h) => ({ ...h, mother: true }))}
-            disabled={heirs.mother}
-            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            Anne Ekle
-          </button>
-          <button
-            type="button"
-            onClick={() => setHeirs((h) => ({ ...h, father: true }))}
-            disabled={heirs.father}
-            className="inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            Baba Ekle
-          </button>
-        </div>
-
-        {/* Eklenen mirascilar */}
-        {(heirs.spouse || heirs.children.length > 0 || heirs.mother || heirs.father) && (
-          <div className="flex flex-wrap gap-3">
-            {heirs.spouse && (
-              <div className="relative rounded-lg border p-3 pr-8 flex items-center gap-2 bg-background">
-                <span className="text-sm font-medium">Sag Kalan Es</span>
-                <button
-                  type="button"
-                  onClick={() => setHeirs((h) => ({ ...h, spouse: false }))}
-                  className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
-                  aria-label="Esi kaldir"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-
-            {heirs.children.map((child, i) => (
-              <div
-                key={`child-${i}`}
-                className="relative rounded-lg border p-3 pr-8 flex items-center gap-2 bg-background"
-              >
-                <span className="text-sm font-medium">{child}</span>
-                <button
-                  type="button"
-                  onClick={() => removeChild(i)}
-                  className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
-                  aria-label={`${child} kaldir`}
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            ))}
-
-            {heirs.mother && (
-              <div className="relative rounded-lg border p-3 pr-8 flex items-center gap-2 bg-background">
-                <span className="text-sm font-medium">Anne</span>
-                <button
-                  type="button"
-                  onClick={() => setHeirs((h) => ({ ...h, mother: false }))}
-                  className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
-                  aria-label="Anneyi kaldir"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-
-            {heirs.father && (
-              <div className="relative rounded-lg border p-3 pr-8 flex items-center gap-2 bg-background">
-                <span className="text-sm font-medium">Baba</span>
-                <button
-                  type="button"
-                  onClick={() => setHeirs((h) => ({ ...h, father: false }))}
-                  className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-red-500 hover:bg-red-50 hover:text-red-700 transition-colors"
-                  aria-label="Babayi kaldir"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Action Buttons */}
-      {/* ------------------------------------------------------------------ */}
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={handleCalculate}
-          disabled={totalEstateValue <= 0}
-          className="inline-flex items-center gap-1.5 justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <Calculator className="h-4 w-4" />
-          Hesapla
-        </button>
-        <button
-          type="button"
-          onClick={handleShowProtected}
-          disabled={totalEstateValue <= 0}
-          className="inline-flex items-center gap-1.5 justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          <Shield className="h-4 w-4" />
-          Sakli Pay Goster
-        </button>
+        title="Miras Payi Hesaplayici"
+        description="TMK m.495-506 hukumlerine gore yasal miras paylari ve sakli pay hesaplama"
+      >
         <button
           type="button"
           onClick={handleReset}
-          className="inline-flex items-center gap-1.5 justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+          className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-4 py-2 text-sm font-medium text-foreground shadow-sm hover:bg-muted transition-colors"
         >
           <RotateCcw className="h-4 w-4" />
           Sifirla
         </button>
-      </div>
+      </PageHeader>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Results Table */}
-      {/* ------------------------------------------------------------------ */}
-      {results && results.length > 0 && (
-        <div className="rounded-lg border bg-card p-6 space-y-6">
-          <h3 className="text-lg font-semibold">Miras Paylari</h3>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b">
-                  <th className="text-left py-3 px-4 font-medium">Mirasci</th>
-                  <th className="text-left py-3 px-4 font-medium">Zumre</th>
-                  <th className="text-center py-3 px-4 font-medium">Pay (Kesir)</th>
-                  <th className="text-right py-3 px-4 font-medium">Pay (%)</th>
-                  {totalCash > 0 && (
-                    <th className="text-right py-3 px-4 font-medium">Nakit (TL)</th>
-                  )}
-                  {tasinmazAssets.length > 0 && (
-                    <th className="text-left py-3 px-4 font-medium">Tasinmaz Paylari</th>
-                  )}
-                  <th className="text-right py-3 px-4 font-medium">Toplam Deger (TL)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {results.map((r, i) => (
-                  <tr key={i} className="border-b last:border-b-0 hover:bg-muted/50">
-                    <td className="py-3 px-4 font-medium">{r.name}</td>
-                    <td className="py-3 px-4 text-muted-foreground">{r.zumre}</td>
-                    <td className="py-3 px-4 text-center font-mono text-primary font-semibold">
-                      {r.fraction}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono">%{r.percentage.toFixed(2)}</td>
-                    {totalCash > 0 && (
-                      <td className="py-3 px-4 text-right font-mono">
-                        {formatCurrency((totalCash * r.percentage) / 100)}
-                      </td>
-                    )}
-                    {tasinmazAssets.length > 0 && (
-                      <td className="py-3 px-4 text-xs">
-                        {tasinmazAssets.map((t) => (
-                          <div key={t.id} className="whitespace-nowrap">
-                            Ada {t.ada} P.{t.parsel}: {r.fraction} hisse
-                          </div>
-                        ))}
-                      </td>
-                    )}
-                    <td className="py-3 px-4 text-right font-mono font-semibold">
-                      {formatCurrency(r.amount)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t-2 font-semibold">
-                  <td className="py-3 px-4" colSpan={2}>
-                    Toplam
-                  </td>
-                  <td className="py-3 px-4 text-center font-mono">1/1</td>
-                  <td className="py-3 px-4 text-right font-mono">
-                    %{results.reduce((s, r) => s + r.percentage, 0).toFixed(2)}
-                  </td>
-                  {totalCash > 0 && (
-                    <td className="py-3 px-4 text-right font-mono">
-                      {formatCurrency(totalCash)}
-                    </td>
-                  )}
-                  {tasinmazAssets.length > 0 && <td className="py-3 px-4" />}
-                  <td className="py-3 px-4 text-right font-mono">
-                    {formatCurrency(totalEstateValue)}
-                  </td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-
-          {/* Asset summary */}
-          {assets.length > 1 && (
-            <div className="grid gap-2 sm:grid-cols-4 text-sm">
-              {[
-                { label: 'Nakit', val: totalCash },
-                {
-                  label: 'Tasinmaz',
-                  val: tasinmazAssets.reduce((s, a) => s + a.value, 0),
-                },
-                {
-                  label: 'Arac',
-                  val: assets.filter((a) => a.type === 'arac').reduce((s, a) => s + a.value, 0),
-                },
-                {
-                  label: 'Diger',
-                  val: assets.filter((a) => a.type === 'diger').reduce((s, a) => s + a.value, 0),
-                },
-              ]
-                .filter((item) => item.val > 0)
-                .map((item) => (
-                  <div
-                    key={item.label}
-                    className="rounded-md border p-3 flex items-center justify-between"
-                  >
-                    <span className="text-muted-foreground">{item.label}</span>
-                    <span className="font-mono font-medium">{formatCurrency(item.val)}</span>
-                  </div>
-                ))}
-            </div>
-          )}
-
-          <div className="mt-2 p-3 rounded-md bg-muted/50 text-xs text-muted-foreground">
-            <strong>Dayanak:</strong> TMK m.499-506 (Kanuni miras paylari ve zumre sistemi). Bu
-            hesaplama bilgilendirme amaclidir, hukuki danismanlik niteliginde degildir.
-          </div>
-        </div>
-      )}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Property Detail Tables */}
-      {/* ------------------------------------------------------------------ */}
-      {results && results.length > 0 && tasinmazAssets.length > 0 && (
-        <div className="space-y-4">
-          <h3 className="text-lg font-semibold flex items-center gap-2">
-            <Home className="h-5 w-5 text-primary" />
-            Tasinmaz Detay Tablosu
-          </h3>
-          {tasinmazAssets.map((asset) => (
-            <PropertyDetailTable key={asset.id} asset={asset} shares={results} />
-          ))}
-        </div>
-      )}
-
-      {/* ------------------------------------------------------------------ */}
-      {/* Protected Share Modal */}
-      {/* ------------------------------------------------------------------ */}
-      {showProtected && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setShowProtected(false)}
-        >
-          <div
-            className="bg-background rounded-lg border shadow-lg w-full max-w-3xl mx-4 max-h-[85vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+        {/* ================================================================ */}
+        {/* LEFT COLUMN: Form */}
+        {/* ================================================================ */}
+        <div className="space-y-4 xl:col-span-2">
+          {/* Section 1: Estate Info */}
+          <SectionCard
+            title="Tereke Bilgileri"
+            icon={<Scale className="h-5 w-5 text-primary" />}
+            expanded={expandedSections.estate}
+            onToggle={() => toggleSection('estate')}
           >
-            <div className="flex items-center justify-between p-6 border-b">
-              <h3 className="text-lg font-semibold flex items-center gap-2">
-                <Shield className="h-5 w-5 text-primary" />
-                Sakli Paylar (TMK m.506)
-              </h3>
+            <div className="space-y-4">
+              <FormField label="Miras Birakanin Adi (opsiyonel)">
+                <input
+                  type="text"
+                  value={form.deceasedName}
+                  onChange={(e) => updateForm('deceasedName', e.target.value)}
+                  placeholder="Orn: Ahmet Yilmaz"
+                  className="input-field"
+                />
+              </FormField>
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <FormField label="Tereke Toplam Degeri (TL)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.estateValue || ''}
+                    onChange={(e) =>
+                      updateForm('estateValue', Number(e.target.value) || 0)
+                    }
+                    placeholder="0"
+                    className="input-field"
+                  />
+                </FormField>
+                <FormField label="Borclar (TL)">
+                  <input
+                    type="number"
+                    min={0}
+                    value={form.debts || ''}
+                    onChange={(e) =>
+                      updateForm('debts', Number(e.target.value) || 0)
+                    }
+                    placeholder="0"
+                    className="input-field"
+                  />
+                </FormField>
+              </div>
+
+              <div className="rounded-lg bg-muted/50 p-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-muted-foreground">Net Tereke</span>
+                  <span className="text-lg font-bold text-foreground">
+                    {formatCurrency(netEstate)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </SectionCard>
+
+          {/* Section 2: Spouse */}
+          <SectionCard
+            title="Sag Kalan Es"
+            icon={<Users className="h-5 w-5 text-primary" />}
+            expanded={expandedSections.spouse}
+            onToggle={() => toggleSection('spouse')}
+          >
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.hasSpouse}
+                onChange={(e) => updateForm('hasSpouse', e.target.checked)}
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-sm font-medium">Sag kalan es var</span>
+            </label>
+            {form.hasSpouse && (
+              <div className="mt-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3 text-xs text-blue-700 dark:text-blue-300">
+                <Info className="mr-1 inline h-3.5 w-3.5" />
+                Es payi: 1. Zumre ile 1/4, 2. Zumre ile 1/2, 3. Zumre ile 3/4, tek basina tamami
+              </div>
+            )}
+          </SectionCard>
+
+          {/* Section 3: 1st Zumre - Children */}
+          <SectionCard
+            title="1. Zumre - Altsoy (Cocuklar)"
+            icon={<Users className="h-5 w-5 text-emerald-600" />}
+            expanded={expandedSections.zumre1}
+            onToggle={() => toggleSection('zumre1')}
+            badge={form.children.length > 0 ? `${form.children.length} cocuk` : undefined}
+          >
+            <div className="space-y-3">
+              {form.children.map((child, idx) => (
+                <div
+                  key={child.id}
+                  className="rounded-lg border border-border bg-background p-3 space-y-3"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground w-6">
+                      {idx + 1}.
+                    </span>
+                    <input
+                      type="text"
+                      value={child.name}
+                      onChange={(e) =>
+                        updateChild(child.id, { name: e.target.value })
+                      }
+                      placeholder={`Cocuk ${idx + 1} adi`}
+                      className="input-field flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeChild(child.id)}
+                      className="rounded p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+                      title="Kaldir"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-4 pl-8">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={child.alive}
+                        onChange={(e) =>
+                          updateChild(child.id, {
+                            alive: e.target.checked,
+                            hasChildren: e.target.checked ? false : child.hasChildren,
+                          })
+                        }
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                      />
+                      <span className="text-sm">Sag</span>
+                    </label>
+
+                    {!child.alive && (
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={child.hasChildren}
+                          onChange={(e) =>
+                            updateChild(child.id, {
+                              hasChildren: e.target.checked,
+                              grandchildren: e.target.checked
+                                ? child.grandchildren
+                                : [],
+                            })
+                          }
+                          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                        />
+                        <span className="text-sm">Cocugu var (halefiyat)</span>
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Grandchildren (halefiyat) */}
+                  {!child.alive && child.hasChildren && (
+                    <div className="ml-8 space-y-2 border-l-2 border-emerald-200 dark:border-emerald-800 pl-3">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Torunlar (halefiyat ile paya hak kazanir)
+                      </p>
+                      {child.grandchildren.map((gc, gcIdx) => (
+                        <div key={gc.id} className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground w-6">
+                            {gcIdx + 1}.
+                          </span>
+                          <input
+                            type="text"
+                            value={gc.name}
+                            onChange={(e) =>
+                              updateGrandchild(child.id, gc.id, e.target.value)
+                            }
+                            placeholder={`Torun ${gcIdx + 1}`}
+                            className="input-field flex-1 text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeGrandchild(child.id, gc.id)}
+                            className="rounded p-1 text-muted-foreground hover:text-destructive transition-colors"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => addGrandchild(child.id)}
+                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                      >
+                        <Plus className="h-3 w-3" />
+                        Torun ekle
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+
               <button
                 type="button"
-                onClick={() => setShowProtected(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted transition-colors"
-                aria-label="Kapat"
+                onClick={addChild}
+                className="inline-flex items-center gap-2 rounded-lg border border-dashed border-border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors w-full justify-center"
               >
-                <X className="h-4 w-4" />
+                <Plus className="h-4 w-4" />
+                Cocuk Ekle
               </button>
             </div>
+          </SectionCard>
 
-            <div className="p-6 space-y-6">
-              {protectedShares.length > 0 ? (
-                <>
+          {/* Section 4: 2nd Zumre - Parents (only if no 1st zumre) */}
+          {!has1stZumre && (
+            <SectionCard
+              title="2. Zumre - Ana ve Baba"
+              icon={<Users className="h-5 w-5 text-amber-600" />}
+              expanded={expandedSections.zumre2}
+              onToggle={() => toggleSection('zumre2')}
+              disabled={has1stZumre}
+              disabledMessage="1. zumrede mirascı oldugu icin 2. zumre devre disi"
+            >
+              <div className="space-y-4">
+                {/* Mother */}
+                <ParentBlock
+                  label="Anne"
+                  parentState={form.mother}
+
+                  onToggleAlive={(alive) => {
+                    updateForm('mother', {
+                      ...form.mother,
+                      alive,
+                      descendants: alive ? [] : form.mother.descendants,
+                    })
+                  }}
+                  onAddDescendant={() => addParentDescendant('mother')}
+                  onRemoveDescendant={(id) => removeParentDescendant('mother', id)}
+                  onUpdateDescendant={(id, u) => updateParentDescendant('mother', id, u)}
+                  onAddNephewNiece={(sibId) => addNephewNiece('mother', sibId)}
+                  onRemoveNephewNiece={(sibId, nnId) => removeNephewNiece('mother', sibId, nnId)}
+                  onUpdateNephewNiece={(sibId, nnId, name) => updateNephewNiece('mother', sibId, nnId, name)}
+                  siblingLabel="Kardes (anne tarafindan)"
+                />
+
+                <hr className="border-border" />
+
+                {/* Father */}
+                <ParentBlock
+                  label="Baba"
+                  parentState={form.father}
+
+                  onToggleAlive={(alive) => {
+                    updateForm('father', {
+                      ...form.father,
+                      alive,
+                      descendants: alive ? [] : form.father.descendants,
+                    })
+                  }}
+                  onAddDescendant={() => addParentDescendant('father')}
+                  onRemoveDescendant={(id) => removeParentDescendant('father', id)}
+                  onUpdateDescendant={(id, u) => updateParentDescendant('father', id, u)}
+                  onAddNephewNiece={(sibId) => addNephewNiece('father', sibId)}
+                  onRemoveNephewNiece={(sibId, nnId) => removeNephewNiece('father', sibId, nnId)}
+                  onUpdateNephewNiece={(sibId, nnId, name) => updateNephewNiece('father', sibId, nnId, name)}
+                  siblingLabel="Kardes (baba tarafindan)"
+                />
+              </div>
+            </SectionCard>
+          )}
+
+          {/* Section 5: 3rd Zumre - Grandparents (only if no 1st or 2nd zumre) */}
+          {!has1stZumre && !has2ndZumre && (
+            <SectionCard
+              title="3. Zumre - Buyukanne ve Buyukbaba"
+              icon={<Users className="h-5 w-5 text-purple-600" />}
+              expanded={expandedSections.zumre3}
+              onToggle={() => toggleSection('zumre3')}
+            >
+              <div className="space-y-6">
+                <GrandparentSideBlock
+                  sideLabel="Anne Tarafi"
+                  side={form.maternalGrandparents}
+                  sideKey="maternalGrandparents"
+                  onUpdateGp={updateGrandparent}
+                  onAddDesc={addGpDescendant}
+                  onRemoveDesc={removeGpDescendant}
+                  onUpdateDesc={updateGpDescendant}
+                  onAddCousin={addCousin}
+                  onRemoveCousin={removeCousin}
+                  onUpdateCousin={updateCousin}
+                />
+
+                <hr className="border-border" />
+
+                <GrandparentSideBlock
+                  sideLabel="Baba Tarafi"
+                  side={form.paternalGrandparents}
+                  sideKey="paternalGrandparents"
+                  onUpdateGp={updateGrandparent}
+                  onAddDesc={addGpDescendant}
+                  onRemoveDesc={removeGpDescendant}
+                  onUpdateDesc={updateGpDescendant}
+                  onAddCousin={addCousin}
+                  onRemoveCousin={removeCousin}
+                  onUpdateCousin={updateCousin}
+                />
+              </div>
+            </SectionCard>
+          )}
+
+          {/* Calculate button */}
+          <button
+            type="button"
+            onClick={handleCalculate}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition-colors"
+          >
+            <Calculator className="h-5 w-5" />
+            Hesapla
+          </button>
+        </div>
+
+        {/* ================================================================ */}
+        {/* RIGHT COLUMN: Results */}
+        {/* ================================================================ */}
+        <div className="space-y-4">
+          {results ? (
+            <>
+              {/* Summary card */}
+              <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Scale className="h-4 w-4 text-primary" />
+                  Ozet
+                </h3>
+                <div className="space-y-2 text-sm">
+                  <SummaryRow label="Tereke" value={formatCurrency(form.estateValue)} />
+                  <SummaryRow label="Borclar" value={`- ${formatCurrency(form.debts)}`} />
+                  <hr className="border-border" />
+                  <SummaryRow
+                    label="Net Tereke"
+                    value={formatCurrency(results.netEstate)}
+                    bold
+                  />
+                  {results.activeZumre > 0 && (
+                    <div className="mt-2 rounded bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
+                      Aktif zumre: <strong>{results.activeZumre}. Zumre</strong>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Legal shares table */}
+              <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Users className="h-4 w-4 text-primary" />
+                  Yasal Miras Paylari
+                </h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
+                        <th className="pb-2 pr-2">Mirascı</th>
+                        <th className="pb-2 pr-2">Zumre</th>
+                        <th className="pb-2 pr-2 text-right">Kesir</th>
+                        <th className="pb-2 pr-2 text-right">%</th>
+                        <th className="pb-2 text-right">Tutar</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {results.shares.map((s, i) => (
+                        <tr
+                          key={i}
+                          className="border-b border-border/50 last:border-0"
+                        >
+                          <td className="py-2 pr-2 font-medium">{s.name}</td>
+                          <td className="py-2 pr-2 text-xs text-muted-foreground">
+                            {s.zumre}
+                          </td>
+                          <td className="py-2 pr-2 text-right font-mono text-xs">
+                            {s.fraction}
+                          </td>
+                          <td className="py-2 pr-2 text-right">
+                            %{s.percentage.toFixed(2)}
+                          </td>
+                          <td className="py-2 text-right font-medium">
+                            {formatCurrency(s.amount)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Protected shares table */}
+              {results.protectedShares.length > 0 && (
+                <div className="rounded-lg border border-border bg-card p-5 space-y-3">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-amber-600" />
+                    Sakli Paylar (TMK m.506)
+                  </h3>
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
-                        <tr className="border-b">
-                          <th className="text-left py-3 px-4 font-medium">Mirasci</th>
-                          <th className="text-center py-3 px-4 font-medium">Yasal Pay</th>
-                          <th className="text-left py-3 px-4 font-medium">Sakli Pay Orani</th>
-                          <th className="text-center py-3 px-4 font-medium">Sakli Pay</th>
-                          <th className="text-right py-3 px-4 font-medium">Tutar (TL)</th>
+                        <tr className="border-b border-border text-left text-xs font-medium text-muted-foreground">
+                          <th className="pb-2 pr-2">Mirascı</th>
+                          <th className="pb-2 pr-2 text-right">Yasal Pay</th>
+                          <th className="pb-2 pr-2 text-right">Sakli Oran</th>
+                          <th className="pb-2 text-right">Sakli Pay</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {protectedShares.map((p, i) => (
-                          <tr key={i} className="border-b last:border-b-0 hover:bg-muted/50">
-                            <td className="py-3 px-4 font-medium">{p.name}</td>
-                            <td className="py-3 px-4 text-center font-mono">
-                              <span className="text-primary font-semibold">{p.legalFraction}</span>
-                              <span className="text-muted-foreground ml-1">
-                                (%{p.legalShare.toFixed(2)})
-                              </span>
+                        {results.protectedShares.map((p, i) => (
+                          <tr
+                            key={i}
+                            className="border-b border-border/50 last:border-0"
+                          >
+                            <td className="py-2 pr-2 font-medium">{p.name}</td>
+                            <td className="py-2 pr-2 text-right text-xs">
+                              {formatCurrency(p.legalAmount)}
                             </td>
-                            <td className="py-3 px-4 text-muted-foreground">{p.protectedRatio}</td>
-                            <td className="py-3 px-4 text-center font-mono">
-                              <span className="text-primary font-semibold">
-                                {p.protectedFraction}
-                              </span>
-                              <span className="text-muted-foreground ml-1">
-                                (%{p.protectedShare.toFixed(2)})
-                              </span>
+                            <td className="py-2 pr-2 text-right font-mono text-xs">
+                              {p.protectedRatio}
                             </td>
-                            <td className="py-3 px-4 text-right font-mono">
+                            <td className="py-2 text-right font-medium">
                               {formatCurrency(p.protectedAmount)}
                             </td>
                           </tr>
                         ))}
                       </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 font-semibold">
-                          <td className="py-3 px-4" colSpan={3}>
-                            Toplam Sakli Pay
-                          </td>
-                          <td className="py-3 px-4 text-center font-mono">
-                            {toFraction(
-                              protectedShares.reduce((s, p) => s + p.protectedShare, 0)
-                            )}
-                            <span className="text-muted-foreground ml-1 font-normal">
-                              (%
-                              {protectedShares
-                                .reduce((s, p) => s + p.protectedShare, 0)
-                                .toFixed(2)}
-                              )
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono">
-                            {formatCurrency(
-                              protectedShares.reduce((s, p) => s + p.protectedAmount, 0)
-                            )}
-                          </td>
-                        </tr>
-                        <tr className="font-semibold text-muted-foreground">
-                          <td className="py-3 px-4" colSpan={3}>
-                            Tasarruf Edilebilir Kisim
-                          </td>
-                          <td className="py-3 px-4 text-center font-mono">
-                            {toFraction(
-                              100 - protectedShares.reduce((s, p) => s + p.protectedShare, 0)
-                            )}
-                            <span className="ml-1 font-normal">
-                              (%
-                              {(
-                                100 - protectedShares.reduce((s, p) => s + p.protectedShare, 0)
-                              ).toFixed(2)}
-                              )
-                            </span>
-                          </td>
-                          <td className="py-3 px-4 text-right font-mono">
-                            {formatCurrency(
-                              totalEstateValue -
-                                protectedShares.reduce((s, p) => s + p.protectedAmount, 0)
-                            )}
-                          </td>
-                        </tr>
-                      </tfoot>
                     </table>
                   </div>
 
-                  {/* Per-asset protected share breakdown */}
-                  {assets.length > 1 && (
-                    <div className="space-y-3">
-                      <h4 className="text-sm font-semibold text-muted-foreground">
-                        Varlik Bazinda Sakli Pay Dagilimi
-                      </h4>
-                      <div className="grid gap-2">
-                        {assets.map((asset) => (
-                          <div key={asset.id} className="rounded-md border p-3 text-xs">
-                            <div className="flex items-center gap-2 mb-2 font-medium text-sm">
-                              <AssetIcon type={asset.type} className="h-3.5 w-3.5" />
-                              {asset.type === 'tasinmaz'
-                                ? `Ada ${(asset as TasinmazAsset).ada} P.${(asset as TasinmazAsset).parsel}`
-                                : asset.type === 'arac'
-                                  ? `${(asset as AracAsset).plaka}`
-                                  : asset.type === 'diger'
-                                    ? (asset as DigerAsset).description
-                                    : 'Nakit'}
-                              <span className="text-muted-foreground font-normal ml-auto">
-                                {formatCurrency(asset.value)}
-                              </span>
-                            </div>
-                            <div className="flex flex-wrap gap-x-4 gap-y-1">
-                              {protectedShares.map((p) => (
-                                <span key={p.name}>
-                                  {p.name}:{' '}
-                                  <span className="font-mono font-medium">
-                                    {formatCurrency((asset.value * p.protectedShare) / 100)}
-                                  </span>
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="text-muted-foreground text-center py-4">
-                  Sakli pay hesaplamasi icin mirasci eklenmeli ve hesaplama yapilmalidir.
-                </p>
+                  <div className="space-y-1.5 rounded-lg bg-muted/50 p-3 text-sm">
+                    <SummaryRow
+                      label="Sakli Paylar Toplami"
+                      value={formatCurrency(results.totalProtected)}
+                    />
+                    <SummaryRow
+                      label="Tasarruf Edilebilir Kisim"
+                      value={formatCurrency(results.disposable)}
+                      bold
+                    />
+                  </div>
+                </div>
               )}
 
-              <div className="p-3 rounded-md bg-muted/50 text-xs text-muted-foreground">
-                <strong>Dayanak:</strong> TMK m.506 - Sakli pay oranlari. Altsoy: yasal payin
-                1/2'si; ana-baba: yasal payin 1/4'u; sag kalan es: yasal payin tamami.
+              {/* Legal info */}
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 p-4 text-xs text-amber-800 dark:text-amber-200">
+                <Info className="mr-1.5 inline h-4 w-4" />
+                Bu hesaplama TMK m.495-506 hukumlerine gore yapilmistir. Vasiyetname
+                veya miras sozlesmesi varsa sonuc degisebilir. Kesin sonuc icin bir
+                avukata danisiniz.
               </div>
+            </>
+          ) : (
+            <div className="rounded-lg border border-dashed border-border bg-muted/30 p-8 text-center">
+              <Calculator className="mx-auto h-10 w-10 text-muted-foreground/50" />
+              <p className="mt-3 text-sm text-muted-foreground">
+                Mirascı bilgilerini girin ve &quot;Hesapla&quot; butonuna basin
+              </p>
             </div>
-          </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ===========================================================================
+// Sub-components
+// ===========================================================================
+
+// --- Section card with collapsible header ---
+
+function SectionCard({
+  title,
+  icon,
+  expanded,
+  onToggle,
+  badge,
+  disabled,
+  disabledMessage,
+  children,
+}: {
+  title: string
+  icon: React.ReactNode
+  expanded: boolean
+  onToggle: () => void
+  badge?: string
+  disabled?: boolean
+  disabledMessage?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card shadow-sm">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="flex w-full items-center justify-between p-4 text-left"
+      >
+        <div className="flex items-center gap-3">
+          {icon}
+          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+          {badge && (
+            <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+              {badge}
+            </span>
+          )}
+        </div>
+        {expanded ? (
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        )}
+      </button>
+      {expanded && (
+        <div className="border-t border-border p-4">
+          {disabled && disabledMessage ? (
+            <p className="text-xs text-muted-foreground italic">{disabledMessage}</p>
+          ) : (
+            children
+          )}
         </div>
       )}
+    </div>
+  )
+}
+
+// --- Form field ---
+
+function FormField({
+  label,
+  children,
+}: {
+  label: string
+  children: React.ReactNode
+}) {
+  return (
+    <div>
+      <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+        {label}
+      </label>
+      {children}
+    </div>
+  )
+}
+
+// --- Summary row ---
+
+function SummaryRow({
+  label,
+  value,
+  bold,
+}: {
+  label: string
+  value: string
+  bold?: boolean
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className={bold ? 'font-semibold' : 'text-muted-foreground'}>
+        {label}
+      </span>
+      <span className={bold ? 'font-bold text-foreground' : 'font-medium'}>
+        {value}
+      </span>
+    </div>
+  )
+}
+
+// --- 2nd Zumre: Parent block ---
+
+function ParentBlock({
+  label,
+  parentState,
+  onToggleAlive,
+  onAddDescendant,
+  onRemoveDescendant,
+  onUpdateDescendant,
+  onAddNephewNiece,
+  onRemoveNephewNiece,
+  onUpdateNephewNiece,
+  siblingLabel,
+}: {
+  label: string
+  parentState: ParentSide
+  onToggleAlive: (alive: boolean) => void
+  onAddDescendant: () => void
+  onRemoveDescendant: (id: string) => void
+  onUpdateDescendant: (id: string, updates: Partial<SiblingOrDescendant>) => void
+  onAddNephewNiece: (siblingId: string) => void
+  onRemoveNephewNiece: (siblingId: string, nnId: string) => void
+  onUpdateNephewNiece: (siblingId: string, nnId: string, name: string) => void
+  siblingLabel: string
+}) {
+  return (
+    <div className="space-y-3">
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={parentState.alive}
+          onChange={(e) => onToggleAlive(e.target.checked)}
+          className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+        />
+        <span className="text-sm font-medium">{label} sag</span>
+      </label>
+
+      {!parentState.alive && (
+        <div className="ml-6 space-y-2 border-l-2 border-amber-200 dark:border-amber-800 pl-3">
+          <p className="text-xs font-medium text-muted-foreground">
+            {label} vefat ettiyse, payi altsoyuna (kardeslerinize) gecer (halefiyat)
+          </p>
+          {parentState.descendants.map((sib, idx) => (
+            <div
+              key={sib.id}
+              className="rounded border border-border bg-background p-2 space-y-2"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground w-5">{idx + 1}.</span>
+                <input
+                  type="text"
+                  value={sib.name}
+                  onChange={(e) =>
+                    onUpdateDescendant(sib.id, { name: e.target.value })
+                  }
+                  placeholder={`${siblingLabel} ${idx + 1}`}
+                  className="input-field flex-1 text-sm"
+                />
+                <label className="flex items-center gap-1 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sib.alive}
+                    onChange={(e) =>
+                      onUpdateDescendant(sib.id, {
+                        alive: e.target.checked,
+                        children: e.target.checked ? [] : sib.children,
+                      })
+                    }
+                    className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary"
+                  />
+                  <span className="text-xs">Sag</span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => onRemoveDescendant(sib.id)}
+                  className="rounded p-1 text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
+
+              {/* Nephew/niece sub-halefiyat */}
+              {!sib.alive && (
+                <div className="ml-7 space-y-1.5 border-l-2 border-amber-100 dark:border-amber-900 pl-2">
+                  <p className="text-xs text-muted-foreground">
+                    Cocuklari (yegen - halefiyat)
+                  </p>
+                  {sib.children.map((nn, nnIdx) => (
+                    <div key={nn.id} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-4">
+                        {nnIdx + 1}.
+                      </span>
+                      <input
+                        type="text"
+                        value={nn.name}
+                        onChange={(e) =>
+                          onUpdateNephewNiece(sib.id, nn.id, e.target.value)
+                        }
+                        placeholder={`Yegen ${nnIdx + 1}`}
+                        className="input-field flex-1 text-xs"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => onRemoveNephewNiece(sib.id, nn.id)}
+                        className="rounded p-0.5 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => onAddNephewNiece(sib.id)}
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Yegen ekle
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+          <button
+            type="button"
+            onClick={onAddDescendant}
+            className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+          >
+            <Plus className="h-3 w-3" />
+            {siblingLabel} ekle
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// --- 3rd Zumre: Grandparent side block ---
+
+function GrandparentSideBlock({
+  sideLabel,
+  side,
+  sideKey,
+  onUpdateGp,
+  onAddDesc,
+  onRemoveDesc,
+  onUpdateDesc,
+  onAddCousin,
+  onRemoveCousin,
+  onUpdateCousin,
+}: {
+  sideLabel: string
+  side: GrandparentSide
+  sideKey: 'maternalGrandparents' | 'paternalGrandparents'
+  onUpdateGp: (
+    side: 'maternalGrandparents' | 'paternalGrandparents',
+    person: 'grandmother' | 'grandfather',
+    updates: Partial<GrandparentPerson>
+  ) => void
+  onAddDesc: (
+    side: 'maternalGrandparents' | 'paternalGrandparents',
+    person: 'grandmother' | 'grandfather'
+  ) => void
+  onRemoveDesc: (
+    side: 'maternalGrandparents' | 'paternalGrandparents',
+    person: 'grandmother' | 'grandfather',
+    id: string
+  ) => void
+  onUpdateDesc: (
+    side: 'maternalGrandparents' | 'paternalGrandparents',
+    person: 'grandmother' | 'grandfather',
+    id: string,
+    updates: Partial<AuntUncle>
+  ) => void
+  onAddCousin: (
+    side: 'maternalGrandparents' | 'paternalGrandparents',
+    person: 'grandmother' | 'grandfather',
+    auId: string
+  ) => void
+  onRemoveCousin: (
+    side: 'maternalGrandparents' | 'paternalGrandparents',
+    person: 'grandmother' | 'grandfather',
+    auId: string,
+    cId: string
+  ) => void
+  onUpdateCousin: (
+    side: 'maternalGrandparents' | 'paternalGrandparents',
+    person: 'grandmother' | 'grandfather',
+    auId: string,
+    cId: string,
+    name: string
+  ) => void
+}) {
+  return (
+    <div className="space-y-4">
+      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+        {sideLabel}
+      </h4>
+
+      {(['grandmother', 'grandfather'] as const).map((personKey) => {
+        const gp = side[personKey]
+        const personLabel = personKey === 'grandmother' ? 'Buyukanne' : 'Buyukbaba'
+        const descLabel =
+          sideLabel === 'Anne Tarafi'
+            ? personKey === 'grandmother'
+              ? 'Dayi/Teyze (buyukanne kolu)'
+              : 'Dayi/Teyze (buyukbaba kolu)'
+            : personKey === 'grandmother'
+              ? 'Amca/Hala (buyukanne kolu)'
+              : 'Amca/Hala (buyukbaba kolu)'
+
+        return (
+          <div key={personKey} className="space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={gp.alive}
+                onChange={(e) =>
+                  onUpdateGp(sideKey, personKey, {
+                    alive: e.target.checked,
+                    descendants: e.target.checked ? [] : gp.descendants,
+                  })
+                }
+                className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
+              />
+              <span className="text-sm font-medium">
+                {personLabel} ({sideLabel.toLowerCase()}) sag
+              </span>
+            </label>
+
+            {!gp.alive && (
+              <div className="ml-6 space-y-2 border-l-2 border-purple-200 dark:border-purple-800 pl-3">
+                <p className="text-xs text-muted-foreground">
+                  {personLabel} vefat ettiyse payi altsoyuna gecer (halefiyat)
+                </p>
+                {gp.descendants.map((au, idx) => (
+                  <div
+                    key={au.id}
+                    className="rounded border border-border bg-background p-2 space-y-2"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground w-5">
+                        {idx + 1}.
+                      </span>
+                      <input
+                        type="text"
+                        value={au.name}
+                        onChange={(e) =>
+                          onUpdateDesc(sideKey, personKey, au.id, {
+                            name: e.target.value,
+                          })
+                        }
+                        placeholder={`${descLabel} ${idx + 1}`}
+                        className="input-field flex-1 text-sm"
+                      />
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={au.alive}
+                          onChange={(e) =>
+                            onUpdateDesc(sideKey, personKey, au.id, {
+                              alive: e.target.checked,
+                              children: e.target.checked ? [] : au.children,
+                            })
+                          }
+                          className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary"
+                        />
+                        <span className="text-xs">Sag</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => onRemoveDesc(sideKey, personKey, au.id)}
+                        className="rounded p-1 text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+
+                    {/* Cousin sub-halefiyat */}
+                    {!au.alive && (
+                      <div className="ml-7 space-y-1.5 border-l-2 border-purple-100 dark:border-purple-900 pl-2">
+                        <p className="text-xs text-muted-foreground">
+                          Cocuklari (kuzen - halefiyat)
+                        </p>
+                        {au.children.map((c, cIdx) => (
+                          <div key={c.id} className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-4">
+                              {cIdx + 1}.
+                            </span>
+                            <input
+                              type="text"
+                              value={c.name}
+                              onChange={(e) =>
+                                onUpdateCousin(
+                                  sideKey,
+                                  personKey,
+                                  au.id,
+                                  c.id,
+                                  e.target.value
+                                )
+                              }
+                              placeholder={`Kuzen ${cIdx + 1}`}
+                              className="input-field flex-1 text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onRemoveCousin(sideKey, personKey, au.id, c.id)
+                              }
+                              className="rounded p-0.5 text-muted-foreground hover:text-destructive"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => onAddCousin(sideKey, personKey, au.id)}
+                          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        >
+                          <Plus className="h-3 w-3" />
+                          Kuzen ekle
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => onAddDesc(sideKey, personKey)}
+                  className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                >
+                  <Plus className="h-3 w-3" />
+                  {descLabel} ekle
+                </button>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }

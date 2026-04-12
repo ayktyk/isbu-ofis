@@ -7,6 +7,7 @@ import {
   Calendar,
   CheckSquare,
   FileText,
+  FolderOpen,
   Gavel,
   Handshake,
   LayoutDashboard,
@@ -37,8 +38,9 @@ const toolItems = [
 ]
 
 const mediationItems = [
-  { to: '/tools/mediation/dava-sarti', label: 'Dava Sarti Arabuluculuk', icon: FileText },
-  { to: '/tools/mediation/ihtiyari', label: 'Ihtiyari Arabuluculuk', icon: Handshake },
+  { to: '/tools/mediation-files', label: 'Dosya Takibi', icon: FolderOpen },
+  { to: '/tools/mediation/dava-sarti', label: 'Dava Sarti Belgeleri', icon: FileText },
+  { to: '/tools/mediation/ihtiyari', label: 'Ihtiyari Belgeleri', icon: Handshake },
 ]
 
 function SidebarLink({

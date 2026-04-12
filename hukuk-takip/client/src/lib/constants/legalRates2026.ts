@@ -34,12 +34,21 @@ export const SGK_ISVEREN_ORANI = 0.205
 export const ISSIZLIK_ISVEREN_ORANI = 0.02
 export const DAMGA_VERGISI_ORANI = 0.00759
 
-// 2025 Gelir vergisi dilimleri
+// 2026 Asgari Ucret
+export const ASGARI_UCRET_BRUT_2026 = 33030
+export const ASGARI_UCRET_NET_2026 = 28075.50
+export const KIDEM_TAVANI_2026_H1 = 64948.77
+
+// Asgari Ucret Istisnalari (aylik)
+export const AU_GV_ISTISNASI = 4211.33
+export const AU_DV_ISTISNASI = 250.70
+
+// 2026 Gelir vergisi dilimleri
 export const GELIR_VERGISI_DILIMLERI = [
-  { limit: 158000, oran: 0.15 },
-  { limit: 330000, oran: 0.20 },
-  { limit: 800000, oran: 0.27 },
-  { limit: 1900000, oran: 0.35 },
+  { limit: 190000, oran: 0.15 },
+  { limit: 400000, oran: 0.20 },
+  { limit: 1500000, oran: 0.27 },
+  { limit: 5300000, oran: 0.35 },
   { limit: Infinity, oran: 0.40 },
 ]
 

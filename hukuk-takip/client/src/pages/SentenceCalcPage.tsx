@@ -1,32 +1,133 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { PageHeader } from '@/components/shared/PageHeader'
-import { SENTENCE_CATEGORIES, SPECIAL_CONDITIONS, RECIDIVISM_LEVELS } from '@/lib/constants/sentenceRates'
+
+// ─── Types ──────────────────────────────────────────────────────────────────
 
 type PenaltyType = 'sureli' | 'muebbet' | 'agir_muebbet'
+type Tekerrur = 'yok' | '1' | '2'
 
-interface FormData {
+interface CrimeCategory {
+  id: string
+  label: string
+  ratio: number
+  ratioLabel: string
+  noDenetimliSerbestlik7456?: boolean
+}
+
+interface FormState {
+  penaltyType: PenaltyType
   years: number
   months: number
   days: number
-  penaltyType: PenaltyType
-  crimeDate: string
-  finalizationDate: string
-  executionStartDate: string
-  birthDate: string
-  detentionDays: number
   crimeCategory: string
-  recidivism: string
-  specialCondition: string
+  crimeDate: string
+  executionStartDate: string
+  detentionDays: number
+  isJuvenile: boolean
+  birthDate: string
+  tekerrur: Tekerrur
+  iyiHal: boolean
 }
 
 interface CalcResult {
-  appliedLaw: string
-  ratio: string
-  conditionalReleaseDate: Date
-  supervisedProbationDays: number
-  supervisedProbationStart: Date
-  unconditionalReleaseDate: Date
+  toplamCezaGun: number
+  mahsupGun: number
+  cocukIndirimiGun: number
+  netCezaGun: number
+  infazOrani: string
+  kosulluGun: number
+  kosulluTarih: Date
+  denetimliSerbestlikGun: number
+  denetimliSerbestlikBaslangic: Date
+  bihakkinTarih: Date
+  kapaliCezaeviGun: number
+  acikCezaeviTarih: Date | null
+  uygulananMevzuat: string[]
+  penaltyType: PenaltyType
+  uyarilar: string[]
 }
+
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+const CRIME_CATEGORIES: CrimeCategory[] = [
+  { id: 'genel', label: 'Genel suclar', ratio: 1 / 2, ratioLabel: '1/2' },
+  {
+    id: 'kasten_oldurme',
+    label: 'Kasten oldurme (TCK 81, 82)',
+    ratio: 2 / 3,
+    ratioLabel: '2/3',
+  },
+  {
+    id: 'uyusturucu',
+    label: 'Uyusturucu imal/ticareti (TCK 188)',
+    ratio: 3 / 4,
+    ratioLabel: '3/4',
+    noDenetimliSerbestlik7456: true,
+  },
+  {
+    id: 'cinsel',
+    label: 'Cinsel suclar (TCK 102, 103, 104)',
+    ratio: 3 / 4,
+    ratioLabel: '3/4',
+    noDenetimliSerbestlik7456: true,
+  },
+  {
+    id: 'teror',
+    label: 'Teror suclari (TMK)',
+    ratio: 3 / 4,
+    ratioLabel: '3/4',
+    noDenetimliSerbestlik7456: true,
+  },
+  {
+    id: 'devlet',
+    label: 'Devlete karsi suclar (TCK 302-339)',
+    ratio: 3 / 4,
+    ratioLabel: '3/4',
+  },
+  {
+    id: 'orgutlu',
+    label: 'Orgutlu suclar (TCK 314, 220)',
+    ratio: 3 / 4,
+    ratioLabel: '3/4',
+  },
+  {
+    id: 'mukerrir',
+    label: 'Ikinci kez mukerrir (tekerrur)',
+    ratio: 3 / 4,
+    ratioLabel: '3/4',
+  },
+]
+
+const TEKERRUR_OPTIONS = [
+  { id: 'yok' as const, label: 'Yok' },
+  { id: '1' as const, label: 'Birinci Tekerrur' },
+  { id: '2' as const, label: 'Ikinci Tekerrur (Mukerrir)' },
+]
+
+// Muebbet tekerrur adjustments (yil cinsinden)
+const MUEBBET_TEKERRUR: Record<Tekerrur, number> = {
+  yok: 24,
+  '1': 28,
+  '2': 32,
+}
+const AGIR_MUEBBET_TEKERRUR: Record<Tekerrur, number> = {
+  yok: 30,
+  '1': 34,
+  '2': 36,
+}
+
+// Denetimli serbestlik cutoff dates
+const DS_CUTOFF_7242 = new Date('2020-03-30') // 7242 SK
+const DS_CUTOFF_7456 = new Date('2023-08-01') // 7456 SK
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+const inputCls =
+  'flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+const selectCls = inputCls
+const labelCls = 'block text-sm font-medium text-foreground mb-1'
+const btnCls =
+  'inline-flex items-center justify-center rounded-md bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors disabled:opacity-50'
 
 function addDays(date: Date, days: number): Date {
   const result = new Date(date)
@@ -42,7 +143,8 @@ function formatDate(date: Date): string {
   })
 }
 
-function formatDuration(totalDays: number): string {
+function daysToYMD(totalDays: number): string {
+  if (totalDays <= 0) return '0 gun'
   const years = Math.floor(totalDays / 365)
   const remaining = totalDays % 365
   const months = Math.floor(remaining / 30)
@@ -54,268 +156,460 @@ function formatDuration(totalDays: number): string {
   return parts.length > 0 ? parts.join(' ') : '0 gun'
 }
 
-function calculate(form: FormData): CalcResult | null {
+function getAgeAtDate(birthDate: Date, targetDate: Date): number {
+  let age = targetDate.getFullYear() - birthDate.getFullYear()
+  const monthDiff = targetDate.getMonth() - birthDate.getMonth()
+  if (
+    monthDiff < 0 ||
+    (monthDiff === 0 && targetDate.getDate() < birthDate.getDate())
+  ) {
+    age--
+  }
+  return age
+}
+
+// ─── Calculation Engine ─────────────────────────────────────────────────────
+
+function calculate(form: FormState): CalcResult | null {
   const executionStart = new Date(form.executionStartDate)
   if (isNaN(executionStart.getTime())) return null
 
-  if (form.penaltyType === 'muebbet') {
-    const conditionalDays = 24 * 365
-    const probationDays = 3 * 365
-    const conditionalReleaseDate = addDays(executionStart, conditionalDays)
-    const supervisedProbationStart = addDays(conditionalReleaseDate, -probationDays)
-    const unconditionalReleaseDate = addDays(executionStart, 99 * 365) // symbolic
-    return {
-      appliedLaw: '5275 SK. m.107/2',
-      ratio: 'Muebbet - 24 yil',
-      conditionalReleaseDate,
-      supervisedProbationDays: probationDays,
-      supervisedProbationStart,
-      unconditionalReleaseDate,
-    }
-  }
-
-  if (form.penaltyType === 'agir_muebbet') {
-    const conditionalDays = 30 * 365
-    const probationDays = 3 * 365
-    const conditionalReleaseDate = addDays(executionStart, conditionalDays)
-    const supervisedProbationStart = addDays(conditionalReleaseDate, -probationDays)
-    const unconditionalReleaseDate = addDays(executionStart, 99 * 365)
-    return {
-      appliedLaw: '5275 SK. m.107/1',
-      ratio: 'Agirlastirilmis Muebbet - 30 yil',
-      conditionalReleaseDate,
-      supervisedProbationDays: probationDays,
-      supervisedProbationStart,
-      unconditionalReleaseDate,
-    }
-  }
-
-  // Sureli ceza
-  const totalDays =
-    form.years * 365 + form.months * 30 + form.days - form.detentionDays
-
-  if (totalDays <= 0) return null
-
-  const category = SENTENCE_CATEGORIES.find((c) => c.id === form.crimeCategory)
+  const crimeDate = form.crimeDate ? new Date(form.crimeDate) : null
+  const category = CRIME_CATEGORIES.find((c) => c.id === form.crimeCategory)
   if (!category) return null
 
-  let ratio = category.ratio
-  let ratioLabel = category.ratioLabel
+  const uyarilar: string[] = []
+  const mevzuat: string[] = ['5275 SK m.107']
 
-  // Tekerrur
-  if (form.recidivism === '1') {
-    ratio = Math.max(ratio, 2 / 3)
-    if (ratio > category.ratio) {
-      ratioLabel = `${category.ratioLabel} -> 2/3 (1. tekerrur)`
+  // ── Muebbet / Agir Muebbet ──
+  if (form.penaltyType !== 'sureli') {
+    const isAgir = form.penaltyType === 'agir_muebbet'
+    const tekerrurMap = isAgir ? AGIR_MUEBBET_TEKERRUR : MUEBBET_TEKERRUR
+    const baseYil = tekerrurMap[form.tekerrur]
+    const kosulluGun = baseYil * 365 - form.detentionDays
+
+    if (form.tekerrur !== 'yok') {
+      mevzuat.push('5275 SK m.108 (tekerrur)')
     }
-  } else if (form.recidivism === '2') {
-    ratio = 0.75
-    ratioLabel = `3/4 (2. tekerrur - 7550 SK.)`
+
+    // DS for muebbet
+    let dsGun = 0
+    if (form.iyiHal) {
+      dsGun = calculateDenetimliSerbestlik(
+        kosulluGun,
+        crimeDate,
+        category,
+        mevzuat,
+      )
+    }
+
+    const kosulluTarih = addDays(executionStart, kosulluGun)
+    const dsBaslangic = addDays(kosulluTarih, -dsGun)
+    const kapaliGun = Math.max(0, kosulluGun - dsGun)
+
+    if (isAgir) {
+      mevzuat.unshift('5275 SK m.107/1')
+    } else {
+      mevzuat.unshift('5275 SK m.107/2')
+    }
+
+    if (form.detentionDays > 0) {
+      uyarilar.push(
+        `${form.detentionDays} gun tutukluluk suresi mahsup edildi.`,
+      )
+    }
+
+    return {
+      toplamCezaGun: baseYil * 365,
+      mahsupGun: form.detentionDays,
+      cocukIndirimiGun: 0,
+      netCezaGun: baseYil * 365,
+      infazOrani: `${isAgir ? 'Agirlastirilmis' : ''} Muebbet - ${baseYil} yil`,
+      kosulluGun,
+      kosulluTarih,
+      denetimliSerbestlikGun: dsGun,
+      denetimliSerbestlikBaslangic: dsBaslangic,
+      bihakkinTarih: addDays(executionStart, 99 * 365), // symbolic
+      kapaliCezaeviGun: kapaliGun,
+      acikCezaeviTarih:
+        kapaliGun > 0
+          ? addDays(executionStart, Math.ceil(kapaliGun / 2))
+          : null,
+      uygulananMevzuat: [...new Set(mevzuat)],
+      penaltyType: form.penaltyType,
+      uyarilar,
+    }
   }
 
-  const infazDays = Math.ceil(totalDays * ratio)
-  const conditionalReleaseDate = addDays(executionStart, infazDays)
+  // ── Sureli Hapis ──
 
-  // Denetimli serbestlik: 7550 SK - en az 5 gun, toplam infaz gunlerinin %10'u
-  const probationDays = Math.max(5, Math.floor(infazDays * 0.1))
-  const supervisedProbationStart = addDays(conditionalReleaseDate, -probationDays)
+  // Step 1: Total days
+  const toplamGun = form.years * 365 + form.months * 30 + form.days
+  if (toplamGun <= 0) return null
 
-  const unconditionalReleaseDate = addDays(executionStart, totalDays)
+  // Step 2: Mahsup
+  const mahsupSonrasi = toplamGun - form.detentionDays
+  if (mahsupSonrasi <= 0) {
+    uyarilar.push('Tutukluluk suresi ceza suresinden fazla veya esit.')
+    return null
+  }
+
+  // Step 3: Juvenile reduction
+  let cocukIndirimi = 0
+  let netGun = mahsupSonrasi
+
+  if (form.isJuvenile && form.birthDate && crimeDate) {
+    const birth = new Date(form.birthDate)
+    const age = getAgeAtDate(birth, crimeDate)
+    if (age >= 12 && age < 15) {
+      cocukIndirimi = Math.floor(netGun * (1 / 3))
+      netGun = netGun - cocukIndirimi
+      uyarilar.push(
+        `Suc tarihinde ${age} yas (12-15 araligi): cezanin 2/3\'u uygulanir.`,
+      )
+      mevzuat.push('TCK m.31/2')
+    } else if (age >= 15 && age < 18) {
+      cocukIndirimi = Math.floor(netGun * (1 / 2))
+      netGun = netGun - cocukIndirimi
+      uyarilar.push(
+        `Suc tarihinde ${age} yas (15-18 araligi): cezanin 1/2\'si uygulanir.`,
+      )
+      mevzuat.push('TCK m.31/3')
+    } else if (age < 12) {
+      uyarilar.push('12 yasindan kucuk cocuklara ceza verilemez (TCK m.31/1).')
+      return null
+    } else {
+      uyarilar.push('Suc tarihinde 18 yas ve uzeri - cocuk indirimi uygulanmaz.')
+    }
+  }
+
+  // Step 4: Infaz orani
+  let oran = category.ratio
+  let oranLabel = category.ratioLabel
+
+  if (form.tekerrur === '1') {
+    if (oran < 2 / 3) {
+      oran = 2 / 3
+      oranLabel = `2/3 (1. tekerrur)`
+      mevzuat.push('5275 SK m.108')
+    }
+  } else if (form.tekerrur === '2') {
+    oran = 3 / 4
+    oranLabel = `3/4 (2. tekerrur - mukerrir)`
+    mevzuat.push('5275 SK m.108')
+  }
+
+  // Step 5: Kosullu saliverilme
+  let kosulluGun = Math.ceil(netGun * oran)
+  // Minimum 1 yil
+  if (kosulluGun < 365 && netGun >= 365) {
+    kosulluGun = 365
+    uyarilar.push(
+      'Kosullu saliverilme suresi 1 yildan az olamaz (5275 SK m.107/2).',
+    )
+  }
+
+  // Step 6: Denetimli serbestlik
+  let dsGun = 0
+  if (form.iyiHal) {
+    dsGun = calculateDenetimliSerbestlik(kosulluGun, crimeDate, category, mevzuat)
+    // DS cannot exceed total sentence
+    if (dsGun > netGun) {
+      dsGun = netGun
+    }
+    // DS cannot exceed kosullu gun
+    if (dsGun > kosulluGun) {
+      dsGun = kosulluGun
+    }
+  }
+
+  // Step 7: Calculate dates
+  const kosulluTarih = addDays(executionStart, kosulluGun)
+  const dsBaslangic = addDays(kosulluTarih, -dsGun)
+  const bihakkinTarih = addDays(executionStart, netGun)
+
+  // Step 8: Kapali cezaevi
+  const kapaliGun = Math.max(0, kosulluGun - dsGun)
+  const acikCezaeviTarih =
+    kapaliGun > 0 && form.iyiHal
+      ? addDays(executionStart, Math.ceil(kapaliGun / 2))
+      : null
+
+  if (form.detentionDays > 0) {
+    uyarilar.push(`${form.detentionDays} gun tutukluluk/gozalti suresi mahsup edildi.`)
+  }
 
   return {
-    appliedLaw: '5275 SK. m.107, 7550 SK., 7571 SK.',
-    ratio: ratioLabel,
-    conditionalReleaseDate,
-    supervisedProbationDays: probationDays,
-    supervisedProbationStart,
-    unconditionalReleaseDate,
+    toplamCezaGun: toplamGun,
+    mahsupGun: form.detentionDays,
+    cocukIndirimiGun: cocukIndirimi,
+    netCezaGun: netGun,
+    infazOrani: oranLabel,
+    kosulluGun,
+    kosulluTarih,
+    denetimliSerbestlikGun: dsGun,
+    denetimliSerbestlikBaslangic: dsBaslangic,
+    bihakkinTarih,
+    kapaliCezaeviGun: kapaliGun,
+    acikCezaeviTarih,
+    uygulananMevzuat: [...new Set(mevzuat)],
+    penaltyType: form.penaltyType,
+    uyarilar,
   }
 }
 
-function ResultItem({
+function calculateDenetimliSerbestlik(
+  kosulluGun: number,
+  crimeDate: Date | null,
+  category: CrimeCategory,
+  mevzuat: string[],
+): number {
+  if (!crimeDate) {
+    // Default to 3 yil if no crime date
+    return Math.min(1095, kosulluGun)
+  }
+
+  // Suc tarihi 01.08.2023 ve sonrasi (7456 SK)
+  if (crimeDate >= DS_CUTOFF_7456) {
+    mevzuat.push('7456 SK')
+    // Teror, cinsel, uyusturucu → DS uygulanmaz
+    if (category.noDenetimliSerbestlik7456) {
+      return 0
+    }
+    // DS = kosullu saliverilme suresinin 1/2'si
+    let ds = Math.ceil(kosulluGun / 2)
+    // Minimum 1 yil
+    if (ds < 365) ds = 365
+    // Genel suclarda max 3 yil
+    if (category.id === 'genel' && ds > 1095) ds = 1095
+    return ds
+  }
+
+  // Suc tarihi 30.03.2020 - 31.07.2023 arasi (7242 SK)
+  if (crimeDate > DS_CUTOFF_7242) {
+    mevzuat.push('7242 SK')
+    return Math.min(1095, kosulluGun) // 3 yil
+  }
+
+  // Suc tarihi 30.03.2020 ve oncesi
+  mevzuat.push('5275 SK m.105/A')
+  return Math.min(1095, kosulluGun) // 3 yil, ceza suresinden fazla olamaz
+}
+
+// ─── Result Card Component ──────────────────────────────────────────────────
+
+function ResultCard({
   label,
   value,
   highlight = false,
+  sublabel,
 }: {
   label: string
   value: string
   highlight?: boolean
+  sublabel?: string
 }) {
   return (
     <div
-      className={`rounded-lg border p-4 ${
+      className={`rounded-lg border p-4 transition-colors ${
         highlight
-          ? 'border-primary/20 bg-primary/5'
+          ? 'border-primary/30 bg-primary/5 ring-1 ring-primary/10'
           : 'border-border bg-background'
       }`}
     >
-      <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="text-lg font-semibold">{value}</p>
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        {label}
+      </p>
+      <p
+        className={`mt-1 text-lg font-semibold ${highlight ? 'text-primary' : 'text-foreground'}`}
+      >
+        {value}
+      </p>
+      {sublabel && (
+        <p className="mt-0.5 text-xs text-muted-foreground">{sublabel}</p>
+      )}
     </div>
   )
 }
 
-const initialForm: FormData = {
+// ─── Initial Form ───────────────────────────────────────────────────────────
+
+const initialForm: FormState = {
+  penaltyType: 'sureli',
   years: 0,
   months: 0,
   days: 0,
-  penaltyType: 'sureli',
+  crimeCategory: 'genel',
   crimeDate: '',
-  finalizationDate: '',
   executionStartDate: '',
-  birthDate: '',
   detentionDays: 0,
-  crimeCategory: SENTENCE_CATEGORIES[0].id,
-  recidivism: 'yok',
-  specialCondition: 'yok',
+  isJuvenile: false,
+  birthDate: '',
+  tekerrur: 'yok',
+  iyiHal: true,
 }
 
-export default function SentenceCalcPage() {
-  const [form, setForm] = useState<FormData>(initialForm)
-  const [result, setResult] = useState<CalcResult | null>(null)
+// ─── Page Component ─────────────────────────────────────────────────────────
 
-  const update = (field: keyof FormData, value: string | number) => {
+export default function SentenceCalcPage() {
+  const [form, setForm] = useState<FormState>(initialForm)
+  const [result, setResult] = useState<CalcResult | null>(null)
+  const [hasCalculated, setHasCalculated] = useState(false)
+
+  const update = <K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm((prev) => ({ ...prev, [field]: value }))
+    setHasCalculated(false)
   }
+
+  const isSureli = form.penaltyType === 'sureli'
+
+  const canCalculate = useMemo(() => {
+    if (!form.executionStartDate) return false
+    if (isSureli && form.years === 0 && form.months === 0 && form.days === 0)
+      return false
+    if (form.isJuvenile && !form.birthDate) return false
+    return true
+  }, [form, isSureli])
 
   const handleCalculate = () => {
     const res = calculate(form)
     setResult(res)
+    setHasCalculated(true)
   }
 
-  const labelClass = 'block text-sm font-medium text-foreground mb-1'
-  const inputClass =
-    'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
-  const selectClass =
-    'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+  const handleReset = () => {
+    setForm(initialForm)
+    setResult(null)
+    setHasCalculated(false)
+  }
 
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader
         title="Ceza Infaz Hesaplama"
         description="Kosullu saliverilme, denetimli serbestlik ve yatar hesabi"
       />
 
-      <div className="inline-flex items-center gap-2 rounded-md bg-amber-50 border border-amber-200 px-3 py-1.5 text-xs text-amber-700 mb-4">
-        7550 SK. &middot; 7571 SK.
+      {/* Uyari */}
+      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+        <svg
+          className="mt-0.5 h-5 w-5 shrink-0"
+          fill="none"
+          viewBox="0 0 24 24"
+          strokeWidth={1.5}
+          stroke="currentColor"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"
+          />
+        </svg>
+        <p>
+          Bu hesaplama bilgilendirme amacidir, kesin sonuc icin infaz savciligina
+          basvurunuz. Hesaplama 5275 SK, 7242 SK ve 7456 SK hukmlerine
+          dayanmaktadir.
+        </p>
       </div>
 
       {/* Form */}
-      <div className="rounded-lg border bg-card p-6 space-y-6">
-        {/* Ceza Bilgileri */}
+      <div className="rounded-lg border bg-card p-6 space-y-8">
+        {/* Section 1: Ceza Turu */}
         <fieldset>
-          <legend className="text-base font-semibold mb-3">Ceza Bilgileri</legend>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div>
-              <label className={labelClass}>Yil</label>
-              <input
-                type="number"
-                min={0}
-                className={inputClass}
-                value={form.years}
-                onChange={(e) => update('years', parseInt(e.target.value) || 0)}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Ay</label>
-              <input
-                type="number"
-                min={0}
-                className={inputClass}
-                value={form.months}
-                onChange={(e) => update('months', parseInt(e.target.value) || 0)}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Gun</label>
-              <input
-                type="number"
-                min={0}
-                className={inputClass}
-                value={form.days}
-                onChange={(e) => update('days', parseInt(e.target.value) || 0)}
-              />
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-4">
+          <legend className="text-base font-semibold mb-4">Ceza Turu</legend>
+          <div className="flex flex-wrap gap-6">
             {(
               [
-                ['sureli', 'Sureli'],
-                ['muebbet', 'Muebbet'],
-                ['agir_muebbet', 'Agirlastirilmis Muebbet'],
+                ['sureli', 'Sureli Hapis'],
+                ['muebbet', 'Muebbet Hapis'],
+                ['agir_muebbet', 'Agirlastirilmis Muebbet Hapis'],
               ] as [PenaltyType, string][]
             ).map(([val, lbl]) => (
-              <label key={val} className="inline-flex items-center gap-2 cursor-pointer text-sm">
+              <label
+                key={val}
+                className="inline-flex items-center gap-2 cursor-pointer text-sm"
+              >
                 <input
                   type="radio"
                   name="penaltyType"
                   value={val}
                   checked={form.penaltyType === val}
                   onChange={() => update('penaltyType', val)}
-                  className="accent-primary"
+                  className="accent-primary h-4 w-4"
                 />
-                {lbl}
+                <span className={form.penaltyType === val ? 'font-medium' : ''}>
+                  {lbl}
+                </span>
               </label>
             ))}
           </div>
         </fieldset>
 
-        {/* Tarih Bilgileri */}
-        <fieldset>
-          <legend className="text-base font-semibold mb-3">Tarih Bilgileri</legend>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Suc Tarihi</label>
-              <input
-                type="date"
-                className={inputClass}
-                value={form.crimeDate}
-                onChange={(e) => update('crimeDate', e.target.value)}
-              />
+        {/* Section 2: Ceza Suresi (only sureli) */}
+        {isSureli && (
+          <fieldset>
+            <legend className="text-base font-semibold mb-4">
+              Ceza Suresi
+            </legend>
+            <div className="grid grid-cols-3 gap-4 max-w-md">
+              <div>
+                <label className={labelCls}>Yil</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={99}
+                  className={inputCls}
+                  value={form.years || ''}
+                  placeholder="0"
+                  onChange={(e) =>
+                    update('years', parseInt(e.target.value) || 0)
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Ay</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={11}
+                  className={inputCls}
+                  value={form.months || ''}
+                  placeholder="0"
+                  onChange={(e) =>
+                    update('months', parseInt(e.target.value) || 0)
+                  }
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Gun</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={29}
+                  className={inputCls}
+                  value={form.days || ''}
+                  placeholder="0"
+                  onChange={(e) =>
+                    update('days', parseInt(e.target.value) || 0)
+                  }
+                />
+              </div>
             </div>
-            <div>
-              <label className={labelClass}>Kesinlesme Tarihi</label>
-              <input
-                type="date"
-                className={inputClass}
-                value={form.finalizationDate}
-                onChange={(e) => update('finalizationDate', e.target.value)}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Infaza Baslama Tarihi</label>
-              <input
-                type="date"
-                className={inputClass}
-                value={form.executionStartDate}
-                onChange={(e) => update('executionStartDate', e.target.value)}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Dogum Tarihi</label>
-              <input
-                type="date"
-                className={inputClass}
-                value={form.birthDate}
-                onChange={(e) => update('birthDate', e.target.value)}
-              />
-            </div>
-          </div>
-        </fieldset>
+          </fieldset>
+        )}
 
-        {/* Suc Bilgileri */}
+        {/* Section 3: Suc Bilgileri */}
         <fieldset>
-          <legend className="text-base font-semibold mb-3">Suc Bilgileri</legend>
+          <legend className="text-base font-semibold mb-4">Suc Bilgileri</legend>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={labelClass}>Suc Turu</label>
+              <label className={labelCls}>Suc Turu</label>
               <select
-                className={selectClass}
+                className={selectCls}
                 value={form.crimeCategory}
                 onChange={(e) => update('crimeCategory', e.target.value)}
               >
-                {SENTENCE_CATEGORIES.map((cat) => (
+                {CRIME_CATEGORIES.map((cat) => (
                   <option key={cat.id} value={cat.id}>
                     {cat.label} ({cat.ratioLabel})
                   </option>
@@ -323,85 +617,269 @@ export default function SentenceCalcPage() {
               </select>
             </div>
             <div>
-              <label className={labelClass}>Tekerrur</label>
+              <label className={labelCls}>Tekerrur</label>
               <select
-                className={selectClass}
-                value={form.recidivism}
-                onChange={(e) => update('recidivism', e.target.value)}
+                className={selectCls}
+                value={form.tekerrur}
+                onChange={(e) => update('tekerrur', e.target.value as Tekerrur)}
               >
-                {RECIDIVISM_LEVELS.map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.label}
+                {TEKERRUR_OPTIONS.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.label}
                   </option>
                 ))}
               </select>
             </div>
             <div>
-              <label className={labelClass}>Gozalti Suresi (gun)</label>
+              <label className={labelCls}>Suc Tarihi</label>
               <input
-                type="number"
-                min={0}
-                className={inputClass}
-                value={form.detentionDays}
-                onChange={(e) =>
-                  update('detentionDays', parseInt(e.target.value) || 0)
-                }
+                type="date"
+                className={inputCls}
+                value={form.crimeDate}
+                onChange={(e) => update('crimeDate', e.target.value)}
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                Hangi kanunun uygulanacagini belirler
+              </p>
+            </div>
+            <div>
+              <label className={labelCls}>Infaza Baslama Tarihi</label>
+              <input
+                type="date"
+                className={inputCls}
+                value={form.executionStartDate}
+                onChange={(e) => update('executionStartDate', e.target.value)}
               />
             </div>
           </div>
         </fieldset>
 
-        {/* Hukumlu Durumu */}
+        {/* Section 4: Tutukluluk / Mahsup */}
         <fieldset>
-          <legend className="text-base font-semibold mb-3">Hukumlu Durumu</legend>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Ozel Durum</label>
-              <select
-                className={selectClass}
-                value={form.specialCondition}
-                onChange={(e) => update('specialCondition', e.target.value)}
-              >
-                {SPECIAL_CONDITIONS.map((sc) => (
-                  <option key={sc.id} value={sc.id}>
-                    {sc.label}
-                  </option>
-                ))}
-              </select>
+          <legend className="text-base font-semibold mb-4">
+            Tutukluluk / Gozalti
+          </legend>
+          <div className="max-w-xs">
+            <label className={labelCls}>Tutuklu/Gozalti Suresi (gun)</label>
+            <input
+              type="number"
+              min={0}
+              className={inputCls}
+              value={form.detentionDays || ''}
+              placeholder="0"
+              onChange={(e) =>
+                update('detentionDays', parseInt(e.target.value) || 0)
+              }
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              Cezadan mahsup edilecek sure
+            </p>
+          </div>
+        </fieldset>
+
+        {/* Section 5: Cocuk / Yas */}
+        <fieldset>
+          <legend className="text-base font-semibold mb-4">
+            Hukumlu Durumu
+          </legend>
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <label className="inline-flex items-center gap-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.isJuvenile}
+                  onChange={(e) => update('isJuvenile', e.target.checked)}
+                  className="accent-primary h-4 w-4"
+                />
+                <span>Suc tarihinde 18 yasindan kucuk (cocuk)</span>
+              </label>
+            </div>
+
+            {form.isJuvenile && (
+              <div className="max-w-xs">
+                <label className={labelCls}>Dogum Tarihi</label>
+                <input
+                  type="date"
+                  className={inputCls}
+                  value={form.birthDate}
+                  onChange={(e) => update('birthDate', e.target.value)}
+                />
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Suc tarihindeki yasi hesaplamak icin gerekli
+                </p>
+              </div>
+            )}
+
+            <div className="flex items-center gap-3">
+              <label className="inline-flex items-center gap-2 cursor-pointer text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.iyiHal}
+                  onChange={(e) => update('iyiHal', e.target.checked)}
+                  className="accent-primary h-4 w-4"
+                />
+                <span>Iyi hal indirimi (denetimli serbestlik icin)</span>
+              </label>
             </div>
           </div>
         </fieldset>
 
-        <button
-          onClick={handleCalculate}
-          className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-2 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 transition-colors"
-        >
-          Hesapla
-        </button>
+        {/* Actions */}
+        <div className="flex items-center gap-3 pt-2">
+          <button
+            onClick={handleCalculate}
+            disabled={!canCalculate}
+            className={btnCls}
+          >
+            Hesapla
+          </button>
+          <button
+            onClick={handleReset}
+            className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2.5 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+          >
+            Temizle
+          </button>
+        </div>
       </div>
 
       {/* Results */}
+      {hasCalculated && !result && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          Hesaplama yapilamadi. Lutfen girilen degerleri kontrol edin.
+        </div>
+      )}
+
       {result && (
-        <div className="rounded-lg border bg-card p-6 mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          <ResultItem label="Uygulanan Mevzuat" value={result.appliedLaw} />
-          <ResultItem label="Sartla Tahliye Orani" value={result.ratio} />
-          <ResultItem
-            label="Kosullu Saliverilme Tarihi"
-            value={formatDate(result.conditionalReleaseDate)}
-            highlight
-          />
-          <ResultItem
-            label="Denetimli Serbestlik Suresi"
-            value={formatDuration(result.supervisedProbationDays)}
-          />
-          <ResultItem
-            label="Denetimli Serbestlik Baslangici"
-            value={formatDate(result.supervisedProbationStart)}
-          />
-          <ResultItem
-            label="Bihakkin Tahliye"
-            value={formatDate(result.unconditionalReleaseDate)}
-          />
+        <div className="space-y-4">
+          {/* Uyarilar */}
+          {result.uyarilar.length > 0 && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 space-y-1 dark:border-blue-900/50 dark:bg-blue-950/30">
+              {result.uyarilar.map((u, i) => (
+                <p
+                  key={i}
+                  className="text-sm text-blue-800 dark:text-blue-200"
+                >
+                  {u}
+                </p>
+              ))}
+            </div>
+          )}
+
+          {/* Result Grid */}
+          <div className="rounded-lg border bg-card p-6">
+            <h2 className="text-base font-semibold mb-4">Hesaplama Sonucu</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {result.penaltyType === 'sureli' && (
+                <>
+                  <ResultCard
+                    label="Toplam Ceza Suresi"
+                    value={daysToYMD(result.toplamCezaGun)}
+                    sublabel={`${result.toplamCezaGun} gun`}
+                  />
+                  {result.mahsupGun > 0 && (
+                    <ResultCard
+                      label="Mahsup (Tutukluluk)"
+                      value={`-${daysToYMD(result.mahsupGun)}`}
+                      sublabel={`${result.mahsupGun} gun dusuldu`}
+                    />
+                  )}
+                  {result.cocukIndirimiGun > 0 && (
+                    <ResultCard
+                      label="Cocuk Indirimi"
+                      value={`-${daysToYMD(result.cocukIndirimiGun)}`}
+                      sublabel="Yas grubuna gore indirim"
+                    />
+                  )}
+                  <ResultCard
+                    label="Net Ceza"
+                    value={daysToYMD(result.netCezaGun)}
+                    sublabel={`${result.netCezaGun} gun`}
+                  />
+                </>
+              )}
+
+              <ResultCard
+                label="Infaz Orani"
+                value={result.infazOrani}
+                sublabel="Kosullu saliverilme orani"
+              />
+
+              <ResultCard
+                label="Kosullu Saliverilme Tarihi"
+                value={formatDate(result.kosulluTarih)}
+                highlight
+                sublabel={`${result.kosulluGun} gun sonra`}
+              />
+
+              {result.denetimliSerbestlikGun > 0 ? (
+                <>
+                  <ResultCard
+                    label="Denetimli Serbestlik Suresi"
+                    value={daysToYMD(result.denetimliSerbestlikGun)}
+                    sublabel={`${result.denetimliSerbestlikGun} gun`}
+                  />
+                  <ResultCard
+                    label="Denetimli Serbestlik Baslangici"
+                    value={formatDate(result.denetimliSerbestlikBaslangic)}
+                    highlight
+                  />
+                </>
+              ) : (
+                <ResultCard
+                  label="Denetimli Serbestlik"
+                  value="Uygulanmaz"
+                  sublabel={
+                    !form.iyiHal
+                      ? 'Iyi hal indirimi secilmedi'
+                      : 'Suc turu nedeniyle uygulanmaz'
+                  }
+                />
+              )}
+
+              <ResultCard
+                label="Bihakkin Tahliye Tarihi"
+                value={
+                  result.penaltyType !== 'sureli'
+                    ? 'Omur boyu'
+                    : formatDate(result.bihakkinTarih)
+                }
+                sublabel={
+                  result.penaltyType !== 'sureli'
+                    ? 'Muebbet cezalarda cezanin tamami'
+                    : `${result.netCezaGun} gun sonra`
+                }
+              />
+
+              <ResultCard
+                label="Yatar Suresi (Kapali Cezaevi)"
+                value={daysToYMD(result.kapaliCezaeviGun)}
+                sublabel={`${result.kapaliCezaeviGun} gun`}
+              />
+
+              {result.acikCezaeviTarih && (
+                <ResultCard
+                  label="Acik Cezaevine Ayrilma (tahmini)"
+                  value={formatDate(result.acikCezaeviTarih)}
+                  sublabel="Iyi halli hukumlu icin tahmini"
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Mevzuat */}
+          <div className="rounded-lg border bg-card p-4">
+            <h3 className="text-sm font-semibold mb-2">Uygulanan Mevzuat</h3>
+            <div className="flex flex-wrap gap-2">
+              {result.uygulananMevzuat.map((m, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center rounded-md bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground"
+                >
+                  {m}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
       )}
     </div>

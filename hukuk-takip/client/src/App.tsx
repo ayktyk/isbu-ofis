@@ -25,6 +25,7 @@ const CalculationsPage = lazy(() => import('./pages/CalculationsPage'))
 const AiPromptsPage = lazy(() => import('./pages/AiPromptsPage'))
 const InheritancePage = lazy(() => import('./pages/InheritancePage'))
 const MediationDocumentsPage = lazy(() => import('./pages/MediationDocumentsPage'))
+const MediationFilesPage = lazy(() => import('./pages/MediationFilesPage'))
 const SentenceCalcPage = lazy(() => import('./pages/SentenceCalcPage'))
 
 // ─── Sayfa yüklenirken gösterilecek skeleton ──────────────────────────────────
@@ -98,6 +99,7 @@ export default function App() {
           <Route path="tools/mediation" element={<MediationDocumentsPage mediationType="dava-sarti" />} />
           <Route path="tools/mediation/dava-sarti" element={<MediationDocumentsPage mediationType="dava-sarti" />} />
           <Route path="tools/mediation/ihtiyari" element={<MediationDocumentsPage mediationType="ihtiyari" />} />
+          <Route path="tools/mediation-files" element={<MediationFilesPage />} />
           <Route path="tools/sentence" element={<SentenceCalcPage />} />
         </Route>
 

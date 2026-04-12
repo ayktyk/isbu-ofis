@@ -316,5 +316,65 @@ export type Notification = typeof notifications.$inferSelect
 export type NewNotification = typeof notifications.$inferInsert
 export type Document = typeof documents.$inferSelect
 export type NewDocument = typeof documents.$inferInsert
+export const mediationTypeEnum = pgEnum('mediation_type', ['dava_sarti', 'ihtiyari'])
+
+export const mediationStatusEnum = pgEnum('mediation_status', [
+  'active',
+  'agreed',
+  'not_agreed',
+  'partially_agreed',
+  'cancelled',
+])
+
+export const mediationFiles = pgTable(
+  'mediation_files',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .references(() => users.id, { onDelete: 'restrict' })
+      .notNull(),
+    fileNo: varchar('file_no', { length: 100 }),
+    mediationType: mediationTypeEnum('mediation_type').notNull(),
+    disputeType: varchar('dispute_type', { length: 255 }).notNull(),
+    disputeSubject: text('dispute_subject'),
+    status: mediationStatusEnum('status').default('active').notNull(),
+    startDate: date('start_date'),
+    endDate: date('end_date'),
+    notes: text('notes'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index('mediation_files_user_idx').on(table.userId),
+    statusIdx: index('mediation_files_status_idx').on(table.status),
+  })
+)
+
+export const mediationParties = pgTable(
+  'mediation_parties',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    mediationFileId: uuid('mediation_file_id')
+      .references(() => mediationFiles.id, { onDelete: 'cascade' })
+      .notNull(),
+    side: varchar('side', { length: 20 }).notNull(), // 'applicant' | 'respondent'
+    fullName: varchar('full_name', { length: 255 }).notNull(),
+    tcNo: varchar('tc_no', { length: 255 }),
+    phone: varchar('phone', { length: 20 }),
+    email: varchar('email', { length: 255 }),
+    address: text('address'),
+    lawyerName: varchar('lawyer_name', { length: 255 }),
+    lawyerBarNo: varchar('lawyer_bar_no', { length: 50 }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    fileIdx: index('mediation_parties_file_idx').on(table.mediationFileId),
+  })
+)
+
 export type Note = typeof notes.$inferSelect
 export type NewNote = typeof notes.$inferInsert
+export type MediationFile = typeof mediationFiles.$inferSelect
+export type NewMediationFile = typeof mediationFiles.$inferInsert
+export type MediationParty = typeof mediationParties.$inferSelect
+export type NewMediationParty = typeof mediationParties.$inferInsert

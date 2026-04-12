@@ -22,6 +22,7 @@ import notesRouter from './routes/notes.js'
 import notificationsRouter from './routes/notifications.js'
 import documentsRouter from './routes/documents.js'
 import mediationRouter from './routes/mediation.js'
+import mediationFilesRouter from './routes/mediationFiles.js'
 import calendarRouter from './routes/calendar.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
@@ -111,6 +112,7 @@ app.use('/api/notes', notesRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/documents', documentsRouter)
 app.use('/api/calendar', calendarRouter)
+app.use('/api/mediation-files', mediationFilesRouter)
 
 if (process.env.NODE_ENV === 'production') {
   const publicPath = path.join(__dirname, 'public')

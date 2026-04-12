@@ -4,44 +4,18 @@ import { PageHeader } from '@/components/shared/PageHeader'
 import { formatCurrency } from '@/lib/utils'
 import {
   KIDEM_TAVANLARI,
-  IHBAR_SURELERI,
   SGK_ISCI_ORANI,
   ISSIZLIK_ISCI_ORANI,
   DAMGA_VERGISI_ORANI,
-  GELIR_VERGISI_DILIMLERI,
   AAUT_NISPI_DILIMLER,
   AAUT_MAKTU_UCRETLER,
-  ARABULUCU_SAATLIK,
   YASAL_FAIZ_ORANLARI,
   TICARI_AVANS_ORANLARI,
+  AU_GV_ISTISNASI,
+  AU_DV_ISTISNASI,
 } from '@/lib/constants/legalRates2026'
 
-// ─── Local constants not in legalRates2026.ts ──────────────────────────────
-
-const UBGT_GUNLERI: Record<number, number> = {
-  2018: 6,
-  2019: 6.5,
-  2020: 6.5,
-  2021: 7.5,
-  2022: 6.5,
-  2023: 5,
-  2024: 6,
-  2025: 6,
-  2026: 6,
-}
-
-// Yemek istisnasi gunluk tutarlari (TL/gun)
-const YEMEK_ISTISNASI_GUNLUK: Record<number, number> = {
-  2018: 16,
-  2019: 19,
-  2020: 23,
-  2021: 25,
-  2022: 51,
-  2023: 118.80,
-  2024: 170,
-  2025: 200,
-  2026: 230,
-}
+// ─── Local constants ──────────────────────────────────────────────────────
 
 const SGK_TOPLAM_ISCI = SGK_ISCI_ORANI + ISSIZLIK_ISCI_ORANI // 0.15
 
@@ -56,7 +30,6 @@ const btnCls =
   'bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 rounded-md text-sm font-medium'
 const btnSecondaryCls =
   'border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 rounded-md text-sm font-medium'
-const checkboxCls = 'h-4 w-4 rounded border-gray-300'
 
 function dateDiff(start: string, end: string) {
   const s = new Date(start)
@@ -79,25 +52,14 @@ function dateDiff(start: string, end: string) {
   return { years, months, days, totalDays }
 }
 
-function getIhbarGun(totalMonths: number): number {
-  for (const s of IHBAR_SURELERI) {
-    if (totalMonths < s.maxMonths) return s.weeks * 7
-  }
-  return 56
-}
-
-function calcGelirVergisiKademeli(matrah: number): number {
-  let remaining = matrah
-  let tax = 0
-  let prevLimit = 0
-  for (const d of GELIR_VERGISI_DILIMLERI) {
-    const band = Math.min(remaining, d.limit - prevLimit)
-    if (band <= 0) break
-    tax += band * d.oran
-    remaining -= band
-    prevLimit = d.limit
-  }
-  return tax
+/** Excel'deki kademeli GV hesabi - kumulatif matraha gore dilim orani uygulanir */
+function calcGvByKumulatif(matrah: number, kumulatif: number): number {
+  if (kumulatif + matrah <= 190000) return matrah * 0.15
+  if (kumulatif >= 5300000) return matrah * 0.40
+  if (kumulatif >= 1500000) return matrah * 0.35
+  if (kumulatif >= 400000) return matrah * 0.27
+  if (kumulatif >= 190000) return matrah * 0.20
+  return matrah * 0.15
 }
 
 /** Net ucretten brut ucrete iteratif donusum */
@@ -125,26 +87,6 @@ function getKidemTavani(dateStr: string): number {
     if (d >= new Date(t.start) && d <= new Date(t.end)) return t.tavan
   }
   return KIDEM_TAVANLARI[0].tavan
-}
-
-/** Yillik izin hakki hesabi (toplam gun) */
-function calcTotalIzinHak(years: number): number {
-  if (years < 1) return 0
-  let total = 0
-  for (let y = 1; y <= years; y++) {
-    if (y <= 5) total += 14
-    else if (y <= 15) total += 20
-    else total += 26
-  }
-  return total
-}
-
-/** Haftalar arasi hesaplama */
-function weeksBetween(startStr: string, endStr: string): number {
-  const start = new Date(startStr)
-  const end = new Date(endStr)
-  const days = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
-  return Math.max(0, Math.floor(days / 7))
 }
 
 function SourceBadge({ text }: { text: string }) {
@@ -206,19 +148,22 @@ function ResultTable({
 interface IscilikFormState {
   iseGiris: string
   istenCikis: string
+  brutUcret: number
   netUcret: number
+  ucretGirisTipi: 'brut' | 'net'
   yemek: number
   servis: number
   ikramiye: number
+  prim: number
+  barinma: number
+  diger: number
   fesihNedeni: FesihNedeni
-  toplamIzinHak: number
-  kullanilanIzin: number
-  fazlaMesaiSaat: number
-  fazlaMesaiBaslangic: string
-  fazlaMesaiBitis: string
-  ubgtVar: boolean
-  haftaTatiliVar: boolean
-  haftaTatiliGun: number // haftalik calisiyor ise gun sayisi
+  kullanilamayanIzin: number
+  haftalikFmSaat: number
+  toplamFmSaat: number
+  ubgtGun: number
+  hakkaniyetOrani: number
+  kumulatifGvMatrah: number
 }
 
 interface IscilikKalemResult {
@@ -232,7 +177,6 @@ interface IscilikResult {
   hizmet: { years: number; months: number; days: number; totalDays: number }
   brutUcret: number
   giydirilmisBrut: number
-  yemekBrut: number
   kalemler: IscilikKalemResult[]
   warnings: string[]
   toplamBrut: number
@@ -244,22 +188,24 @@ function IscilikTab() {
   const [form, setForm] = useState<IscilikFormState>({
     iseGiris: '',
     istenCikis: '',
+    brutUcret: 0,
     netUcret: 0,
+    ucretGirisTipi: 'brut',
     yemek: 0,
     servis: 0,
     ikramiye: 0,
+    prim: 0,
+    barinma: 0,
+    diger: 0,
     fesihNedeni: 'isveren_haksiz',
-    toplamIzinHak: 0,
-    kullanilanIzin: 0,
-    fazlaMesaiSaat: 0,
-    fazlaMesaiBaslangic: '',
-    fazlaMesaiBitis: '',
-    ubgtVar: false,
-    haftaTatiliVar: false,
-    haftaTatiliGun: 1,
+    kullanilamayanIzin: 0,
+    haftalikFmSaat: 0,
+    toplamFmSaat: 0,
+    ubgtGun: 0,
+    hakkaniyetOrani: 0.30,
+    kumulatifGvMatrah: 0,
   })
   const [result, setResult] = useState<IscilikResult | null>(null)
-  const [izinOtomatik, setIzinOtomatik] = useState(true)
 
   const set = (k: keyof IscilikFormState, v: string | number | boolean) =>
     setForm((p) => ({ ...p, [k]: v }))
@@ -269,78 +215,97 @@ function IscilikTab() {
       toast.error('Ise giris ve isten cikis tarihleri zorunludur.')
       return
     }
-    if (form.netUcret <= 0) {
-      toast.error('Net ucret giriniz.')
+
+    const ciplaklBrut = form.ucretGirisTipi === 'brut'
+      ? form.brutUcret
+      : netToBrut(form.netUcret)
+
+    if (ciplaklBrut <= 0) {
+      toast.error('Brut veya net ucret giriniz.')
       return
     }
 
     const warnings: string[] = []
     const kalemler: IscilikKalemResult[] = []
 
-    // ── MODUL 1: Hizmet Suresi ──
+    // ── HIZMET SURESI ──
     const hizmet = dateDiff(form.iseGiris, form.istenCikis)
-    const totalMonths = hizmet.years * 12 + hizmet.months
 
-    // Zamanasimi kontrolu (5 yil, 01.01.2018 sonrasi)
+    // Zamanasimi kontrolu
     const cikisDate = new Date(form.istenCikis)
     const now = new Date()
     const yilFark = (now.getTime() - cikisDate.getTime()) / (1000 * 60 * 60 * 24 * 365.25)
     if (yilFark > 5) {
-      warnings.push('ZAMANASIMI UYARISI: Fesih tarihinden 5 yildan fazla sure gecmis. Zamanasimi savunmasi riski yuksek.')
+      warnings.push('ZAMANASIMI: Fesih tarihinden 5 yildan fazla sure gecmis.')
     } else if (yilFark > 4) {
-      warnings.push('ZAMANASIMI UYARISI: Fesih tarihinden 4 yildan fazla sure gecmis. Zamanasimi yaklasiyors.')
+      warnings.push('ZAMANASIMI YAKLASIYORS: Fesih tarihinden 4 yildan fazla sure gecmis.')
     }
 
-    // ── MODUL 2: Brut/Net Ucret Donusumu ──
-    const brutUcret = netToBrut(form.netUcret)
-
-    // Yemek istisnasi hesabi
-    const cikisYili = cikisDate.getFullYear()
-    const gunlukIstisna = YEMEK_ISTISNASI_GUNLUK[cikisYili] || YEMEK_ISTISNASI_GUNLUK[2026]
-    const aylikIstisna = gunlukIstisna * 26
-    const yemekBrut = Math.max(0, form.yemek - aylikIstisna)
-
     // Giydirilmis brut ucret
-    const giydirilmisBrut = brutUcret + yemekBrut + form.servis + form.ikramiye
+    const giydirilmisBrut = ciplaklBrut + form.yemek + form.servis + form.ikramiye + form.prim + form.barinma + form.diger
 
-    // Fesih nedenine gore kidem hakki kontrolu
+    // Fesih kontrolu
     const kidemHakki = form.fesihNedeni !== 'istifa'
     const ihbarHakki = form.fesihNedeni === 'isveren_haksiz' || form.fesihNedeni === 'ikale'
 
     if (form.fesihNedeni === 'istifa') {
-      warnings.push('ISTIFA: Istifa eden isci kidem ve ihbar tazminatina hak kazanamaz. Ancak odenmemis alacak (fazla mesai vb.) nedeniyle hakli fesih sayilabilir.')
+      warnings.push('ISTIFA: Istifa eden isci kidem ve ihbar tazminatina hak kazanamaz. Ancak odenmemis alacak nedeniyle hakli fesih sayilabilir.')
     }
 
-    // ── MODUL 3: Kidem Tazminati ──
+    // ── KIDEM TAZMINATI ──
     if (kidemHakki && hizmet.totalDays >= 365) {
       const tavan = getKidemTavani(form.istenCikis)
       const esasUcret = Math.min(giydirilmisBrut, tavan)
       if (giydirilmisBrut > tavan) {
-        warnings.push(`KIDEM TAVANI: Giydirilmis brut (${formatCurrency(giydirilmisBrut)}) kidem tavanini (${formatCurrency(tavan)}) asiyor. Tavan uygulanir.`)
+        warnings.push(`KIDEM TAVANI: Giydirilmis brut (${formatCurrency(giydirilmisBrut)}) tavani (${formatCurrency(tavan)}) asiyor. Tavan esas alinir.`)
       }
-      const kidemBrut =
-        esasUcret * hizmet.years +
-        (esasUcret / 12) * hizmet.months +
-        (esasUcret / 365) * hizmet.days
-      // Kidem tazminatindan sadece damga vergisi kesilir
-      const kidemDamga = kidemBrut * DAMGA_VERGISI_ORANI
+
+      // Formul: Esas x Yil + Esas/12 x Ay + Esas/365 x Gun
+      const tamYilKidemi = esasUcret * hizmet.years
+      const kalanAyKidemi = (esasUcret / 12) * hizmet.months
+      const kalanGunKidemi = (esasUcret / 365) * hizmet.days
+      const kidemBrut = tamYilKidemi + kalanAyKidemi + kalanGunKidemi
+
+      // Kesintiler: SADECE Damga Vergisi
+      const kidemDv = kidemBrut * DAMGA_VERGISI_ORANI
+      const kidemDvIstisna = AU_DV_ISTISNASI
+      const kidemNetDv = Math.max(0, kidemDv - kidemDvIstisna)
+
       kalemler.push({
         label: 'Kidem Tazminati',
         brut: kidemBrut,
-        kesinti: kidemDamga,
-        net: kidemBrut - kidemDamga,
+        kesinti: kidemNetDv,
+        net: kidemBrut - kidemNetDv,
       })
     } else if (kidemHakki && hizmet.totalDays < 365) {
-      warnings.push('KIDEM: 1 yildan az hizmet suresi oldugu icin kidem tazminati hesaplanmadi.')
+      warnings.push('KIDEM: 1 yildan az hizmet suresi - kidem tazminati hesaplanmadi.')
     }
 
-    // ── MODUL 4: Ihbar Tazminati ──
+    // ── IHBAR TAZMINATI ──
     if (ihbarHakki) {
-      const ihbarGun = getIhbarGun(totalMonths)
-      const ihbarBrut = (giydirilmisBrut / 30) * ihbarGun
-      const ihbarGelir = ihbarBrut * 0.15
-      const ihbarDamga = ihbarBrut * DAMGA_VERGISI_ORANI
-      const ihbarKesinti = ihbarGelir + ihbarDamga
+      const hizmetYil = hizmet.years + hizmet.months / 12 + hizmet.days / 365
+
+      let ihbarGun: number
+      if (hizmetYil < 0.5) ihbarGun = 14
+      else if (hizmetYil < 1.5) ihbarGun = 28
+      else if (hizmetYil < 3) ihbarGun = 42
+      else ihbarGun = 56
+
+      const gunlukGiydirilmis = giydirilmisBrut / 30
+      const ihbarBrut = gunlukGiydirilmis * ihbarGun
+
+      // GV: Kumulatif matraha gore dilim orani
+      const ihbarGv = calcGvByKumulatif(ihbarBrut, form.kumulatifGvMatrah)
+      const ihbarGvIstisna = AU_GV_ISTISNASI
+      const ihbarNetGv = Math.max(0, ihbarGv - ihbarGvIstisna)
+
+      // DV
+      const ihbarDv = ihbarBrut * DAMGA_VERGISI_ORANI
+      const ihbarDvIstisna = AU_DV_ISTISNASI
+      const ihbarNetDv = Math.max(0, ihbarDv - ihbarDvIstisna)
+
+      const ihbarKesinti = ihbarNetGv + ihbarNetDv
+
       kalemler.push({
         label: 'Ihbar Tazminati',
         brut: ihbarBrut,
@@ -349,91 +314,24 @@ function IscilikTab() {
       })
     }
 
-    // ── MODUL 5: Fazla Calisma Ucreti ──
-    if (form.fazlaMesaiSaat > 0) {
-      const fcBaslangic = form.fazlaMesaiBaslangic || form.iseGiris
-      const fcBitis = form.fazlaMesaiBitis || form.istenCikis
-      const toplamHafta = weeksBetween(fcBaslangic, fcBitis)
+    // ── YILLIK IZIN UCRETI ──
+    if (form.kullanilamayanIzin > 0) {
+      // Excel: CIPLAK Brut / 30 x kullanilmayan gun
+      const gunlukCiplak = ciplaklBrut / 30
+      const izinBrut = gunlukCiplak * form.kullanilamayanIzin
 
-      const saatUcreti = brutUcret / 225
-      const fcSaatUcreti = saatUcreti * 1.5
-      const fcBrut = fcSaatUcreti * form.fazlaMesaiSaat * toplamHafta
+      // Kesintiler: SGK %14, Issizlik %1, GV (kademeli), DV
+      const izinSgk = izinBrut * SGK_ISCI_ORANI
+      const izinIssizlik = izinBrut * ISSIZLIK_ISCI_ORANI
+      const izinGvMatrah = izinBrut - izinSgk - izinIssizlik
+      const izinGv = calcGvByKumulatif(izinGvMatrah, form.kumulatifGvMatrah)
+      const izinGvIstisna = AU_GV_ISTISNASI
+      const izinNetGv = Math.max(0, izinGv - izinGvIstisna)
+      const izinDv = izinBrut * DAMGA_VERGISI_ORANI
+      const izinDvIstisna = AU_DV_ISTISNASI
+      const izinNetDv = Math.max(0, izinDv - izinDvIstisna)
 
-      // SGK %15, kademeli gelir vergisi, damga vergisi
-      const fcSgk = fcBrut * SGK_TOPLAM_ISCI
-      const fcGelirMatrah = fcBrut - fcSgk
-      const fcGelir = calcGelirVergisiKademeli(fcGelirMatrah)
-      const fcDamga = fcBrut * DAMGA_VERGISI_ORANI
-      const fcKesinti = fcSgk + fcGelir + fcDamga
-
-      kalemler.push({
-        label: 'Fazla Calisma Ucreti',
-        brut: fcBrut,
-        kesinti: fcKesinti,
-        net: fcBrut - fcKesinti,
-      })
-
-      if (toplamHafta > 0) {
-        // No extra warning needed
-      }
-    }
-
-    // ── MODUL 6: UBGT Ucreti ──
-    if (form.ubgtVar) {
-      let ubgtToplamBrut = 0
-      const girisYil = new Date(form.iseGiris).getFullYear()
-      const cikisYil = cikisDate.getFullYear()
-
-      for (let yil = girisYil; yil <= cikisYil; yil++) {
-        const gunSayisi = UBGT_GUNLERI[yil] || 6
-        // O yila ait brut ucret (basitlestirme: mevcut brut kullanilir)
-        const yillikUbgtBrut = (brutUcret / 30) * gunSayisi
-        ubgtToplamBrut += yillikUbgtBrut
-      }
-
-      const ubgtSgk = ubgtToplamBrut * SGK_TOPLAM_ISCI
-      const ubgtGelir = (ubgtToplamBrut - ubgtSgk) * 0.15
-      const ubgtDamga = ubgtToplamBrut * DAMGA_VERGISI_ORANI
-      const ubgtKesinti = ubgtSgk + ubgtGelir + ubgtDamga
-
-      kalemler.push({
-        label: 'UBGT Ucreti',
-        brut: ubgtToplamBrut,
-        kesinti: ubgtKesinti,
-        net: ubgtToplamBrut - ubgtKesinti,
-      })
-    }
-
-    // ── MODUL 7: Hafta Tatili Ucreti ──
-    if (form.haftaTatiliVar && form.haftaTatiliGun > 0) {
-      const toplamHafta = weeksBetween(form.iseGiris, form.istenCikis)
-      const htBrut = (brutUcret / 30) * 1.5 * form.haftaTatiliGun * toplamHafta
-
-      const htSgk = htBrut * SGK_TOPLAM_ISCI
-      const htGelir = (htBrut - htSgk) * 0.15
-      const htDamga = htBrut * DAMGA_VERGISI_ORANI
-      const htKesinti = htSgk + htGelir + htDamga
-
-      kalemler.push({
-        label: 'Hafta Tatili Ucreti',
-        brut: htBrut,
-        kesinti: htKesinti,
-        net: htBrut - htKesinti,
-      })
-    }
-
-    // ── MODUL 8: Yillik Izin Ucreti ──
-    const toplamIzinHak = izinOtomatik
-      ? calcTotalIzinHak(hizmet.years)
-      : form.toplamIzinHak
-    const bakiyeIzin = Math.max(0, toplamIzinHak - form.kullanilanIzin)
-
-    if (bakiyeIzin > 0) {
-      const izinBrut = (giydirilmisBrut / 30) * bakiyeIzin
-      const izinSgk = izinBrut * SGK_TOPLAM_ISCI
-      const izinGelir = (izinBrut - izinSgk) * 0.15
-      const izinDamga = izinBrut * DAMGA_VERGISI_ORANI
-      const izinKesinti = izinSgk + izinGelir + izinDamga
+      const izinKesinti = izinSgk + izinIssizlik + izinNetGv + izinNetDv
 
       kalemler.push({
         label: 'Yillik Izin Ucreti',
@@ -443,29 +341,61 @@ function IscilikTab() {
       })
     }
 
-    // ── MODUL 9: Ise Iade ──
-    if (form.fesihNedeni === 'isveren_haksiz' && hizmet.totalDays >= 180) {
-      // Ise baslatmama tazminati (minimum 4 ay)
-      const iseBrut = brutUcret * 4
-      const iseDamga = iseBrut * DAMGA_VERGISI_ORANI
+    // ── FAZLA MESAI UCRETI ──
+    const toplamFmSaat = form.toplamFmSaat > 0
+      ? form.toplamFmSaat
+      : form.haftalikFmSaat * Math.max(0, Math.floor(hizmet.totalDays / 7))
+
+    if (toplamFmSaat > 0) {
+      // Excel: Ciplak Brut / 225 x 1.5 x toplam saat
+      const saatlik = ciplaklBrut / 225
+      const fmBrutTavan = saatlik * 1.5 * toplamFmSaat
+
+      // Hakkaniyet indirimi
+      const fmBrut = fmBrutTavan * (1 - form.hakkaniyetOrani)
+
+      // Kesintiler: SGK %14, Issizlik %1, GV, DV (AU istisnasi YOK)
+      const fmSgk = fmBrut * SGK_ISCI_ORANI
+      const fmIssizlik = fmBrut * ISSIZLIK_ISCI_ORANI
+      const fmGvMatrah = fmBrut - fmSgk - fmIssizlik
+      const fmGv = calcGvByKumulatif(fmGvMatrah, form.kumulatifGvMatrah)
+      const fmDv = fmBrut * DAMGA_VERGISI_ORANI
+      const fmKesinti = fmSgk + fmIssizlik + fmGv + fmDv
+
       kalemler.push({
-        label: 'Ise Iade - Ise Baslatmama (4 ay)',
-        brut: iseBrut,
-        kesinti: iseDamga,
-        net: iseBrut - iseDamga,
+        label: 'Fazla Mesai Ucreti',
+        brut: fmBrut,
+        kesinti: fmKesinti,
+        net: fmBrut - fmKesinti,
       })
 
-      // Bosta gecen sure (max 4 ay)
-      const bostaBrut = brutUcret * 4
-      const bostaSgk = bostaBrut * SGK_TOPLAM_ISCI
-      const bostaGelir = (bostaBrut - bostaSgk) * 0.15
-      const bostaDamga = bostaBrut * DAMGA_VERGISI_ORANI
-      const bostaKesinti = bostaSgk + bostaGelir + bostaDamga
+      if (form.hakkaniyetOrani > 0) {
+        warnings.push(`FM hakkaniyet indirimi: %${(form.hakkaniyetOrani * 100).toFixed(0)} uygulandi. Tanik beyaniyla ispatlanan FM icin standart oran %30.`)
+      }
+    }
+
+    // ── UBGT UCRETI ──
+    if (form.ubgtGun > 0) {
+      // Excel: Ciplak Brut / 30 x gun sayisi
+      const gunlukCiplak = ciplaklBrut / 30
+      const ubgtBrutTavan = gunlukCiplak * form.ubgtGun
+
+      // Hakkaniyet indirimi
+      const ubgtBrut = ubgtBrutTavan * (1 - form.hakkaniyetOrani)
+
+      // Kesintiler: SGK %14, Issizlik %1, GV, DV (AU istisnasi YOK)
+      const ubgtSgk = ubgtBrut * SGK_ISCI_ORANI
+      const ubgtIssizlik = ubgtBrut * ISSIZLIK_ISCI_ORANI
+      const ubgtGvMatrah = ubgtBrut - ubgtSgk - ubgtIssizlik
+      const ubgtGv = calcGvByKumulatif(ubgtGvMatrah, form.kumulatifGvMatrah)
+      const ubgtDv = ubgtBrut * DAMGA_VERGISI_ORANI
+      const ubgtKesinti = ubgtSgk + ubgtIssizlik + ubgtGv + ubgtDv
+
       kalemler.push({
-        label: 'Ise Iade - Bosta Gecen Sure (4 ay)',
-        brut: bostaBrut,
-        kesinti: bostaKesinti,
-        net: bostaBrut - bostaKesinti,
+        label: 'UBGT Ucreti',
+        brut: ubgtBrut,
+        kesinti: ubgtKesinti,
+        net: ubgtBrut - ubgtKesinti,
       })
     }
 
@@ -476,9 +406,8 @@ function IscilikTab() {
 
     setResult({
       hizmet,
-      brutUcret,
+      brutUcret: ciplaklBrut,
       giydirilmisBrut,
-      yemekBrut,
       kalemler,
       warnings,
       toplamBrut,
@@ -491,10 +420,10 @@ function IscilikTab() {
     <div className="space-y-6">
       <SourceBadge text="Kaynak: 4857 s. Is Kanunu, 1475 s. K. m.14, Excel Hesaplama Formulleri" />
 
-      {/* Calisma Bilgileri */}
+      {/* A. ISCI BILGILERI */}
       <fieldset className="rounded-lg border p-4 space-y-3">
         <legend className="text-sm font-medium text-muted-foreground px-2">
-          Calisma Bilgileri
+          A. Isci Bilgileri
         </legend>
         <div className="flex flex-wrap gap-4">
           <div className="min-w-[200px]">
@@ -531,180 +460,217 @@ function IscilikTab() {
         </div>
       </fieldset>
 
-      {/* Ucret Bilgileri */}
+      {/* B. UCRET BILGILERI */}
       <fieldset className="rounded-lg border p-4 space-y-3">
         <legend className="text-sm font-medium text-muted-foreground px-2">
-          Ucret Bilgileri (Aylik TL)
+          B. Ucret Bilgileri (Aylik TL)
         </legend>
         <div className="flex flex-wrap gap-4">
+          {/* Brut/Net toggle */}
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Son net ucret</label>
+            <label className="text-sm font-medium">Ucret giris tipi</label>
+            <select
+              className={selectCls}
+              value={form.ucretGirisTipi}
+              onChange={(e) => set('ucretGirisTipi', e.target.value)}
+            >
+              <option value="brut">Brut ucret</option>
+              <option value="net">Net ucret</option>
+            </select>
+          </div>
+          {form.ucretGirisTipi === 'brut' ? (
+            <div className="min-w-[200px]">
+              <label className="text-sm font-medium">Ciplak brut ucret</label>
+              <input
+                type="number"
+                className={inputCls}
+                placeholder="0"
+                value={form.brutUcret || ''}
+                onChange={(e) => set('brutUcret', parseFloat(e.target.value) || 0)}
+              />
+            </div>
+          ) : (
+            <div className="min-w-[200px]">
+              <label className="text-sm font-medium">Net ucret</label>
+              <input
+                type="number"
+                className={inputCls}
+                placeholder="0"
+                value={form.netUcret || ''}
+                onChange={(e) => set('netUcret', parseFloat(e.target.value) || 0)}
+              />
+            </div>
+          )}
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Yemek yardimi (brut)</label>
             <input
               type="number"
               className={inputCls}
               placeholder="0"
-              value={form.netUcret || ''}
-              onChange={(e) => set('netUcret', parseFloat(e.target.value) || 0)}
-            />
-          </div>
-          <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Yemek yardimi (aylik)</label>
-            <input
-              type="number"
-              className={inputCls}
-              placeholder="Opsiyonel"
               value={form.yemek || ''}
               onChange={(e) => set('yemek', parseFloat(e.target.value) || 0)}
             />
           </div>
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Servis yardimi (aylik)</label>
+            <label className="text-sm font-medium">Yol/Servis (brut)</label>
             <input
               type="number"
               className={inputCls}
-              placeholder="Opsiyonel"
+              placeholder="0"
               value={form.servis || ''}
               onChange={(e) => set('servis', parseFloat(e.target.value) || 0)}
             />
           </div>
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Ikramiye/prim (aylik)</label>
-            <input
-              type="number"
-              className={inputCls}
-              placeholder="Opsiyonel"
-              value={form.ikramiye || ''}
-              onChange={(e) => set('ikramiye', parseFloat(e.target.value) || 0)}
-            />
-          </div>
-        </div>
-      </fieldset>
-
-      {/* Izin Bilgileri */}
-      <fieldset className="rounded-lg border p-4 space-y-3">
-        <legend className="text-sm font-medium text-muted-foreground px-2">
-          Yillik Izin Bilgileri
-        </legend>
-        <div className="flex flex-wrap gap-4 items-end">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="izinOtomatik"
-              className={checkboxCls}
-              checked={izinOtomatik}
-              onChange={(e) => setIzinOtomatik(e.target.checked)}
-            />
-            <label htmlFor="izinOtomatik" className="text-sm font-medium">
-              Izin hakkini otomatik hesapla
-            </label>
-          </div>
-          {!izinOtomatik && (
-            <div className="min-w-[200px]">
-              <label className="text-sm font-medium">Toplam izin hakki (gun)</label>
-              <input
-                type="number"
-                className={inputCls}
-                value={form.toplamIzinHak || ''}
-                onChange={(e) => set('toplamIzinHak', parseInt(e.target.value) || 0)}
-              />
-            </div>
-          )}
-          <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Kullanilan izin (gun)</label>
-            <input
-              type="number"
-              className={inputCls}
-              value={form.kullanilanIzin || ''}
-              onChange={(e) => set('kullanilanIzin', parseInt(e.target.value) || 0)}
-            />
-          </div>
-        </div>
-      </fieldset>
-
-      {/* Fazla Mesai */}
-      <fieldset className="rounded-lg border p-4 space-y-3">
-        <legend className="text-sm font-medium text-muted-foreground px-2">
-          Fazla Calisma (Opsiyonel)
-        </legend>
-        <div className="flex flex-wrap gap-4 items-end">
-          <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Haftalik fazla mesai (saat)</label>
+            <label className="text-sm font-medium">Ikramiye (brut)</label>
             <input
               type="number"
               className={inputCls}
               placeholder="0"
-              value={form.fazlaMesaiSaat || ''}
-              onChange={(e) => set('fazlaMesaiSaat', parseFloat(e.target.value) || 0)}
+              value={form.ikramiye || ''}
+              onChange={(e) => set('ikramiye', parseFloat(e.target.value) || 0)}
             />
           </div>
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">FC baslangic tarihi</label>
+            <label className="text-sm font-medium">Prim (brut)</label>
             <input
-              type="date"
+              type="number"
               className={inputCls}
-              value={form.fazlaMesaiBaslangic}
-              onChange={(e) => set('fazlaMesaiBaslangic', e.target.value)}
+              placeholder="0"
+              value={form.prim || ''}
+              onChange={(e) => set('prim', parseFloat(e.target.value) || 0)}
             />
-            <p className="text-xs text-muted-foreground mt-1">Bos birakilirsa ise giris tarihi</p>
           </div>
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">FC bitis tarihi</label>
+            <label className="text-sm font-medium">Barinma/Konut (brut)</label>
             <input
-              type="date"
+              type="number"
               className={inputCls}
-              value={form.fazlaMesaiBitis}
-              onChange={(e) => set('fazlaMesaiBitis', e.target.value)}
+              placeholder="0"
+              value={form.barinma || ''}
+              onChange={(e) => set('barinma', parseFloat(e.target.value) || 0)}
             />
-            <p className="text-xs text-muted-foreground mt-1">Bos birakilirsa isten cikis tarihi</p>
+          </div>
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Diger ayni/nakdi (brut)</label>
+            <input
+              type="number"
+              className={inputCls}
+              placeholder="0"
+              value={form.diger || ''}
+              onChange={(e) => set('diger', parseFloat(e.target.value) || 0)}
+            />
           </div>
         </div>
       </fieldset>
 
-      {/* UBGT ve Hafta Tatili */}
+      {/* D. DIGER GIRDILER */}
       <fieldset className="rounded-lg border p-4 space-y-3">
         <legend className="text-sm font-medium text-muted-foreground px-2">
-          UBGT ve Hafta Tatili (Opsiyonel)
+          D. Diger Girdiler
         </legend>
-        <div className="flex flex-wrap gap-6 items-end">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap gap-4">
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Kullanilmamis izin (gun)</label>
             <input
-              type="checkbox"
-              id="ubgtVar"
-              className={checkboxCls}
-              checked={form.ubgtVar}
-              onChange={(e) => set('ubgtVar', e.target.checked)}
+              type="number"
+              className={inputCls}
+              placeholder="0"
+              value={form.kullanilamayanIzin || ''}
+              onChange={(e) => set('kullanilamayanIzin', parseInt(e.target.value) || 0)}
             />
-            <label htmlFor="ubgtVar" className="text-sm font-medium">
-              UBGT calismasi var
-            </label>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Haftalik FM saat</label>
             <input
-              type="checkbox"
-              id="haftaTatiliVar"
-              className={checkboxCls}
-              checked={form.haftaTatiliVar}
-              onChange={(e) => set('haftaTatiliVar', e.target.checked)}
+              type="number"
+              className={inputCls}
+              placeholder="0"
+              value={form.haftalikFmSaat || ''}
+              onChange={(e) => set('haftalikFmSaat', parseFloat(e.target.value) || 0)}
             />
-            <label htmlFor="haftaTatiliVar" className="text-sm font-medium">
-              Hafta tatili calismasi var
-            </label>
+            <p className="text-xs text-muted-foreground mt-1">Haftalik ortalama fazla mesai</p>
           </div>
-          {form.haftaTatiliVar && (
-            <div className="min-w-[200px]">
-              <label className="text-sm font-medium">Haftalik calisiyor (gun)</label>
-              <input
-                type="number"
-                className={inputCls}
-                min={1}
-                max={2}
-                value={form.haftaTatiliGun || ''}
-                onChange={(e) => set('haftaTatiliGun', parseInt(e.target.value) || 1)}
-              />
-            </div>
-          )}
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Toplam FM saat</label>
+            <input
+              type="number"
+              className={inputCls}
+              placeholder="0"
+              value={form.toplamFmSaat || ''}
+              onChange={(e) => set('toplamFmSaat', parseFloat(e.target.value) || 0)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">0 ise haftaliktan hesaplanir</p>
+          </div>
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">UBGT calisinan gun</label>
+            <input
+              type="number"
+              className={inputCls}
+              placeholder="0"
+              value={form.ubgtGun || ''}
+              onChange={(e) => set('ubgtGun', parseFloat(e.target.value) || 0)}
+            />
+          </div>
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Hakkaniyet indirimi (%)</label>
+            <input
+              type="number"
+              className={inputCls}
+              step={5}
+              min={0}
+              max={100}
+              value={(form.hakkaniyetOrani * 100) || ''}
+              onChange={(e) => set('hakkaniyetOrani', (parseFloat(e.target.value) || 0) / 100)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">FM ve UBGT icin (standart: 30)</p>
+          </div>
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Kumulatif GV matrahi</label>
+            <input
+              type="number"
+              className={inputCls}
+              placeholder="0"
+              value={form.kumulatifGvMatrah || ''}
+              onChange={(e) => set('kumulatifGvMatrah', parseFloat(e.target.value) || 0)}
+            />
+            <p className="text-xs text-muted-foreground mt-1">Isten cikis ayi bordrosundan</p>
+          </div>
         </div>
       </fieldset>
+
+      {/* Otomatik Hesaplanan */}
+      {form.iseGiris && form.istenCikis && (form.brutUcret > 0 || form.netUcret > 0) && (
+        <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-1">
+          <p className="font-medium text-muted-foreground mb-2">Otomatik Hesaplanan</p>
+          <p>
+            <strong>Hizmet suresi:</strong>{' '}
+            {(() => {
+              const h = dateDiff(form.iseGiris, form.istenCikis)
+              return `${h.years} yil ${h.months} ay ${h.days} gun`
+            })()}
+          </p>
+          <p>
+            <strong>Ciplak brut ucret:</strong>{' '}
+            {formatCurrency(
+              form.ucretGirisTipi === 'brut' ? form.brutUcret : netToBrut(form.netUcret)
+            )}
+          </p>
+          <p>
+            <strong>Giydirilmis brut:</strong>{' '}
+            {formatCurrency(
+              (form.ucretGirisTipi === 'brut' ? form.brutUcret : netToBrut(form.netUcret)) +
+                form.yemek + form.servis + form.ikramiye + form.prim + form.barinma + form.diger
+            )}
+          </p>
+          <p>
+            <strong>SGK + Issizlik payi (%15):</strong>{' '}
+            {formatCurrency(
+              (form.ucretGirisTipi === 'brut' ? form.brutUcret : netToBrut(form.netUcret)) * SGK_TOPLAM_ISCI
+            )}
+          </p>
+        </div>
+      )}
 
       {/* Buttons */}
       <div className="flex gap-3">
@@ -741,12 +707,8 @@ function IscilikTab() {
               {result.hizmet.totalDays} gun)
             </p>
             <p>
-              <strong>Hesaplanan brut ucret:</strong>{' '}
+              <strong>Ciplak brut ucret:</strong>{' '}
               {formatCurrency(result.brutUcret)}
-            </p>
-            <p>
-              <strong>Yemek brut (istisna sonrasi):</strong>{' '}
-              {formatCurrency(result.yemekBrut)}
             </p>
             <p>
               <strong>Giydirilmis brut ucret:</strong>{' '}
@@ -756,10 +718,16 @@ function IscilikTab() {
               <strong>Kidem tavani (cikis donemi):</strong>{' '}
               {formatCurrency(getKidemTavani(form.istenCikis))}
             </p>
+            {result.giydirilmisBrut > getKidemTavani(form.istenCikis) && (
+              <p className="text-amber-600 font-medium">
+                Giydirilmis brut tavan asimi - kidem icin tavan esas alinir.
+              </p>
+            )}
           </div>
 
           {/* Result table */}
           <ResultTable
+            headers={['Alacak Kalemi', 'Brut Tutar (TL)', 'Kesintiler (TL)', 'Net Tutar (TL)']}
             rows={[
               ...result.kalemler.map((k) => [
                 k.label,
@@ -775,6 +743,7 @@ function IscilikTab() {
             Not: Bu hesaplama yaklasik degerler icerir. Kesin hesap icin bilirkisi raporu gerekebilir.
             Kidem tazminatindan yalnizca damga vergisi kesilir (SGK ve gelir vergisi yok).
             Ihbar tazminatindan gelir vergisi + damga vergisi kesilir (SGK yok).
+            FM ve UBGT icin AU istisnasi uygulanmaz.
           </p>
         </div>
       )}
@@ -945,45 +914,123 @@ function VekaletTab() {
   )
 }
 
-// ─── TAB 3: Arabulucu Ucreti ────────────────────────────────────────────────
+// ─── TAB 3: Arabulucu Ucreti (2025-2026 AAUT Tarifesi) ─────────────────────
+
+type ArabulucuTur = 'isci-isveren' | 'ticari' | 'tuketici' | 'kira' | 'aile' | 'ortaklik' | 'diger'
+type AnlasmaDurumu = 'anlasma' | 'anlasama'
+
+/** Saatlik ucret tarifesi: [ilk3SaatAnlasma, sonrakiAnlasma, ilk3SaatAnlasama, sonrakiAnlasama] */
+const ARABULUCU_SAATLIK_2TARAF: Record<ArabulucuTur, [number, number, number, number]> = {
+  'isci-isveren': [1000, 750, 750, 500],
+  'ticari':       [1500, 1000, 1000, 750],
+  'tuketici':     [600, 450, 450, 350],
+  'aile':         [900, 650, 650, 500],
+  'kira':         [800, 600, 600, 450],
+  'ortaklik':     [1200, 900, 900, 650],
+  'diger':        [750, 550, 550, 400],
+}
+
+const ARABULUCU_SAATLIK_3PLUS: Record<ArabulucuTur, [number, number, number, number]> = {
+  'isci-isveren': [1250, 1000, 1000, 750],
+  'ticari':       [1750, 1250, 1250, 1000],
+  'tuketici':     [800, 600, 600, 450],
+  'aile':         [1100, 850, 850, 650],
+  'kira':         [1000, 800, 800, 600],
+  'ortaklik':     [1500, 1100, 1100, 850],
+  'diger':        [950, 700, 700, 550],
+}
+
+const ARABULUCU_NISPI_DILIMLER = [
+  { limit: 120_000, oran: 0.06 },
+  { limit: 240_000, oran: 0.05 },
+  { limit: 600_000, oran: 0.04 },
+  { limit: 1_200_000, oran: 0.03 },
+  { limit: 2_400_000, oran: 0.02 },
+  { limit: 6_000_000, oran: 0.015 },
+  { limit: 12_000_000, oran: 0.01 },
+  { limit: Infinity, oran: 0.005 },
+]
+
+function calcArabulucuNispi(deger: number): number {
+  let remaining = deger
+  let total = 0
+  let prevLimit = 0
+  for (const d of ARABULUCU_NISPI_DILIMLER) {
+    const band = Math.min(remaining, d.limit - prevLimit)
+    if (band <= 0) break
+    total += band * d.oran
+    remaining -= band
+    prevLimit = d.limit
+  }
+  return total
+}
+
+interface ArabulucuResult {
+  saatlikToplam: number
+  nispiToplam: number
+  uygulananUcret: number
+  kdv: number
+  stopaj: number
+  netOdeme: number
+  tarafBasina: number
+  arabulucuNetGelir: number
+}
 
 function ArabulucuTab() {
   const [form, setForm] = useState({
-    tur: 'isci-isveren' as keyof typeof ARABULUCU_SAATLIK,
-    konu: 'parasal' as 'parasal' | 'parasal-olmayan',
-    sonuc: 'anlasmali' as 'anlasmali' | 'anlasmasiz',
-    sure: 2,
-    deger: 0,
+    tur: 'isci-isveren' as ArabulucuTur,
+    sonuc: 'anlasma' as AnlasmaDurumu,
+    sure: 3,
     tarafSayisi: 2,
+    deger: 0,
   })
-  const [result, setResult] = useState<null | {
-    ucret: number
-    tarafBasina: number
-    aciklama: string
-  }>(null)
+  const [result, setResult] = useState<ArabulucuResult | null>(null)
 
   function hesapla() {
-    const rates = ARABULUCU_SAATLIK[form.tur]
-    const saatlik = rates[form.sonuc]
-    let ucret = saatlik * form.sure
-
-    let aciklama = `Saatlik ${formatCurrency(saatlik)} x ${form.sure} saat = ${formatCurrency(ucret)}`
-    if (form.konu === 'parasal' && form.deger > 0 && form.sonuc === 'anlasmali') {
-      const nispi = form.deger * 0.06
-      if (nispi > ucret) {
-        ucret = nispi
-        aciklama = `Nispi hesap (%6): ${formatCurrency(nispi)} (saatlikten yuksek)`
-      }
+    if (form.sure <= 0) {
+      toast.error('Toplanti suresi giriniz.')
+      return
     }
 
-    const tarafBasina = ucret / form.tarafSayisi
+    const rates = form.tarafSayisi > 2
+      ? ARABULUCU_SAATLIK_3PLUS[form.tur]
+      : ARABULUCU_SAATLIK_2TARAF[form.tur]
 
-    setResult({ ucret, tarafBasina, aciklama })
+    const isAnlasma = form.sonuc === 'anlasma'
+    const ilk3Saat = isAnlasma ? rates[0] : rates[2]
+    const sonrakiSaat = isAnlasma ? rates[1] : rates[3]
+
+    const ilk3 = Math.min(form.sure, 3)
+    const sonraki = Math.max(0, form.sure - 3)
+    const saatlikToplam = ilk3 * ilk3Saat + sonraki * sonrakiSaat
+
+    let nispiToplam = 0
+    if (isAnlasma && form.deger > 0) {
+      nispiToplam = calcArabulucuNispi(form.deger)
+    }
+
+    const uygulananUcret = Math.max(saatlikToplam, nispiToplam)
+    const kdv = uygulananUcret * 0.20
+    const stopaj = uygulananUcret * 0.20
+    const netOdeme = uygulananUcret - stopaj + kdv
+    const tarafBasina = netOdeme / Math.max(form.tarafSayisi, 1)
+    const arabulucuNetGelir = uygulananUcret - stopaj
+
+    setResult({
+      saatlikToplam,
+      nispiToplam,
+      uygulananUcret,
+      kdv,
+      stopaj,
+      netOdeme,
+      tarafBasina,
+      arabulucuNetGelir,
+    })
   }
 
   return (
     <div className="space-y-6">
-      <SourceBadge text="Kaynak: 6325 s. K., Arabuluculuk Ucret Tarifesi 2026" />
+      <SourceBadge text="Kaynak: 6325 s. K., AAUT Arabuluculuk Asgari Ucret Tarifesi 2025-2026" />
 
       <fieldset className="rounded-lg border p-4 space-y-3">
         <legend className="text-sm font-medium text-muted-foreground px-2">
@@ -995,102 +1042,94 @@ function ArabulucuTab() {
             <select
               className={selectCls}
               value={form.tur}
-              onChange={(e) =>
-                setForm((p) => ({
-                  ...p,
-                  tur: e.target.value as keyof typeof ARABULUCU_SAATLIK,
-                }))
-              }
+              onChange={(e) => setForm((p) => ({ ...p, tur: e.target.value as ArabulucuTur }))}
             >
               <option value="isci-isveren">Isci-Isveren</option>
               <option value="ticari">Ticari</option>
               <option value="tuketici">Tuketici</option>
-              <option value="aile">Aile</option>
               <option value="kira">Kira</option>
-              <option value="ortaklik">Ortaklik</option>
+              <option value="aile">Aile (Bosanma vb.)</option>
+              <option value="ortaklik">Ortakligin Giderilmesi</option>
               <option value="diger">Diger</option>
             </select>
           </div>
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Konu</label>
-            <select
-              className={selectCls}
-              value={form.konu}
-              onChange={(e) =>
-                setForm((p) => ({
-                  ...p,
-                  konu: e.target.value as 'parasal' | 'parasal-olmayan',
-                }))
-              }
-            >
-              <option value="parasal">Parasal</option>
-              <option value="parasal-olmayan">Parasal olmayan</option>
-            </select>
+            <label className="text-sm font-medium">Anlasma durumu</label>
+            <div className="flex gap-4 mt-1">
+              <label className="flex items-center gap-1.5 text-sm">
+                <input
+                  type="radio"
+                  name="arb-sonuc"
+                  checked={form.sonuc === 'anlasma'}
+                  onChange={() => setForm((p) => ({ ...p, sonuc: 'anlasma' }))}
+                />
+                Anlasma ile
+              </label>
+              <label className="flex items-center gap-1.5 text-sm">
+                <input
+                  type="radio"
+                  name="arb-sonuc"
+                  checked={form.sonuc === 'anlasama'}
+                  onChange={() => setForm((p) => ({ ...p, sonuc: 'anlasama' }))}
+                />
+                Anlasama ile
+              </label>
+            </div>
           </div>
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Sonuc</label>
-            <select
-              className={selectCls}
-              value={form.sonuc}
-              onChange={(e) =>
-                setForm((p) => ({
-                  ...p,
-                  sonuc: e.target.value as 'anlasmali' | 'anlasmasiz',
-                }))
-              }
-            >
-              <option value="anlasmali">Anlasma ile</option>
-              <option value="anlasmasiz">Anlasmazlik</option>
-            </select>
-          </div>
-          <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Sure (saat)</label>
+            <label className="text-sm font-medium">Toplanti suresi (saat)</label>
             <input
               type="number"
               className={inputCls}
+              min={1}
               value={form.sure || ''}
-              onChange={(e) =>
-                setForm((p) => ({
-                  ...p,
-                  sure: parseInt(e.target.value) || 0,
-                }))
-              }
+              onChange={(e) => setForm((p) => ({ ...p, sure: parseInt(e.target.value) || 0 }))}
             />
           </div>
-          {form.konu === 'parasal' && (
-            <div className="min-w-[200px]">
-              <label className="text-sm font-medium">
-                Uyusmazlik degeri (TL)
-              </label>
-              <input
-                type="number"
-                className={inputCls}
-                value={form.deger || ''}
-                onChange={(e) =>
-                  setForm((p) => ({
-                    ...p,
-                    deger: parseFloat(e.target.value) || 0,
-                  }))
-                }
-              />
-            </div>
-          )}
           <div className="min-w-[200px]">
             <label className="text-sm font-medium">Taraf sayisi</label>
             <input
               type="number"
               className={inputCls}
+              min={2}
               value={form.tarafSayisi || ''}
-              onChange={(e) =>
-                setForm((p) => ({
-                  ...p,
-                  tarafSayisi: parseInt(e.target.value) || 2,
-                }))
-              }
+              onChange={(e) => setForm((p) => ({ ...p, tarafSayisi: Math.max(2, parseInt(e.target.value) || 2) }))}
             />
+            <p className="text-xs text-muted-foreground mt-1">3+ tarafta farkli tarife uygulanir</p>
+          </div>
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Uyusmazlik konusu deger (TL)</label>
+            <input
+              type="number"
+              className={inputCls}
+              placeholder="Opsiyonel - parasal uyusmazliklar icin"
+              value={form.deger || ''}
+              onChange={(e) => setForm((p) => ({ ...p, deger: parseFloat(e.target.value) || 0 }))}
+            />
+            <p className="text-xs text-muted-foreground mt-1">Anlasma halinde nispi ucret hesabi icin</p>
           </div>
         </div>
       </fieldset>
+
+      {/* Tarife bilgi tablosu */}
+      <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+        <p className="font-medium text-muted-foreground mb-2">
+          Secili tarife: {form.tur.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())} ({form.tarafSayisi > 2 ? '3+ taraf' : '2 taraf'})
+        </p>
+        {(() => {
+          const rates = form.tarafSayisi > 2
+            ? ARABULUCU_SAATLIK_3PLUS[form.tur]
+            : ARABULUCU_SAATLIK_2TARAF[form.tur]
+          return (
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>Anlasma - Ilk 3 saat: <strong>{formatCurrency(rates[0])}/saat</strong></div>
+              <div>Anlasma - Sonraki: <strong>{formatCurrency(rates[1])}/saat</strong></div>
+              <div>Anlasama - Ilk 3 saat: <strong>{formatCurrency(rates[2])}/saat</strong></div>
+              <div>Anlasama - Sonraki: <strong>{formatCurrency(rates[3])}/saat</strong></div>
+            </div>
+          )
+        })()}
+      </div>
 
       <button className={btnCls} onClick={hesapla}>
         Hesapla
@@ -1101,11 +1140,28 @@ function ArabulucuTab() {
           <ResultTable
             headers={['Kalem', 'Tutar (TL)']}
             rows={[
-              ['Toplam arabulucu ucreti', result.ucret],
-              ['Taraf basina', result.tarafBasina],
+              ['Saatlik ucret toplami', result.saatlikToplam],
+              ...(result.nispiToplam > 0
+                ? [['Nispi ucret toplami (deger uzerinden)' as string | number, result.nispiToplam as string | number] as (string | number)[]]
+                : []),
+              ['Uygulanan ucret (buyuk olan)', result.uygulananUcret],
+              ['KDV (%20)', result.kdv],
+              ['Stopaj - GV (%20)', result.stopaj],
+              ['Toplam odeme (ucret - stopaj + KDV)', result.netOdeme],
+              ['Taraf basina maliyet', result.tarafBasina],
+              ['Arabulucu net gelir (ucret - stopaj)', result.arabulucuNetGelir],
             ]}
           />
-          <p className="text-sm text-muted-foreground">{result.aciklama}</p>
+
+          {result.nispiToplam > 0 && result.nispiToplam > result.saatlikToplam && (
+            <WarningBadge text="Nispi ucret saatlik ucretten yuksek oldugu icin nispi ucret uygulanmistir." />
+          )}
+
+          <p className="text-xs text-muted-foreground">
+            Not: Arabulucu ucreti taraflar arasinda esit olarak paylasilir.
+            KDV arabulucuya ayrica odenir. Stopaj (%20 gelir vergisi) arabulucu ucretinden kesilir.
+            Nispi ucret yalnizca anlasma halinde ve deger girilmisse hesaplanir; saatlik ucretten az olamaz.
+          </p>
         </div>
       )}
     </div>
@@ -1542,6 +1598,663 @@ function KazaTazminatTab() {
   )
 }
 
+// ─── TAB 5b: Harc Hesaplama ─────────────────────────────────────────────────
+
+type DavaMahkemesi = 'asliye-hukuk' | 'sulh-hukuk' | 'is-mahkemesi' | 'aile' | 'ticaret' | 'tuketici' | 'idare' | 'vergi' | 'icra'
+
+const MAKTU_BASVURMA_HARCI: Record<DavaMahkemesi, number> = {
+  'asliye-hukuk': 427.60,
+  'sulh-hukuk': 427.60,
+  'is-mahkemesi': 427.60,
+  'aile': 427.60,
+  'ticaret': 427.60,
+  'tuketici': 427.60,
+  'idare': 427.60,
+  'vergi': 427.60,
+  'icra': 427.60,
+}
+
+const HARC_SABITLERI = {
+  nispiBasvurmaBinde: 6.831,
+  nispiKararBinde: 11.40,
+  vekaletSuret: 32.50,
+  tebligatNormal: 142.50,
+  tebligatAps: 165.00,
+  bilirkisiOrtalama: 3000,
+  kesifOrtalama: 5000,
+  tanikTazminati: 100,
+  postaMuzekkere: 500,
+  tarafBasinaTebligat: 200,
+}
+
+interface HarcResult {
+  maktuBasvurma: number
+  nispiBasvurma: number
+  nispiKarar: number
+  pesinHarc: number
+  vekaletSuret: number
+  giderAvansi: number
+  giderDetay: { kalem: string; tutar: number }[]
+  toplamOnOdeme: number
+  bakiyeKararHarci: number
+}
+
+function HarcTab() {
+  const [form, setForm] = useState({
+    mahkeme: 'asliye-hukuk' as DavaMahkemesi,
+    davaDegeri: 0,
+    harcTuru: 'nispi' as 'nispi' | 'maktu',
+    tarafSayisi: 2,
+    tanikSayisi: 2,
+    bilirkisiGerekli: true,
+    kesifGerekli: false,
+  })
+  const [result, setResult] = useState<HarcResult | null>(null)
+
+  function hesapla() {
+    const maktuBasvurma = MAKTU_BASVURMA_HARCI[form.mahkeme]
+
+    let nispiBasvurma = 0
+    let nispiKarar = 0
+    let pesinHarc = 0
+
+    if (form.harcTuru === 'nispi' && form.davaDegeri > 0) {
+      nispiBasvurma = form.davaDegeri * (HARC_SABITLERI.nispiBasvurmaBinde / 1000)
+      nispiKarar = form.davaDegeri * (HARC_SABITLERI.nispiKararBinde / 1000)
+      pesinHarc = nispiKarar / 4
+    }
+
+    const vekaletSuret = HARC_SABITLERI.vekaletSuret
+
+    const giderDetay: { kalem: string; tutar: number }[] = []
+    const tebligatTutar = HARC_SABITLERI.tarafBasinaTebligat * form.tarafSayisi
+    giderDetay.push({ kalem: `Tebligat (${form.tarafSayisi} taraf x ${formatCurrency(HARC_SABITLERI.tarafBasinaTebligat)})`, tutar: tebligatTutar })
+
+    if (form.bilirkisiGerekli) {
+      giderDetay.push({ kalem: 'Bilirkisi ucreti (ortalama)', tutar: HARC_SABITLERI.bilirkisiOrtalama })
+    }
+    if (form.kesifGerekli) {
+      giderDetay.push({ kalem: 'Kesif ucreti (ortalama)', tutar: HARC_SABITLERI.kesifOrtalama })
+    }
+    if (form.tanikSayisi > 0) {
+      const tanikTutar = HARC_SABITLERI.tanikTazminati * form.tanikSayisi
+      giderDetay.push({ kalem: `Tanik tazminati (${form.tanikSayisi} tanik x ${formatCurrency(HARC_SABITLERI.tanikTazminati)})`, tutar: tanikTutar })
+    }
+    giderDetay.push({ kalem: 'Posta/muzekkere', tutar: HARC_SABITLERI.postaMuzekkere })
+
+    const giderAvansi = giderDetay.reduce((s, d) => s + d.tutar, 0)
+
+    const basvurmaHarci = form.harcTuru === 'nispi' ? Math.max(maktuBasvurma, nispiBasvurma) : maktuBasvurma
+    const toplamOnOdeme = basvurmaHarci + pesinHarc + vekaletSuret + giderAvansi
+    const bakiyeKararHarci = nispiKarar > 0 ? nispiKarar - pesinHarc : 0
+
+    setResult({
+      maktuBasvurma,
+      nispiBasvurma,
+      nispiKarar,
+      pesinHarc,
+      vekaletSuret,
+      giderAvansi,
+      giderDetay,
+      toplamOnOdeme,
+      bakiyeKararHarci,
+    })
+  }
+
+  return (
+    <div className="space-y-6">
+      <SourceBadge text="Kaynak: 492 s. Harclar Kanunu, 2026 Harclar Kanunu Genel Tebligi" />
+
+      <fieldset className="rounded-lg border p-4 space-y-3">
+        <legend className="text-sm font-medium text-muted-foreground px-2">
+          Dava Bilgileri
+        </legend>
+        <div className="flex flex-wrap gap-4">
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Mahkeme turu</label>
+            <select
+              className={selectCls}
+              value={form.mahkeme}
+              onChange={(e) => setForm((p) => ({ ...p, mahkeme: e.target.value as DavaMahkemesi }))}
+            >
+              <option value="asliye-hukuk">Asliye Hukuk</option>
+              <option value="sulh-hukuk">Sulh Hukuk</option>
+              <option value="is-mahkemesi">Is Mahkemesi</option>
+              <option value="aile">Aile Mahkemesi</option>
+              <option value="ticaret">Ticaret Mahkemesi</option>
+              <option value="tuketici">Tuketici Mahkemesi</option>
+              <option value="idare">Idare Mahkemesi</option>
+              <option value="vergi">Vergi Mahkemesi</option>
+              <option value="icra">Icra Dairesi</option>
+            </select>
+          </div>
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Harc turu</label>
+            <div className="flex gap-4 mt-1">
+              <label className="flex items-center gap-1.5 text-sm">
+                <input
+                  type="radio"
+                  name="harc-turu"
+                  checked={form.harcTuru === 'nispi'}
+                  onChange={() => setForm((p) => ({ ...p, harcTuru: 'nispi' }))}
+                />
+                Nispi
+              </label>
+              <label className="flex items-center gap-1.5 text-sm">
+                <input
+                  type="radio"
+                  name="harc-turu"
+                  checked={form.harcTuru === 'maktu'}
+                  onChange={() => setForm((p) => ({ ...p, harcTuru: 'maktu' }))}
+                />
+                Maktu
+              </label>
+            </div>
+          </div>
+          {form.harcTuru === 'nispi' && (
+            <div className="min-w-[200px]">
+              <label className="text-sm font-medium">Dava degeri (TL)</label>
+              <input
+                type="number"
+                className={inputCls}
+                value={form.davaDegeri || ''}
+                onChange={(e) => setForm((p) => ({ ...p, davaDegeri: parseFloat(e.target.value) || 0 }))}
+              />
+            </div>
+          )}
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Taraf sayisi</label>
+            <input
+              type="number"
+              className={inputCls}
+              min={2}
+              value={form.tarafSayisi || ''}
+              onChange={(e) => setForm((p) => ({ ...p, tarafSayisi: Math.max(2, parseInt(e.target.value) || 2) }))}
+            />
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset className="rounded-lg border p-4 space-y-3">
+        <legend className="text-sm font-medium text-muted-foreground px-2">
+          Gider Avansi Kalemleri
+        </legend>
+        <div className="flex flex-wrap gap-4">
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Tanik sayisi</label>
+            <input
+              type="number"
+              className={inputCls}
+              min={0}
+              value={form.tanikSayisi || ''}
+              onChange={(e) => setForm((p) => ({ ...p, tanikSayisi: parseInt(e.target.value) || 0 }))}
+            />
+          </div>
+          <div className="min-w-[200px] flex items-end gap-2">
+            <input
+              type="checkbox"
+              id="bilirkisi"
+              checked={form.bilirkisiGerekli}
+              onChange={(e) => setForm((p) => ({ ...p, bilirkisiGerekli: e.target.checked }))}
+            />
+            <label htmlFor="bilirkisi" className="text-sm font-medium">Bilirkisi gerekli</label>
+          </div>
+          <div className="min-w-[200px] flex items-end gap-2">
+            <input
+              type="checkbox"
+              id="kesif"
+              checked={form.kesifGerekli}
+              onChange={(e) => setForm((p) => ({ ...p, kesifGerekli: e.target.checked }))}
+            />
+            <label htmlFor="kesif" className="text-sm font-medium">Kesif gerekli</label>
+          </div>
+        </div>
+      </fieldset>
+
+      <button className={btnCls} onClick={hesapla}>
+        Hesapla
+      </button>
+
+      {result && (
+        <div className="space-y-4">
+          <h3 className="text-sm font-semibold">On Odeme Tablosu</h3>
+          <ResultTable
+            headers={['Kalem', 'Tutar (TL)']}
+            rows={[
+              [
+                form.harcTuru === 'nispi' && result.nispiBasvurma > result.maktuBasvurma
+                  ? `Basvurma harci (nispi: binde ${HARC_SABITLERI.nispiBasvurmaBinde})`
+                  : 'Basvurma harci (maktu)',
+                form.harcTuru === 'nispi'
+                  ? Math.max(result.maktuBasvurma, result.nispiBasvurma)
+                  : result.maktuBasvurma,
+              ],
+              ...(result.pesinHarc > 0
+                ? [['Pesin harc (karar harcinin 1/4)' as string | number, result.pesinHarc as string | number] as (string | number)[]]
+                : []),
+              ['Vekalet suret harci', result.vekaletSuret],
+              ...result.giderDetay.map(
+                (d) => [d.kalem, d.tutar] as (string | number)[]
+              ),
+              ['TOPLAM ON ODEME', result.toplamOnOdeme],
+            ]}
+          />
+
+          {result.nispiKarar > 0 && (
+            <>
+              <h3 className="text-sm font-semibold mt-4">Dava Sonunda Odenecek</h3>
+              <ResultTable
+                headers={['Kalem', 'Tutar (TL)']}
+                rows={[
+                  ['Karar ve ilam harci (toplam)', result.nispiKarar],
+                  ['Pesin harc (on odeme ile odendr)', result.pesinHarc],
+                  ['Bakiye karar harci', result.bakiyeKararHarci],
+                ]}
+              />
+            </>
+          )}
+
+          <WarningBadge text="Harc tutarlari 2026 yili Harclar Kanunu Genel Tebligine goredir. UYAP uzerinden dogrulayiniz." />
+
+          <div className="rounded-lg border bg-muted/30 p-4 text-xs space-y-1">
+            <p><strong>Diger masraflar (referans):</strong></p>
+            <p>Tebligat (normal): {formatCurrency(HARC_SABITLERI.tebligatNormal)} | Tebligat (APS): {formatCurrency(HARC_SABITLERI.tebligatAps)}</p>
+            <p>Nispi basvurma harci: binde {HARC_SABITLERI.nispiBasvurmaBinde} | Nispi karar harci: binde {HARC_SABITLERI.nispiKararBinde}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── TAB 5c: Kira Sureleri ──────────────────────────────────────────────────
+
+type TahliyeNedeni =
+  | 'konut-ihtiyaci'
+  | 'yeni-malik'
+  | 'esasli-tadilat'
+  | 'tahliye-taahhut'
+  | 'ayni-ilce-konut'
+  | 'iki-hakli-ihtar'
+  | '10-yillik-uzama'
+  | 'kira-odememe'
+  | 'ozenle-kullanma'
+  | 'komsulara-saygisizlik'
+
+const TAHLIYE_NEDENLERI: { value: TahliyeNedeni; label: string; madde: string }[] = [
+  { value: 'konut-ihtiyaci', label: 'Kiraya verenin konut ihtiyaci', madde: 'TBK 350/1' },
+  { value: 'yeni-malik', label: 'Yeni malikin ihtiyaci', madde: 'TBK 351' },
+  { value: 'esasli-tadilat', label: 'Esasli tamir/tadilat', madde: 'TBK 350/2' },
+  { value: 'tahliye-taahhut', label: 'Kiracinin tahliye taahhutnamesi', madde: 'TBK 352/1' },
+  { value: 'ayni-ilce-konut', label: 'Ayni ilce/beldede konutu olma', madde: 'TBK 352/3' },
+  { value: 'iki-hakli-ihtar', label: 'Iki hakli ihtar', madde: 'TBK 352/2' },
+  { value: '10-yillik-uzama', label: '10 yillik uzama sonrasi', madde: 'TBK 347' },
+  { value: 'kira-odememe', label: 'Kira bedelinin odenmemesi', madde: 'TBK 315' },
+  { value: 'ozenle-kullanma', label: 'Ozenle kullanma yukumlulugu ihlali', madde: 'TBK 316' },
+  { value: 'komsulara-saygisizlik', label: 'Komsulara saygisizlik / rahatsizlik', madde: 'TBK 316' },
+]
+
+function addDays(date: Date, days: number): Date {
+  const d = new Date(date)
+  d.setDate(d.getDate() + days)
+  return d
+}
+
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date)
+  d.setMonth(d.getMonth() + months)
+  return d
+}
+
+function addYears(date: Date, years: number): Date {
+  const d = new Date(date)
+  d.setFullYear(d.getFullYear() + years)
+  return d
+}
+
+function formatTarih(d: Date): string {
+  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`
+}
+
+interface KiraSureResult {
+  items: { label: string; tarih: string; uyari?: boolean }[]
+  notlar: string[]
+  kanunMaddesi: string
+}
+
+function calcKiraSureleri(
+  _baslangic: Date,
+  bitis: Date,
+  neden: TahliyeNedeni,
+  edinmeTarihi?: Date,
+  taahutTarihi?: Date,
+): KiraSureResult {
+  const items: KiraSureResult['items'] = []
+  const notlar: string[] = []
+  const nedenInfo = TAHLIYE_NEDENLERI.find((n) => n.value === neden)
+  const kanunMaddesi = nedenInfo?.madde || ''
+
+  switch (neden) {
+    case 'konut-ihtiyaci': {
+      const ihtarSonTarih = addMonths(bitis, -3)
+      const davaBaslangic = new Date(bitis)
+      const davaSonTarih = addMonths(bitis, 1)
+      items.push({ label: 'Ihtarname gonderme son tarihi', tarih: formatTarih(ihtarSonTarih), uyari: true })
+      items.push({ label: 'Dava acma baslangic tarihi', tarih: formatTarih(davaBaslangic) })
+      items.push({ label: 'Dava acma son tarihi', tarih: formatTarih(davaSonTarih), uyari: true })
+      notlar.push('Kira bitis tarihinden en az 3 ay once ihtarname gonderilmelidir.')
+      notlar.push('Dava sozlesme bitiminden itibaren 1 ay icinde acilmalidir.')
+      notlar.push('Tahliye sonrasi 3 yil yeniden kiraya verilemez.')
+      break
+    }
+    case 'yeni-malik': {
+      if (edinmeTarihi) {
+        const ihtarSonTarih = addMonths(edinmeTarihi, 1)
+        const dava6ay = addMonths(edinmeTarihi, 6)
+        const kiraBitis = new Date(bitis)
+        const davaBaslangic = dava6ay < kiraBitis ? dava6ay : kiraBitis
+        items.push({ label: 'Ihtarname gonderme son tarihi (edinmeden 1 ay)', tarih: formatTarih(ihtarSonTarih), uyari: true })
+        items.push({ label: 'Dava acma (edinmeden 6 ay sonra)', tarih: formatTarih(dava6ay) })
+        items.push({ label: 'Dava acma (kira bitis tarihi)', tarih: formatTarih(kiraBitis) })
+        items.push({ label: 'Uygulanacak dava tarihi (once gelen)', tarih: formatTarih(davaBaslangic), uyari: true })
+      } else {
+        items.push({ label: 'Edinme tarihi girilmedi', tarih: '-', uyari: true })
+      }
+      notlar.push('Edinme tarihinden itibaren 1 ay icinde ihtarname gonderilmelidir.')
+      notlar.push('Edinmeden 6 ay sonra VEYA kira bitis tarihinde dava acilir (hangisi once ise).')
+      break
+    }
+    case 'esasli-tadilat': {
+      const davaBaslangic = new Date(bitis)
+      const davaSonTarih = addMonths(bitis, 1)
+      items.push({ label: 'Dava acma baslangic tarihi', tarih: formatTarih(davaBaslangic) })
+      items.push({ label: 'Dava acma son tarihi', tarih: formatTarih(davaSonTarih), uyari: true })
+      notlar.push('Sozlesme bitiminden itibaren 1 ay icinde dava acilmalidir.')
+      notlar.push('Tahliye sonrasi 3 yil eski kiraciya oncelik hakki vardir.')
+      notlar.push('Tadilat surecinde tasinmazin kullanilmasinin imkansiz olmasi gerekir.')
+      break
+    }
+    case 'tahliye-taahhut': {
+      if (taahutTarihi) {
+        const icraVeyaDavaSon = addMonths(taahutTarihi, 1)
+        items.push({ label: 'Taahhut edilen tarih', tarih: formatTarih(taahutTarihi) })
+        items.push({ label: 'Icra/dava son tarihi (taahhut tarihinden 1 ay)', tarih: formatTarih(icraVeyaDavaSon), uyari: true })
+      } else {
+        items.push({ label: 'Taahhut tarihi girilmedi', tarih: '-', uyari: true })
+      }
+      notlar.push('Taahhutname kira sozlesmesi baslangicindan SONRA verilmis olmalidir.')
+      notlar.push('Taahhut edilen tarihten itibaren 1 ay icinde icra takibi veya dava acilmalidir.')
+      break
+    }
+    case 'ayni-ilce-konut': {
+      const davaSonTarih = addMonths(bitis, 1)
+      items.push({ label: 'Dava acma son tarihi', tarih: formatTarih(davaSonTarih), uyari: true })
+      notlar.push('Sozlesme bitiminden itibaren 1 ay icinde dava acilmalidir.')
+      notlar.push('Kiracinin ayni ilce veya beldede konutunun bulundugu kanitlanmalidir.')
+      break
+    }
+    case 'iki-hakli-ihtar': {
+      const sonrakiYilBaslangic = addYears(bitis, 1)
+      const davaSonTarih = addMonths(sonrakiYilBaslangic, 1)
+      items.push({ label: 'Sonraki kira yili baslangici', tarih: formatTarih(sonrakiYilBaslangic) })
+      items.push({ label: 'Dava acma son tarihi', tarih: formatTarih(davaSonTarih), uyari: true })
+      notlar.push('Bir kira yili icinde 2 hakli ihtar yapilmis olmalidir.')
+      notlar.push('Dava sonraki kira yilinin basindan itibaren 1 ay icinde acilmalidir.')
+      break
+    }
+    case '10-yillik-uzama': {
+      const onYilSonrasi = addYears(bitis, 10)
+      const fesihBildirimSon = addMonths(onYilSonrasi, -3)
+      const birSonrakiYil = addYears(onYilSonrasi, 1)
+      const birSonrakiFesihSon = addMonths(birSonrakiYil, -3)
+      items.push({ label: '10 yillik uzama suresi dolusu', tarih: formatTarih(onYilSonrasi) })
+      items.push({ label: 'Fesih bildirimi son tarihi (3 ay once)', tarih: formatTarih(fesihBildirimSon), uyari: true })
+      items.push({ label: 'Fesih yapilmazsa sonraki firsat', tarih: formatTarih(birSonrakiFesihSon) })
+      notlar.push('10 yillik uzama suresi doldugunda, her uzama yili sonundan en az 3 ay once fesih bildirimi yapilmalidir.')
+      notlar.push('Bildirim yapilmazsa sozlesme 1 yil daha uzar, her yil ayni hak tekrar dogar.')
+      break
+    }
+    case 'kira-odememe': {
+      const ihtarSureSonu = addDays(new Date(), 30)
+      items.push({ label: 'Ihtarname ile 30 gun sure verilir', tarih: formatTarih(new Date()), uyari: true })
+      items.push({ label: 'Sure dolum tarihi (dava acilabilir)', tarih: formatTarih(ihtarSureSonu) })
+      notlar.push('Kiraciya 30 gun sure verilerek ihtarname gonderilmelidir.')
+      notlar.push('Sure icerisinde odeme yapilmazsa tahliye davasi acilabilir.')
+      break
+    }
+    case 'ozenle-kullanma':
+    case 'komsulara-saygisizlik': {
+      const ihtarSureSonu = addDays(new Date(), 30)
+      items.push({ label: 'Ihtarname ile 30 gun sure verilir', tarih: formatTarih(new Date()), uyari: true })
+      items.push({ label: 'Sure dolum tarihi (dava acilabilir)', tarih: formatTarih(ihtarSureSonu) })
+      notlar.push('Kiraciya yazili olarak 30 gun sure verilmelidir.')
+      notlar.push('Sure icerisinde aykirilik giderilmezse fesih hakki dogar.')
+      break
+    }
+  }
+
+  return { items, notlar, kanunMaddesi }
+}
+
+function KiraSureleriTab() {
+  const [form, setForm] = useState({
+    baslangic: '',
+    bitis: '',
+    neden: 'konut-ihtiyaci' as TahliyeNedeni,
+    edinmeTarihi: '',
+    taahutTarihi: '',
+    mevcutKira: 0,
+    tufeOrani: 0,
+  })
+  const [result, setResult] = useState<KiraSureResult | null>(null)
+  const [kiraArtis, setKiraArtis] = useState<{ yeniKira: number; artis: number } | null>(null)
+
+  const nedenlerRequiringEdinme: TahliyeNedeni[] = ['yeni-malik']
+  const nedenlerRequiringTaahut: TahliyeNedeni[] = ['tahliye-taahhut']
+
+  function hesaplaSureler() {
+    if (!form.baslangic || !form.bitis) {
+      toast.error('Kira sozlesmesi baslangic ve bitis tarihleri zorunludur.')
+      return
+    }
+
+    const baslangic = new Date(form.baslangic)
+    const bitis = new Date(form.bitis)
+    const edinme = form.edinmeTarihi ? new Date(form.edinmeTarihi) : undefined
+    const taahut = form.taahutTarihi ? new Date(form.taahutTarihi) : undefined
+
+    setResult(calcKiraSureleri(baslangic, bitis, form.neden, edinme, taahut))
+  }
+
+  function hesaplaKiraArtisi() {
+    if (form.mevcutKira <= 0 || form.tufeOrani <= 0) {
+      toast.error('Mevcut kira ve TUFE orani giriniz.')
+      return
+    }
+    const artis = form.mevcutKira * (form.tufeOrani / 100)
+    const yeniKira = form.mevcutKira + artis
+    setKiraArtis({ yeniKira, artis })
+  }
+
+  return (
+    <div className="space-y-6">
+      <SourceBadge text="Kaynak: 6098 s. TBK m.315, 316, 347, 350-352" />
+
+      {/* Tahliye sure hesaplama */}
+      <fieldset className="rounded-lg border p-4 space-y-3">
+        <legend className="text-sm font-medium text-muted-foreground px-2">
+          Kira Sozlesmesi Bilgileri
+        </legend>
+        <div className="flex flex-wrap gap-4">
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Sozlesme baslangic tarihi</label>
+            <input
+              type="date"
+              className={inputCls}
+              value={form.baslangic}
+              onChange={(e) => setForm((p) => ({ ...p, baslangic: e.target.value }))}
+            />
+          </div>
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Sozlesme bitis tarihi</label>
+            <input
+              type="date"
+              className={inputCls}
+              value={form.bitis}
+              onChange={(e) => setForm((p) => ({ ...p, bitis: e.target.value }))}
+            />
+          </div>
+          <div className="min-w-[280px]">
+            <label className="text-sm font-medium">Tahliye nedeni</label>
+            <select
+              className={selectCls}
+              value={form.neden}
+              onChange={(e) => setForm((p) => ({ ...p, neden: e.target.value as TahliyeNedeni }))}
+            >
+              {TAHLIYE_NEDENLERI.map((n) => (
+                <option key={n.value} value={n.value}>
+                  {n.label} ({n.madde})
+                </option>
+              ))}
+            </select>
+          </div>
+          {nedenlerRequiringEdinme.includes(form.neden) && (
+            <div className="min-w-[200px]">
+              <label className="text-sm font-medium">Tasinmaz edinme tarihi</label>
+              <input
+                type="date"
+                className={inputCls}
+                value={form.edinmeTarihi}
+                onChange={(e) => setForm((p) => ({ ...p, edinmeTarihi: e.target.value }))}
+              />
+            </div>
+          )}
+          {nedenlerRequiringTaahut.includes(form.neden) && (
+            <div className="min-w-[200px]">
+              <label className="text-sm font-medium">Taahhut edilen tahliye tarihi</label>
+              <input
+                type="date"
+                className={inputCls}
+                value={form.taahutTarihi}
+                onChange={(e) => setForm((p) => ({ ...p, taahutTarihi: e.target.value }))}
+              />
+            </div>
+          )}
+        </div>
+      </fieldset>
+
+      <button className={btnCls} onClick={hesaplaSureler}>
+        Sureleri Hesapla
+      </button>
+
+      {result && (
+        <div className="space-y-4">
+          <div className="rounded-lg border p-4">
+            <h3 className="text-sm font-semibold mb-3">
+              Sure Tablosu — {TAHLIYE_NEDENLERI.find((n) => n.value === form.neden)?.label}
+              <span className="ml-2 text-xs font-normal text-muted-foreground">({result.kanunMaddesi})</span>
+            </h3>
+            <div className="space-y-2">
+              {result.items.map((item, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center justify-between rounded-md px-3 py-2 text-sm ${
+                    item.uyari ? 'bg-amber-50 border border-amber-200' : 'bg-muted/30'
+                  }`}
+                >
+                  <span>{item.label}</span>
+                  <span className={`font-medium ${item.uyari ? 'text-amber-800' : ''}`}>
+                    {item.tarih}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {result.notlar.length > 0 && (
+            <div className="space-y-1">
+              {result.notlar.map((n, i) => (
+                <WarningBadge key={i} text={n} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 10 Yillik Uzama Hesabi */}
+      {form.baslangic && form.bitis && (
+        <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-2">
+          <p className="font-medium text-muted-foreground">10 Yillik Uzama Hesabi (TBK m.347)</p>
+          {(() => {
+            const bitis = new Date(form.bitis)
+            const onYil = addYears(bitis, 10)
+            const fesihSon = addMonths(onYil, -3)
+            return (
+              <>
+                <p>Sozlesme bitis: <strong>{formatTarih(bitis)}</strong></p>
+                <p>10 yillik uzama dolusu: <strong>{formatTarih(onYil)}</strong></p>
+                <p>Fesih bildirimi son tarih: <strong className="text-amber-700">{formatTarih(fesihSon)}</strong></p>
+                <p className="text-xs text-muted-foreground">Fesih yapilmazsa sozlesme 1 yil daha uzar, her yil ayni hak tekrar dogar.</p>
+              </>
+            )
+          })()}
+        </div>
+      )}
+
+      {/* Kira artis hesaplama */}
+      <fieldset className="rounded-lg border p-4 space-y-3">
+        <legend className="text-sm font-medium text-muted-foreground px-2">
+          Kira Artis Hesaplama (TBK m.344)
+        </legend>
+        <div className="flex flex-wrap gap-4">
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">Mevcut kira bedeli (TL)</label>
+            <input
+              type="number"
+              className={inputCls}
+              value={form.mevcutKira || ''}
+              onChange={(e) => setForm((p) => ({ ...p, mevcutKira: parseFloat(e.target.value) || 0 }))}
+            />
+          </div>
+          <div className="min-w-[200px]">
+            <label className="text-sm font-medium">TUFE 12 aylik ortalama (%)</label>
+            <input
+              type="number"
+              step="0.01"
+              className={inputCls}
+              value={form.tufeOrani || ''}
+              onChange={(e) => setForm((p) => ({ ...p, tufeOrani: parseFloat(e.target.value) || 0 }))}
+            />
+          </div>
+          <div className="min-w-[200px] flex items-end">
+            <button className={btnCls} onClick={hesaplaKiraArtisi}>
+              Artis Hesapla
+            </button>
+          </div>
+        </div>
+
+        {kiraArtis && (
+          <div className="mt-3">
+            <ResultTable
+              headers={['Kalem', 'Tutar (TL)']}
+              rows={[
+                ['Mevcut kira', form.mevcutKira],
+                [`Artis tutari (%${form.tufeOrani})`, kiraArtis.artis],
+                ['Yeni kira bedeli', kiraArtis.yeniKira],
+              ]}
+            />
+          </div>
+        )}
+
+        <p className="text-xs text-muted-foreground mt-2">
+          TBK m.344: Konut kiralarinda kira artisi bir onceki kira yilina ait TUFE 12 aylik ortalamasini gecemez.
+          2024 Temmuz sonrasi %25 tavan uygulamasi kaldirilmistir, sadece TUFE siniri gecerlidir.
+        </p>
+      </fieldset>
+    </div>
+  )
+}
+
 // ─── TABS ───────────────────────────────────────────────────────────────────
 
 const TABS = [
@@ -1549,6 +2262,8 @@ const TABS = [
   { id: 'vekalet', label: 'Vekalet Ucreti' },
   { id: 'arabulucu', label: 'Arabulucu Ucreti' },
   { id: 'faiz', label: 'Faiz Hesaplama' },
+  { id: 'harc', label: 'Harc Hesaplama' },
+  { id: 'kira', label: 'Kira Sureleri' },
   { id: 'kaza', label: 'Kaza Tazminat' },
 ] as const
 
@@ -1563,7 +2278,7 @@ export default function CalculationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Hesaplamalar"
-        description="Hukuki hesaplama araclari — 9 modullu iscilik alacaklari, vekalet ucreti, arabulucu ucreti, faiz ve kaza tazminati"
+        description="Hukuki hesaplama araclari — iscilik alacaklari, vekalet ucreti, arabulucu ucreti, faiz, harc, kira sureleri ve kaza tazminati"
       />
 
       {/* Tab buttons */}
@@ -1589,6 +2304,8 @@ export default function CalculationsPage() {
         {activeTab === 'vekalet' && <VekaletTab />}
         {activeTab === 'arabulucu' && <ArabulucuTab />}
         {activeTab === 'faiz' && <FaizTab />}
+        {activeTab === 'harc' && <HarcTab />}
+        {activeTab === 'kira' && <KiraSureleriTab />}
         {activeTab === 'kaza' && <KazaTazminatTab />}
       </div>
     </div>
