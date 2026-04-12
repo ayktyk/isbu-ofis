@@ -1,0 +1,62 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1774336961939,
+      "tag": "0000_melodic_colleen_wing",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1774451648666,
+      "tag": "0001_crazy_lady_ursula",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774467698938,
+      "tag": "0002_massive_slipstream",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1774620000000,
+      "tag": "0003_ai_workspace_bridge",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1774809957439,
+      "tag": "0004_majestic_vindicator",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1774811704697,
+      "tag": "0005_fair_butterfly",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774815859851,
+      "tag": "0006_mute_reavers",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1774873573860,
+      "tag": "0007_perpetual_betty_ross",
+      "breakpoints": true
+    }
+  ]
+}
