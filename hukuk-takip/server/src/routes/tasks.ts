@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type Request, type Response } from 'express'
 import { eq, and, desc, sql } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { tasks, cases } from '../db/schema.js'
@@ -13,7 +13,7 @@ router.use(authenticate)
 
 // ─── GET /api/tasks ───────────────────────────────────────────────────────────
 
-router.get('/', async (req, res) => {
+router.get('/', async (req: Request, res: Response) => {
   const status = getSingleValue(req.query.status)
   const priority = getSingleValue(req.query.priority)
 
@@ -50,7 +50,7 @@ router.get('/', async (req, res) => {
 
 // ─── POST /api/tasks ──────────────────────────────────────────────────────────
 
-router.post('/', validate(createTaskSchema), async (req, res) => {
+router.post('/', validate(createTaskSchema), async (req: Request, res: Response) => {
   const { dueDate, caseId, label, ...rest } = req.body
 
   if (caseId) {
@@ -77,7 +77,7 @@ router.post('/', validate(createTaskSchema), async (req, res) => {
 
 // ─── PUT /api/tasks/:id ──────────────────────────────────────────────────────
 
-router.put('/:id', validate(updateTaskSchema), async (req, res) => {
+router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Response) => {
   const taskId = getSingleValue(req.params.id)
 
   if (!taskId) {
@@ -114,7 +114,7 @@ router.put('/:id', validate(updateTaskSchema), async (req, res) => {
 
 // ─── PATCH /api/tasks/:id/status — Hızlı durum değiştirme ────────────────────
 
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', async (req: Request, res: Response) => {
   const taskId = getSingleValue(req.params.id)
 
   if (!taskId) {
@@ -143,7 +143,7 @@ router.patch('/:id/status', async (req, res) => {
 
 // ─── DELETE /api/tasks/:id ────────────────────────────────────────────────────
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', async (req: Request, res: Response) => {
   const taskId = getSingleValue(req.params.id)
 
   if (!taskId) {

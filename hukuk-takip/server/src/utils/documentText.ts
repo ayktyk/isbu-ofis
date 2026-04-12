@@ -1,5 +1,5 @@
-import { spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
+import { spawn } from 'child_process'
+import { fileURLToPath } from 'url'
 
 const DOCUMENT_TEXT_SCRIPT = fileURLToPath(new URL('./document_text_extract.py', import.meta.url))
 
@@ -38,7 +38,7 @@ async function runPythonExtractor(targetPath: string): Promise<ExtractionResult>
 
     child.on('error', reject)
 
-    child.on('close', (code) => {
+    child.on('close', (code: number | null) => {
       if (code !== 0) {
         reject(new Error(stderr.trim() || stdout.trim() || 'Belge metni okunamadi.'))
         return

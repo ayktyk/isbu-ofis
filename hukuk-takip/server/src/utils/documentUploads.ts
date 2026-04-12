@@ -1,4 +1,4 @@
-import path from 'path'
+import path from 'node:path'
 
 export const MAX_DOCUMENT_FILE_SIZE_BYTES = 75 * 1024 * 1024
 export const MAX_DOCUMENT_FILES_PER_REQUEST = 20
