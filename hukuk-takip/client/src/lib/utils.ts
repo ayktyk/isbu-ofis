@@ -64,7 +64,7 @@ export const caseStatusLabels: Record<string, string> = {
   yargitayda: 'Yargıtayda',
   'yargıtayda': 'Yargıtayda',
   'yargÄ±tayda': 'Yargıtayda',
-  passive: 'Pasif',
+  passive: 'Potansiyel',
   closed: 'Kapatıldı',
   won: 'Kazanıldı',
   lost: 'Kaybedildi',

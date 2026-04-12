@@ -23,7 +23,7 @@ const statusVariant: Record<string, 'default' | 'success' | 'danger' | 'warning'
 const statusGroupOptions = [
   { value: '', label: 'Tum Davalar' },
   { value: 'active', label: 'Aktif Davalar' },
-  { value: 'pending', label: 'Bekleyen Davalar' },
+  { value: 'pending', label: 'Potansiyel Davalar' },
   { value: 'finished', label: 'Biten Davalar' },
 ] as const
 

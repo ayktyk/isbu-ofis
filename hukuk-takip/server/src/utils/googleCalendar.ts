@@ -1,0 +1,398 @@
+import { createSign } from 'node:crypto'
+
+const GOOGLE_OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+const GOOGLE_CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3'
+const DEFAULT_REMINDER_MINUTES = 3 * 24 * 60
+const DEFAULT_TIME_ZONE = 'Europe/Istanbul'
+
+type CalendarEventDate =
+  | { date: string }
+  | { dateTime: string; timeZone?: string }
+
+type CalendarEventPayload = {
+  summary: string
+  description?: string
+  location?: string
+  start: CalendarEventDate
+  end: CalendarEventDate
+  reminders: {
+    useDefault: false
+    overrides: Array<{ method: 'popup' | 'email'; minutes: number }>
+  }
+  extendedProperties: {
+    private: Record<string, string>
+  }
+}
+
+type MinimalCalendarEvent = {
+  id: string
+}
+
+export type TaskCalendarSyncInput = {
+  taskId: string
+  title: string
+  dueDate?: Date | string | null
+  description?: string | null
+  label?: string | null
+  status?: string | null
+  caseTitle?: string | null
+}
+
+export type HearingCalendarSyncInput = {
+  hearingId: string
+  hearingDate?: Date | string | null
+  result?: string | null
+  caseTitle?: string | null
+  caseNumber?: string | null
+  courtName?: string | null
+  courtRoom?: string | null
+  judge?: string | null
+  clientName?: string | null
+  notes?: string | null
+}
+
+function getCalendarConfig() {
+  const calendarId = process.env.GOOGLE_CALENDAR_ID?.trim()
+  const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim()
+  const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
+  const reminderMinutes = Number.parseInt(
+    process.env.GOOGLE_CALENDAR_REMINDER_MINUTES || `${DEFAULT_REMINDER_MINUTES}`,
+    10
+  )
+
+  if (!calendarId || !clientEmail || !privateKey) {
+    return null
+  }
+
+  return {
+    calendarId,
+    clientEmail,
+    privateKey,
+    reminderMinutes: Number.isFinite(reminderMinutes) ? reminderMinutes : DEFAULT_REMINDER_MINUTES,
+    timeZone: process.env.GOOGLE_CALENDAR_TIMEZONE || DEFAULT_TIME_ZONE,
+  }
+}
+
+function base64UrlEncode(value: string) {
+  return Buffer.from(value)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+}
+
+async function getGoogleAccessToken() {
+  const config = getCalendarConfig()
+  if (!config) {
+    return null
+  }
+
+  const now = Math.floor(Date.now() / 1000)
+  const header = base64UrlEncode(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))
+  const claimSet = base64UrlEncode(
+    JSON.stringify({
+      iss: config.clientEmail,
+      scope: 'https://www.googleapis.com/auth/calendar',
+      aud: GOOGLE_OAUTH_TOKEN_URL,
+      exp: now + 3600,
+      iat: now,
+    })
+  )
+
+  const signer = createSign('RSA-SHA256')
+  signer.update(`${header}.${claimSet}`)
+  signer.end()
+
+  const signature = signer
+    .sign(config.privateKey)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '')
+
+  const assertion = `${header}.${claimSet}.${signature}`
+
+  const response = await fetch(GOOGLE_OAUTH_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: new URLSearchParams({
+      grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+      assertion,
+    }),
+  })
+
+  if (!response.ok) {
+    const errorBody = await response.text()
+    throw new Error(`Google token request failed: ${response.status} ${errorBody}`)
+  }
+
+  const data = (await response.json()) as { access_token?: string }
+  if (!data.access_token) {
+    throw new Error('Google token response did not include access_token')
+  }
+
+  return data.access_token
+}
+
+async function googleCalendarRequest<T>(path: string, init?: RequestInit) {
+  const config = getCalendarConfig()
+  if (!config) {
+    throw new Error('Google Calendar is not configured')
+  }
+
+  const accessToken = await getGoogleAccessToken()
+  if (!accessToken) {
+    throw new Error('Google Calendar access token could not be created')
+  }
+
+  const response = await fetch(`${GOOGLE_CALENDAR_API_BASE}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
+  })
+
+  if (!response.ok) {
+    const errorBody = await response.text()
+    throw new Error(`Google Calendar request failed: ${response.status} ${errorBody}`)
+  }
+
+  if (response.status === 204) {
+    return null as T
+  }
+
+  return (await response.json()) as T
+}
+
+function buildReminderOverrides(minutes: number) {
+  return {
+    useDefault: false as const,
+    overrides: [
+      { method: 'popup' as const, minutes },
+      { method: 'email' as const, minutes },
+    ],
+  }
+}
+
+function getEntityKey(entityType: 'task' | 'hearing', entityId: string) {
+  return `${entityType}:${entityId}`
+}
+
+function toDate(value?: Date | string | null) {
+  if (!value) return null
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return null
+  }
+  return date
+}
+
+function toDateOnlyString(value: Date) {
+  return value.toISOString().slice(0, 10)
+}
+
+function addDays(value: Date, amount: number) {
+  const copy = new Date(value)
+  copy.setUTCDate(copy.getUTCDate() + amount)
+  return copy
+}
+
+function addMinutes(value: Date, amount: number) {
+  return new Date(value.getTime() + amount * 60 * 1000)
+}
+
+function buildTaskEventPayload(input: TaskCalendarSyncInput, reminderMinutes: number): CalendarEventPayload {
+  const dueDate = toDate(input.dueDate)
+  if (!dueDate) {
+    throw new Error('Task due date is required for Google Calendar sync')
+  }
+
+  const descriptionLines = [
+    input.caseTitle ? `Dava: ${input.caseTitle}` : null,
+    input.label ? `Etiket: ${input.label}` : null,
+    input.description ? `Aciklama: ${input.description}` : null,
+    'Bu gorev Isbu Ofis tarafindan otomatik senkronlandi.',
+  ].filter(Boolean)
+
+  return {
+    summary: `Gorev: ${input.title}`,
+    description: descriptionLines.join('\n'),
+    start: { date: toDateOnlyString(dueDate) },
+    end: { date: toDateOnlyString(addDays(dueDate, 1)) },
+    reminders: buildReminderOverrides(reminderMinutes),
+    extendedProperties: {
+      private: {
+        appSource: 'isbu-ofis',
+        appEntity: getEntityKey('task', input.taskId),
+      },
+    },
+  }
+}
+
+function buildHearingEventPayload(
+  input: HearingCalendarSyncInput,
+  reminderMinutes: number,
+  timeZone: string
+): CalendarEventPayload {
+  const hearingDate = toDate(input.hearingDate)
+  if (!hearingDate) {
+    throw new Error('Hearing date is required for Google Calendar sync')
+  }
+
+  const descriptionLines = [
+    input.caseTitle ? `Dava: ${input.caseTitle}` : null,
+    input.caseNumber ? `Esas No: ${input.caseNumber}` : null,
+    input.clientName ? `Muvekkil: ${input.clientName}` : null,
+    input.judge ? `Hakim: ${input.judge}` : null,
+    input.notes ? `Not: ${input.notes}` : null,
+    'Bu durusma Isbu Ofis tarafindan otomatik senkronlandi.',
+  ].filter(Boolean)
+
+  const location = [input.courtName, input.courtRoom].filter(Boolean).join(' / ')
+
+  return {
+    summary: `Durusma: ${input.caseTitle || 'Dava'}`,
+    description: descriptionLines.join('\n'),
+    location: location || undefined,
+    start: { dateTime: hearingDate.toISOString(), timeZone },
+    end: { dateTime: addMinutes(hearingDate, 60).toISOString(), timeZone },
+    reminders: buildReminderOverrides(reminderMinutes),
+    extendedProperties: {
+      private: {
+        appSource: 'isbu-ofis',
+        appEntity: getEntityKey('hearing', input.hearingId),
+      },
+    },
+  }
+}
+
+async function findCalendarEventId(entityType: 'task' | 'hearing', entityId: string) {
+  const config = getCalendarConfig()
+  if (!config) {
+    return null
+  }
+
+  const params = new URLSearchParams({
+    maxResults: '1',
+    singleEvents: 'true',
+    privateExtendedProperty: `appEntity=${getEntityKey(entityType, entityId)}`,
+  })
+
+  const response = await googleCalendarRequest<{ items?: MinimalCalendarEvent[] }>(
+    `/calendars/${encodeURIComponent(config.calendarId)}/events?${params.toString()}`
+  )
+
+  return response.items?.[0]?.id || null
+}
+
+async function upsertCalendarEvent(entityType: 'task' | 'hearing', entityId: string, payload: CalendarEventPayload) {
+  const config = getCalendarConfig()
+  if (!config) {
+    return false
+  }
+
+  const existingEventId = await findCalendarEventId(entityType, entityId)
+
+  if (existingEventId) {
+    await googleCalendarRequest(
+      `/calendars/${encodeURIComponent(config.calendarId)}/events/${encodeURIComponent(existingEventId)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      }
+    )
+    return true
+  }
+
+  await googleCalendarRequest(
+    `/calendars/${encodeURIComponent(config.calendarId)}/events`,
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }
+  )
+
+  return true
+}
+
+async function deleteCalendarEvent(entityType: 'task' | 'hearing', entityId: string) {
+  const config = getCalendarConfig()
+  if (!config) {
+    return false
+  }
+
+  const existingEventId = await findCalendarEventId(entityType, entityId)
+  if (!existingEventId) {
+    return false
+  }
+
+  await googleCalendarRequest(
+    `/calendars/${encodeURIComponent(config.calendarId)}/events/${encodeURIComponent(existingEventId)}`,
+    {
+      method: 'DELETE',
+    }
+  )
+
+  return true
+}
+
+export function getCalendarIntegrationStatus() {
+  const config = getCalendarConfig()
+
+  return {
+    configured: !!config,
+    calendarId: config?.calendarId || null,
+    calendarLabel: config?.calendarId
+      ? config.calendarId.replace(/^(.{3}).+(@.+)$/, '$1***$2')
+      : null,
+    reminderDays: Math.round((config?.reminderMinutes || DEFAULT_REMINDER_MINUTES) / (24 * 60)),
+    timeZone: config?.timeZone || DEFAULT_TIME_ZONE,
+    mode: 'service_account',
+  }
+}
+
+export async function syncTaskToGoogleCalendar(input: TaskCalendarSyncInput) {
+  const config = getCalendarConfig()
+  if (!config) {
+    return { synced: false, reason: 'disabled' as const }
+  }
+
+  if (!input.dueDate || input.status === 'completed' || input.status === 'cancelled') {
+    await deleteCalendarEvent('task', input.taskId)
+    return { synced: false, reason: 'deleted' as const }
+  }
+
+  await upsertCalendarEvent('task', input.taskId, buildTaskEventPayload(input, config.reminderMinutes))
+  return { synced: true, reason: 'synced' as const }
+}
+
+export async function syncHearingToGoogleCalendar(input: HearingCalendarSyncInput) {
+  const config = getCalendarConfig()
+  if (!config) {
+    return { synced: false, reason: 'disabled' as const }
+  }
+
+  if (!input.hearingDate || input.result === 'completed' || input.result === 'cancelled') {
+    await deleteCalendarEvent('hearing', input.hearingId)
+    return { synced: false, reason: 'deleted' as const }
+  }
+
+  await upsertCalendarEvent(
+    'hearing',
+    input.hearingId,
+    buildHearingEventPayload(input, config.reminderMinutes, config.timeZone)
+  )
+  return { synced: true, reason: 'synced' as const }
+}
+
+export async function deleteTaskFromGoogleCalendar(taskId: string) {
+  return deleteCalendarEvent('task', taskId)
+}
+
+export async function deleteHearingFromGoogleCalendar(hearingId: string) {
+  return deleteCalendarEvent('hearing', hearingId)
+}

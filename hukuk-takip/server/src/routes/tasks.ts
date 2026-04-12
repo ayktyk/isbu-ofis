@@ -1,17 +1,30 @@
 import { Router, type Request, type Response } from 'express'
-import { eq, and, desc, sql } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 import { db } from '../db/index.js'
-import { tasks, cases } from '../db/schema.js'
-import { validate } from '../middleware/validate.js'
+import { cases, tasks } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
+import { validate } from '../middleware/validate.js'
 import { createTaskSchema, updateTaskSchema } from '../../../shared/dist/index.js'
 import { getOwnedCase } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
+import { deleteTaskFromGoogleCalendar, syncTaskToGoogleCalendar } from '../utils/googleCalendar.js'
 
 const router = Router()
 router.use(authenticate)
 
-// ─── GET /api/tasks ───────────────────────────────────────────────────────────
+async function getTaskCaseTitle(userId: string, caseId?: string | null) {
+  if (!caseId) {
+    return null
+  }
+
+  const [caseRow] = await db
+    .select({ title: cases.title })
+    .from(cases)
+    .where(and(eq(cases.id, caseId), eq(cases.userId, userId)))
+    .limit(1)
+
+  return caseRow?.title || null
+}
 
 router.get('/', async (req: Request, res: Response) => {
   const status = getSingleValue(req.query.status)
@@ -48,8 +61,6 @@ router.get('/', async (req: Request, res: Response) => {
   res.json(data)
 })
 
-// ─── POST /api/tasks ──────────────────────────────────────────────────────────
-
 router.post('/', validate(createTaskSchema), async (req: Request, res: Response) => {
   const { dueDate, caseId, label, ...rest } = req.body
 
@@ -72,10 +83,22 @@ router.post('/', validate(createTaskSchema), async (req: Request, res: Response)
     })
     .returning()
 
+  try {
+    await syncTaskToGoogleCalendar({
+      taskId: task.id,
+      title: task.title,
+      description: task.description,
+      dueDate: task.dueDate,
+      label: task.label,
+      status: task.status,
+      caseTitle: await getTaskCaseTitle(req.user!.userId, task.caseId),
+    })
+  } catch (error) {
+    console.error('[GoogleCalendar] Task create sync failed', task.id, error)
+  }
+
   res.status(201).json(task)
 })
-
-// ─── PUT /api/tasks/:id ──────────────────────────────────────────────────────
 
 router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Response) => {
   const taskId = getSingleValue(req.params.id)
@@ -97,6 +120,7 @@ router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Respons
 
   if (req.body.dueDate) updateData.dueDate = new Date(req.body.dueDate)
   if (req.body.status === 'completed') updateData.completedAt = new Date()
+  if (req.body.status && req.body.status !== 'completed') updateData.completedAt = null
 
   const [updated] = await db
     .update(tasks)
@@ -105,14 +129,26 @@ router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Respons
     .returning()
 
   if (!updated) {
-    res.status(404).json({ error: 'Görev bulunamadı.' })
+    res.status(404).json({ error: 'Gorev bulunamadi.' })
     return
+  }
+
+  try {
+    await syncTaskToGoogleCalendar({
+      taskId: updated.id,
+      title: updated.title,
+      description: updated.description,
+      dueDate: updated.dueDate,
+      label: updated.label,
+      status: updated.status,
+      caseTitle: await getTaskCaseTitle(req.user!.userId, updated.caseId),
+    })
+  } catch (error) {
+    console.error('[GoogleCalendar] Task update sync failed', updated.id, error)
   }
 
   res.json(updated)
 })
-
-// ─── PATCH /api/tasks/:id/status — Hızlı durum değiştirme ────────────────────
 
 router.patch('/:id/status', async (req: Request, res: Response) => {
   const taskId = getSingleValue(req.params.id)
@@ -126,6 +162,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
 
   const updateData: Record<string, unknown> = { status, updatedAt: new Date() }
   if (status === 'completed') updateData.completedAt = new Date()
+  if (status && status !== 'completed') updateData.completedAt = null
 
   const [updated] = await db
     .update(tasks)
@@ -134,14 +171,26 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     .returning()
 
   if (!updated) {
-    res.status(404).json({ error: 'Görev bulunamadı.' })
+    res.status(404).json({ error: 'Gorev bulunamadi.' })
     return
+  }
+
+  try {
+    await syncTaskToGoogleCalendar({
+      taskId: updated.id,
+      title: updated.title,
+      description: updated.description,
+      dueDate: updated.dueDate,
+      label: updated.label,
+      status: updated.status,
+      caseTitle: await getTaskCaseTitle(req.user!.userId, updated.caseId),
+    })
+  } catch (error) {
+    console.error('[GoogleCalendar] Task status sync failed', updated.id, error)
   }
 
   res.json(updated)
 })
-
-// ─── DELETE /api/tasks/:id ────────────────────────────────────────────────────
 
 router.delete('/:id', async (req: Request, res: Response) => {
   const taskId = getSingleValue(req.params.id)
@@ -157,11 +206,17 @@ router.delete('/:id', async (req: Request, res: Response) => {
     .returning()
 
   if (!deleted) {
-    res.status(404).json({ error: 'Görev bulunamadı.' })
+    res.status(404).json({ error: 'Gorev bulunamadi.' })
     return
   }
 
-  res.json({ message: 'Görev silindi.' })
+  try {
+    await deleteTaskFromGoogleCalendar(deleted.id)
+  } catch (error) {
+    console.error('[GoogleCalendar] Task delete sync failed', deleted.id, error)
+  }
+
+  res.json({ message: 'Gorev silindi.' })
 })
 
 export default router

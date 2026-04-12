@@ -75,6 +75,7 @@ export default function CaseDetailPage() {
   const { id } = useParams()
   const [noteContent, setNoteContent] = useState('')
   const [taskTitle, setTaskTitle] = useState('')
+  const [taskDueDate, setTaskDueDate] = useState('')
   const [hearingDate, setHearingDate] = useState('')
   const [expenseDescription, setExpenseDescription] = useState('')
   const [expenseAmount, setExpenseAmount] = useState('')
@@ -256,6 +257,7 @@ export default function CaseDetailPage() {
                 {createHearing.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               </button>
             </form>
+            <p className="text-xs text-muted-foreground">Durusmalar da Google Calendar baglantisi aktif oldugunda 3 gun once hatirlatilir.</p>
             {hearings.length === 0 ? <p className="text-sm text-muted-foreground">Durusma bulunmuyor.</p> : hearings.map((item: any) => (
               <div key={item.id} className="flex items-start justify-between rounded-xl border p-3">
                 <div>
@@ -275,15 +277,30 @@ export default function CaseDetailPage() {
               onSubmit={(event) => {
                 event.preventDefault()
                 if (!id || !taskTitle.trim()) return
-                createTask.mutate({ caseId: id, title: taskTitle.trim(), priority: 'medium' }, { onSuccess: () => setTaskTitle('') })
+                createTask.mutate(
+                  {
+                    caseId: id,
+                    title: taskTitle.trim(),
+                    priority: 'medium',
+                    dueDate: taskDueDate || undefined,
+                  },
+                  {
+                    onSuccess: () => {
+                      setTaskTitle('')
+                      setTaskDueDate('')
+                    },
+                  }
+                )
               }}
-              className="flex gap-2"
+              className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_180px_auto]"
             >
               <input type="text" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Yeni gorev" className="flex-1 rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-law-accent focus:ring-2 focus:ring-law-accent/20" />
+              <input type="date" value={taskDueDate} onChange={(e) => setTaskDueDate(e.target.value)} className="rounded-xl border px-3 py-2.5 text-sm outline-none focus:border-law-accent focus:ring-2 focus:ring-law-accent/20" />
               <button type="submit" disabled={createTask.isPending || !taskTitle.trim()} className="rounded-xl bg-law-primary px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
                 {createTask.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
               </button>
             </form>
+            <p className="text-xs text-muted-foreground">Son tarih girilen gorevler Google Calendar baglantisi aktif oldugunda 3 gun once hatirlatilir.</p>
             {tasks.length === 0 ? <p className="text-sm text-muted-foreground">Gorev bulunmuyor.</p> : tasks.map((item: any) => (
               <div key={item.id} className="flex items-start justify-between rounded-xl border p-3">
                 <div>
@@ -291,6 +308,7 @@ export default function CaseDetailPage() {
                   <p className="text-xs text-muted-foreground">
                     {taskPriorityLabels[item.priority] || item.priority} • {taskStatusLabels[item.status] || item.status}
                   </p>
+                  {item.dueDate && <p className="text-xs text-muted-foreground">Son tarih: {formatDate(item.dueDate)}</p>}
                 </div>
                 <button type="button" onClick={() => deleteTask.mutate(item.id)} className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
               </div>

@@ -1,146 +1,135 @@
+import type { ElementType } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  Users,
+  Bell,
   Briefcase,
+  Calculator,
   Calendar,
   CheckSquare,
-  Bell,
-  Settings,
-  Gavel,
-  Calculator,
-  Sparkles,
-  Scale,
   FileText,
+  Gavel,
+  LayoutDashboard,
+  Scale,
+  Settings,
   Shield,
+  Sparkles,
+  Users,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/clients', label: 'Müvekkiller', icon: Users },
+  { to: '/clients', label: 'Muvekkiller', icon: Users },
   { to: '/cases', label: 'Davalar', icon: Briefcase },
-  { to: '/hearings', label: 'Duruşmalar', icon: Gavel },
-  { to: '/tasks', label: 'Görevler', icon: CheckSquare },
+  { to: '/hearings', label: 'Durusmalar', icon: Gavel },
+  { to: '/tasks', label: 'Gorevler', icon: CheckSquare },
   { to: '/calendar', label: 'Takvim', icon: Calendar },
   { to: '/notifications', label: 'Bildirimler', icon: Bell },
 ]
 
 const toolItems = [
   { to: '/tools/calculations', label: 'Hesaplamalar', icon: Calculator },
-  { to: '/tools/prompts', label: 'AI Şablonları', icon: Sparkles },
-  { to: '/tools/inheritance', label: 'Miras Payı', icon: Scale },
-  { to: '/tools/mediation', label: 'Arabuluculuk', icon: FileText },
-  { to: '/tools/sentence', label: 'İnfaz Hesabı', icon: Shield },
+  { to: '/tools/prompts', label: 'AI Sablonlari', icon: Sparkles },
+  { to: '/tools/inheritance', label: 'Miras Payi', icon: Scale },
+  { to: '/tools/sentence', label: 'Infaz Hesabi', icon: Shield },
 ]
+
+const mediationItems = [
+  { to: '/tools/mediation', label: 'Arabuluculuk', icon: FileText },
+]
+
+function SidebarLink({
+  to,
+  label,
+  Icon,
+}: {
+  to: string
+  label: string
+  Icon: ElementType
+}) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        cn(
+          'group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-200',
+          isActive
+            ? 'bg-sidebar-active-bg text-sidebar-foreground shadow-sm'
+            : 'text-sidebar-muted hover:bg-white/[0.06] hover:text-sidebar-foreground'
+        )
+      }
+    >
+      {({ isActive }) => (
+        <>
+          <Icon
+            size={16}
+            className={cn(
+              'flex-shrink-0 transition-colors duration-200',
+              isActive ? 'text-law-gold-light' : 'text-sidebar-muted group-hover:text-sidebar-foreground/70'
+            )}
+          />
+          <span>{label}</span>
+          {isActive && <div className="ml-auto h-4 w-1 rounded-full bg-law-gold/60" />}
+        </>
+      )}
+    </NavLink>
+  )
+}
 
 export default function Sidebar() {
   return (
-    <aside className="w-[240px] flex-shrink-0 bg-sidebar flex flex-col relative overflow-hidden">
-      {/* Subtle gradient overlay */}
-      <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent pointer-events-none" />
+    <aside className="relative flex w-[240px] flex-shrink-0 flex-col overflow-hidden bg-sidebar">
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent" />
 
-      {/* Logo */}
       <div className="relative flex items-center gap-3 px-5 py-5">
-        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-law-gold/15 border border-law-gold/25">
-          <Gavel className="w-[18px] h-[18px] text-law-gold-light" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-law-gold/25 bg-law-gold/15">
+          <Gavel className="h-[18px] w-[18px] text-law-gold-light" />
         </div>
         <div>
-          <p className="text-sidebar-foreground font-serif text-[15px] font-semibold tracking-tight leading-tight">
+          <p className="font-serif text-[15px] font-semibold leading-tight tracking-tight text-sidebar-foreground">
             HukukTakip
           </p>
-          <p className="text-sidebar-muted text-[11px] tracking-wide uppercase mt-0.5">
-            Büro Yönetimi
+          <p className="mt-0.5 text-[11px] uppercase tracking-wide text-sidebar-muted">
+            Buro Yonetimi
           </p>
         </div>
       </div>
 
-      {/* Separator */}
       <div className="mx-5 h-px bg-gradient-to-r from-law-gold/30 via-law-gold/10 to-transparent" />
 
-      {/* Navigation */}
-      <nav className="relative flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+      <nav className="relative flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
         {navItems.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) =>
-              cn(
-                'group flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-200',
-                isActive
-                  ? 'bg-sidebar-active-bg text-sidebar-foreground shadow-sm'
-                  : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/[0.06]'
-              )
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <Icon
-                  size={17}
-                  className={cn(
-                    'transition-colors duration-200 flex-shrink-0',
-                    isActive ? 'text-law-gold-light' : 'text-sidebar-muted group-hover:text-sidebar-foreground/70'
-                  )}
-                />
-                <span>{label}</span>
-                {isActive && (
-                  <div className="ml-auto w-1 h-4 rounded-full bg-law-gold/60" />
-                )}
-              </>
-            )}
-          </NavLink>
+          <SidebarLink key={to} to={to} label={label} Icon={Icon} />
         ))}
 
-        {/* Araçlar grubu */}
-        <div className="pt-3 mt-3">
+        <div className="mt-3 pt-3">
           <div className="mx-2 mb-2 h-px bg-sidebar-border" />
-          <p className="px-3 mb-1.5 text-[10px] font-semibold tracking-widest uppercase text-sidebar-muted/60">
-            Araçlar
+          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted/60">
+            Araclar
           </p>
           {toolItems.map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                cn(
-                  'group flex items-center gap-3 px-3 py-2 rounded-lg text-[13px] font-medium transition-all duration-200',
-                  isActive
-                    ? 'bg-sidebar-active-bg text-sidebar-foreground shadow-sm'
-                    : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/[0.06]'
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon
-                    size={16}
-                    className={cn(
-                      'transition-colors duration-200 flex-shrink-0',
-                      isActive ? 'text-law-gold-light' : 'text-sidebar-muted group-hover:text-sidebar-foreground/70'
-                    )}
-                  />
-                  <span>{label}</span>
-                  {isActive && (
-                    <div className="ml-auto w-1 h-4 rounded-full bg-law-gold/60" />
-                  )}
-                </>
-              )}
-            </NavLink>
+            <SidebarLink key={to} to={to} label={label} Icon={Icon} />
+          ))}
+
+          <p className="mb-1.5 mt-4 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted/60">
+            Arabuluculuk Dosyalari
+          </p>
+          {mediationItems.map(({ to, label, icon: Icon }) => (
+            <SidebarLink key={to} to={to} label={label} Icon={Icon} />
           ))}
         </div>
       </nav>
 
-      {/* Bottom — Settings */}
       <div className="relative px-3 pb-4">
         <div className="mx-2 mb-3 h-px bg-sidebar-border" />
         <NavLink
           to="/settings"
           className={({ isActive }) =>
             cn(
-              'group flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-200',
+              'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-200',
               isActive
                 ? 'bg-sidebar-active-bg text-sidebar-foreground'
-                : 'text-sidebar-muted hover:text-sidebar-foreground hover:bg-white/[0.06]'
+                : 'text-sidebar-muted hover:bg-white/[0.06] hover:text-sidebar-foreground'
             )
           }
         >

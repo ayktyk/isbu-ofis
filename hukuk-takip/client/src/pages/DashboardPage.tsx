@@ -179,7 +179,7 @@ export default function DashboardPage() {
           icon={Scale}
         />
         <StatCard
-          title="Bekleyen Davalar"
+          title="Potansiyel Davalar"
           value={cases?.pending ?? 0}
           description="Pasif veya islem bekleyen dosyalar"
           icon={Clock3}
