@@ -95,7 +95,9 @@ export default function App() {
           <Route path="tools/calculations" element={<CalculationsPage />} />
           <Route path="tools/prompts" element={<AiPromptsPage />} />
           <Route path="tools/inheritance" element={<InheritancePage />} />
-          <Route path="tools/mediation" element={<MediationDocumentsPage />} />
+          <Route path="tools/mediation" element={<MediationDocumentsPage mediationType="dava-sarti" />} />
+          <Route path="tools/mediation/dava-sarti" element={<MediationDocumentsPage mediationType="dava-sarti" />} />
+          <Route path="tools/mediation/ihtiyari" element={<MediationDocumentsPage mediationType="ihtiyari" />} />
           <Route path="tools/sentence" element={<SentenceCalcPage />} />
         </Route>
 

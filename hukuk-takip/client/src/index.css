@@ -246,7 +246,7 @@ html.theme-forest {
   .priority-low { @apply bg-slate-50 text-slate-600; }
 
   .page-title {
-    @apply text-2xl font-semibold font-serif tracking-tight;
+    @apply text-xl font-semibold font-serif tracking-tight sm:text-2xl;
     color: hsl(var(--primary));
   }
 

@@ -43,15 +43,15 @@ function StatCard({
 }) {
   return (
     <Card className="overflow-hidden border-0 bg-gradient-to-br from-white via-slate-50 to-slate-100 shadow-sm">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <p className="text-[13px] font-medium text-muted-foreground">{title}</p>
-            <p className="text-3xl font-semibold tracking-tight text-law-primary">{value}</p>
-            <p className="text-xs text-muted-foreground">{description}</p>
+      <CardContent className="p-3 sm:p-5">
+        <div className="flex items-start justify-between gap-2 sm:gap-4">
+          <div className="min-w-0 space-y-1 sm:space-y-2">
+            <p className="truncate text-[11px] font-medium text-muted-foreground sm:text-[13px]">{title}</p>
+            <p className="text-xl font-semibold tracking-tight text-law-primary sm:text-3xl">{value}</p>
+            <p className="hidden text-xs text-muted-foreground sm:block">{description}</p>
           </div>
-          <div className="rounded-2xl bg-law-accent/10 p-3">
-            <Icon className="h-5 w-5 text-law-accent" />
+          <div className="flex-shrink-0 rounded-xl bg-law-accent/10 p-2 sm:rounded-2xl sm:p-3">
+            <Icon className="h-4 w-4 text-law-accent sm:h-5 sm:w-5" />
           </div>
         </div>
       </CardContent>
@@ -62,7 +62,7 @@ function StatCard({
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-5">
         {Array.from({ length: 5 }).map((_, index) => (
           <Card key={index}>
             <CardContent className="p-5">
@@ -171,7 +171,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-5">
         <StatCard
           title="Aktif Davalar"
           value={cases?.active ?? 0}

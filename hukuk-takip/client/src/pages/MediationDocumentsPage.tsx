@@ -778,7 +778,7 @@ function AgreementTab({
 // Main page component
 // ---------------------------------------------------------------------------
 
-export default function MediationDocumentsPage() {
+export default function MediationDocumentsPage({ mediationType }: { mediationType?: 'ihtiyari' | 'dava-sarti' }) {
   const [activeTab, setActiveTab] = useState<TabId>('invitation')
   const [copied, setCopied] = useState(false)
   const [downloadingUdf, setDownloadingUdf] = useState(false)
@@ -875,8 +875,12 @@ export default function MediationDocumentsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Arabuluculuk Belgeleri"
-        description="Arabuluculuk surecine ait belge olusturma ve onizleme"
+        title={mediationType === 'ihtiyari' ? 'Ihtiyari Arabuluculuk Belgeleri' : 'Dava Sarti Arabuluculuk Belgeleri'}
+        description={
+          mediationType === 'ihtiyari'
+            ? 'Ihtiyari arabuluculuk surecine ait belge olusturma ve onizleme'
+            : 'Dava sarti arabuluculuk surecine ait belge olusturma ve onizleme (6325 s.K. ve 7036 s.K.)'
+        }
       />
 
       {/* Tabs */}

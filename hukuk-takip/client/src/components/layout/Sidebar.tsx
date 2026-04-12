@@ -8,12 +8,14 @@ import {
   CheckSquare,
   FileText,
   Gavel,
+  Handshake,
   LayoutDashboard,
   Scale,
   Settings,
   Shield,
   Sparkles,
   Users,
+  X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -35,21 +37,25 @@ const toolItems = [
 ]
 
 const mediationItems = [
-  { to: '/tools/mediation', label: 'Arabuluculuk', icon: FileText },
+  { to: '/tools/mediation/dava-sarti', label: 'Dava Sarti Arabuluculuk', icon: FileText },
+  { to: '/tools/mediation/ihtiyari', label: 'Ihtiyari Arabuluculuk', icon: Handshake },
 ]
 
 function SidebarLink({
   to,
   label,
   Icon,
+  onClick,
 }: {
   to: string
   label: string
   Icon: ElementType
+  onClick?: () => void
 }) {
   return (
     <NavLink
       to={to}
+      onClick={onClick}
       className={({ isActive }) =>
         cn(
           'group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-200',
@@ -68,7 +74,7 @@ function SidebarLink({
               isActive ? 'text-law-gold-light' : 'text-sidebar-muted group-hover:text-sidebar-foreground/70'
             )}
           />
-          <span>{label}</span>
+          <span className="truncate">{label}</span>
           {isActive && <div className="ml-auto h-4 w-1 rounded-full bg-law-gold/60" />}
         </>
       )}
@@ -76,77 +82,110 @@ function SidebarLink({
   )
 }
 
-export default function Sidebar() {
+export default function Sidebar({
+  open,
+  onClose,
+}: {
+  open: boolean
+  onClose: () => void
+}) {
   return (
-    <aside className="relative flex w-[240px] flex-shrink-0 flex-col overflow-hidden bg-sidebar">
-      <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent" />
+    <>
+      {/* Mobil overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm md:hidden"
+          onClick={onClose}
+          aria-hidden="true"
+        />
+      )}
 
-      <div className="relative flex items-center gap-3 px-5 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-law-gold/25 bg-law-gold/15">
-          <Gavel className="h-[18px] w-[18px] text-law-gold-light" />
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-50 flex w-[280px] flex-col overflow-hidden bg-sidebar transition-transform duration-300 ease-in-out md:relative md:z-auto md:w-[240px] md:translate-x-0 md:transition-none',
+          open ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent" />
+
+        <div className="relative flex items-center justify-between px-5 py-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-law-gold/25 bg-law-gold/15">
+              <Gavel className="h-[18px] w-[18px] text-law-gold-light" />
+            </div>
+            <div>
+              <p className="font-serif text-[15px] font-semibold leading-tight tracking-tight text-sidebar-foreground">
+                HukukTakip
+              </p>
+              <p className="mt-0.5 text-[11px] uppercase tracking-wide text-sidebar-muted">
+                Buro Yonetimi
+              </p>
+            </div>
+          </div>
+          {/* Mobil kapat butonu */}
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-sidebar-muted transition-colors hover:bg-white/10 hover:text-sidebar-foreground md:hidden"
+            aria-label="Menuyu kapat"
+          >
+            <X size={20} />
+          </button>
         </div>
-        <div>
-          <p className="font-serif text-[15px] font-semibold leading-tight tracking-tight text-sidebar-foreground">
-            HukukTakip
-          </p>
-          <p className="mt-0.5 text-[11px] uppercase tracking-wide text-sidebar-muted">
-            Buro Yonetimi
-          </p>
-        </div>
-      </div>
 
-      <div className="mx-5 h-px bg-gradient-to-r from-law-gold/30 via-law-gold/10 to-transparent" />
+        <div className="mx-5 h-px bg-gradient-to-r from-law-gold/30 via-law-gold/10 to-transparent" />
 
-      <nav className="relative flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-        {navItems.map(({ to, label, icon: Icon }) => (
-          <SidebarLink key={to} to={to} label={label} Icon={Icon} />
-        ))}
-
-        <div className="mt-3 pt-3">
-          <div className="mx-2 mb-2 h-px bg-sidebar-border" />
-          <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted/60">
-            Araclar
-          </p>
-          {toolItems.map(({ to, label, icon: Icon }) => (
-            <SidebarLink key={to} to={to} label={label} Icon={Icon} />
+        <nav className="relative flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
+          {navItems.map(({ to, label, icon: Icon }) => (
+            <SidebarLink key={to} to={to} label={label} Icon={Icon} onClick={onClose} />
           ))}
 
-          <p className="mb-1.5 mt-4 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted/60">
-            Arabuluculuk Dosyalari
-          </p>
-          {mediationItems.map(({ to, label, icon: Icon }) => (
-            <SidebarLink key={to} to={to} label={label} Icon={Icon} />
-          ))}
-        </div>
-      </nav>
+          <div className="mt-3 pt-3">
+            <div className="mx-2 mb-2 h-px bg-sidebar-border" />
+            <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted/60">
+              Araclar
+            </p>
+            {toolItems.map(({ to, label, icon: Icon }) => (
+              <SidebarLink key={to} to={to} label={label} Icon={Icon} onClick={onClose} />
+            ))}
 
-      <div className="relative px-3 pb-4">
-        <div className="mx-2 mb-3 h-px bg-sidebar-border" />
-        <NavLink
-          to="/settings"
-          className={({ isActive }) =>
-            cn(
-              'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-200',
-              isActive
-                ? 'bg-sidebar-active-bg text-sidebar-foreground'
-                : 'text-sidebar-muted hover:bg-white/[0.06] hover:text-sidebar-foreground'
-            )
-          }
-        >
-          {({ isActive }) => (
-            <>
-              <Settings
-                size={17}
-                className={cn(
-                  'transition-colors duration-200',
-                  isActive ? 'text-law-gold-light' : 'text-sidebar-muted group-hover:text-sidebar-foreground/70'
-                )}
-              />
-              <span>Ayarlar</span>
-            </>
-          )}
-        </NavLink>
-      </div>
-    </aside>
+            <p className="mb-1.5 mt-4 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted/60">
+              Arabuluculuk Dosyalari
+            </p>
+            {mediationItems.map(({ to, label, icon: Icon }) => (
+              <SidebarLink key={to} to={to} label={label} Icon={Icon} onClick={onClose} />
+            ))}
+          </div>
+        </nav>
+
+        <div className="relative px-3 pb-4">
+          <div className="mx-2 mb-3 h-px bg-sidebar-border" />
+          <NavLink
+            to="/settings"
+            onClick={onClose}
+            className={({ isActive }) =>
+              cn(
+                'group flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-200',
+                isActive
+                  ? 'bg-sidebar-active-bg text-sidebar-foreground'
+                  : 'text-sidebar-muted hover:bg-white/[0.06] hover:text-sidebar-foreground'
+              )
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <Settings
+                  size={17}
+                  className={cn(
+                    'transition-colors duration-200',
+                    isActive ? 'text-law-gold-light' : 'text-sidebar-muted group-hover:text-sidebar-foreground/70'
+                  )}
+                />
+                <span>Ayarlar</span>
+              </>
+            )}
+          </NavLink>
+        </div>
+      </aside>
+    </>
   )
 }

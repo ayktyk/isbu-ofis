@@ -136,7 +136,7 @@ export default function TasksPage() {
                 )}
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
                 <div>
                   <label className="mb-1.5 block text-sm font-medium">İlgili Dava</label>
                   <select
@@ -217,7 +217,7 @@ export default function TasksPage() {
       )}
 
       {/* Filtreler */}
-      <div className="flex gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3">
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}

@@ -113,7 +113,7 @@ export default function CasesPage() {
 
       <Card className="border-0 bg-gradient-to-br from-white via-slate-50 to-slate-100 shadow-sm">
         <CardContent className="space-y-4 p-4 sm:p-5">
-          <div className="flex flex-wrap gap-2">
+          <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:gap-2">
             {statusGroupOptions.map((option) => (
               <button
                 key={option.value}
@@ -122,7 +122,7 @@ export default function CasesPage() {
                   setStatusGroup(option.value)
                   setPage(1)
                 }}
-                className={`rounded-full px-3.5 py-2 text-sm font-medium transition ${
+                className={`flex-shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition sm:px-3.5 sm:py-2 sm:text-sm ${
                   statusGroup === option.value
                     ? 'bg-law-primary text-white shadow-sm'
                     : 'bg-white text-muted-foreground hover:bg-slate-100 hover:text-foreground'
@@ -133,7 +133,7 @@ export default function CasesPage() {
             ))}
           </div>
 
-          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_180px_180px]">
+          <div className="grid gap-2 sm:gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_180px_180px]">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
