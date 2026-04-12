@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import { and, desc, eq, ilike, or, sql } from 'drizzle-orm'
-import { createCaseSchema, updateCaseSchema } from '@hukuk-takip/shared'
+import { createCaseSchema, updateCaseSchema } from '../../../shared/dist/index.js'
 import { db } from '../db/index.js'
 import {
   caseHearings,

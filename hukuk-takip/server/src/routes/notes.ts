@@ -4,7 +4,7 @@ import { db } from '../db/index.js'
 import { notes } from '../db/schema.js'
 import { validate } from '../middleware/validate.js'
 import { authenticate } from '../middleware/auth.js'
-import { createNoteSchema, updateNoteSchema } from '@hukuk-takip/shared'
+import { createNoteSchema, updateNoteSchema } from '../../../shared/dist/index.js'
 import { getOwnedCase, getOwnedClient } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
 

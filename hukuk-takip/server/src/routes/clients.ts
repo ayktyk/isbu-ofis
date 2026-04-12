@@ -4,7 +4,7 @@ import { db } from '../db/index.js'
 import { clients, cases } from '../db/schema.js'
 import { validate } from '../middleware/validate.js'
 import { authenticate } from '../middleware/auth.js'
-import { createClientSchema, updateClientSchema } from '@hukuk-takip/shared'
+import { createClientSchema, updateClientSchema } from '../../../shared/dist/index.js'
 import { getPositiveInt, getSingleValue } from '../utils/request.js'
 
 const router = Router()

@@ -6,7 +6,7 @@ import { db } from '../db/index.js'
 import { users } from '../db/schema.js'
 import { validate } from '../middleware/validate.js'
 import { authenticate, type JwtPayload } from '../middleware/auth.js'
-import { loginSchema } from '@hukuk-takip/shared'
+import { loginSchema } from '../../../shared/dist/index.js'
 
 const router = Router()
 

@@ -4,7 +4,7 @@ import { db } from '../db/index.js'
 import { caseHearings, cases, clients } from '../db/schema.js'
 import { validate } from '../middleware/validate.js'
 import { authenticate } from '../middleware/auth.js'
-import { createHearingSchema, updateHearingSchema } from '@hukuk-takip/shared'
+import { createHearingSchema, updateHearingSchema } from '../../../shared/dist/index.js'
 import { getOwnedCase, getOwnedHearing } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
 

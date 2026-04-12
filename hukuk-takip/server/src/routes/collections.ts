@@ -4,7 +4,7 @@ import { db } from '../db/index.js'
 import { collections, cases, clients } from '../db/schema.js'
 import { validate } from '../middleware/validate.js'
 import { authenticate } from '../middleware/auth.js'
-import { createCollectionSchema, updateCollectionSchema } from '@hukuk-takip/shared'
+import { createCollectionSchema, updateCollectionSchema } from '../../../shared/dist/index.js'
 import { getOwnedCase, getOwnedClient, getOwnedCollection } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
 

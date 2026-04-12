@@ -4,7 +4,7 @@ import { db } from '../db/index.js'
 import { tasks, cases } from '../db/schema.js'
 import { validate } from '../middleware/validate.js'
 import { authenticate } from '../middleware/auth.js'
-import { createTaskSchema, updateTaskSchema } from '@hukuk-takip/shared'
+import { createTaskSchema, updateTaskSchema } from '../../../shared/dist/index.js'
 import { getOwnedCase } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
 
