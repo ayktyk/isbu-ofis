@@ -229,7 +229,7 @@ export default function DashboardPage() {
                 <p className="text-sm text-muted-foreground">Yaklasan durusma bulunmuyor.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto max-w-full">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-xs uppercase tracking-[0.18em] text-muted-foreground">

@@ -13,14 +13,14 @@ const items = [
 export default function MobileBottomNav() {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur-md md:hidden">
-      <div className="flex items-center justify-around">
+      <div className="flex items-center justify-around px-1">
         {items.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
             className={({ isActive }) =>
               cn(
-                'flex flex-1 flex-col items-center gap-0.5 py-2 text-[10px] font-medium transition-colors',
+                'relative flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-all active:scale-95',
                 isActive
                   ? 'text-law-accent'
                   : 'text-muted-foreground'
@@ -29,8 +29,16 @@ export default function MobileBottomNav() {
           >
             {({ isActive }) => (
               <>
-                <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
-                <span>{label}</span>
+                {isActive && (
+                  <div className="absolute -top-px left-1/2 h-0.5 w-8 -translate-x-1/2 rounded-full bg-law-accent" />
+                )}
+                <div className={cn(
+                  'flex h-8 w-8 items-center justify-center rounded-xl transition-colors',
+                  isActive ? 'bg-law-accent/10' : ''
+                )}>
+                  <Icon size={20} strokeWidth={isActive ? 2.5 : 1.8} />
+                </div>
+                <span className={cn(isActive ? 'font-semibold' : '')}>{label}</span>
               </>
             )}
           </NavLink>

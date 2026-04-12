@@ -1,6 +1,7 @@
 import type { ElementType } from 'react'
 import { NavLink } from 'react-router-dom'
 import {
+  BarChart3,
   Bell,
   Briefcase,
   Calculator,
@@ -28,6 +29,7 @@ const navItems = [
   { to: '/tasks', label: 'Gorevler', icon: CheckSquare },
   { to: '/calendar', label: 'Takvim', icon: Calendar },
   { to: '/notifications', label: 'Bildirimler', icon: Bell },
+  { to: '/statistics', label: 'Istatistikler', icon: BarChart3 },
 ]
 
 const toolItems = [

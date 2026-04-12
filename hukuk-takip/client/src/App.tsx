@@ -27,6 +27,7 @@ const InheritancePage = lazy(() => import('./pages/InheritancePage'))
 const MediationDocumentsPage = lazy(() => import('./pages/MediationDocumentsPage'))
 const MediationFilesPage = lazy(() => import('./pages/MediationFilesPage'))
 const SentenceCalcPage = lazy(() => import('./pages/SentenceCalcPage'))
+const StatisticsPage = lazy(() => import('./pages/StatisticsPage'))
 
 // ─── Sayfa yüklenirken gösterilecek skeleton ──────────────────────────────────
 
@@ -101,6 +102,7 @@ export default function App() {
           <Route path="tools/mediation/ihtiyari" element={<MediationDocumentsPage mediationType="ihtiyari" />} />
           <Route path="tools/mediation-files" element={<MediationFilesPage />} />
           <Route path="tools/sentence" element={<SentenceCalcPage />} />
+          <Route path="statistics" element={<StatisticsPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
