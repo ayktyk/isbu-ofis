@@ -3,31 +3,32 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './lib/axios'
 
-// ─── Lazy sayfa yüklemeleri ───────────────────────────────────────────────────
+// ─── Sık kullanılan sayfalar (ana bundle — anında açılır) ────────────────────
 
-const LoginPage = lazy(() => import('./pages/LoginPage'))
-const AppLayout = lazy(() => import('./components/layout/AppLayout'))
-const DashboardPage = lazy(() => import('./pages/DashboardPage'))
-const ClientsPage = lazy(() => import('./pages/ClientsPage'))
+import AppLayout from './components/layout/AppLayout'
+import LoginPage from './pages/LoginPage'
+import DashboardPage from './pages/DashboardPage'
+import ClientsPage from './pages/ClientsPage'
+import CasesPage from './pages/CasesPage'
+import CaseDetailPage from './pages/CaseDetailPage'
+import HearingsPage from './pages/HearingsPage'
+import TasksPage from './pages/TasksPage'
+import CalendarPage from './pages/CalendarPage'
+import NotificationsPage from './pages/NotificationsPage'
+import StatisticsPage from './pages/StatisticsPage'
+import MediationFilesPage from './pages/MediationFilesPage'
+
+// ─── Nadir kullanılan sayfalar (lazy — gerektiğinde yüklenir) ────────────────
+
 const ClientFormPage = lazy(() => import('./pages/ClientFormPage'))
 const ClientDetailPage = lazy(() => import('./pages/ClientDetailPage'))
-const CasesPage = lazy(() => import('./pages/CasesPage'))
 const CaseFormPage = lazy(() => import('./pages/CaseFormPage'))
-const CaseDetailPage = lazy(() => import('./pages/CaseDetailPage'))
-const HearingsPage = lazy(() => import('./pages/HearingsPage'))
-const TasksPage = lazy(() => import('./pages/TasksPage'))
-const CalendarPage = lazy(() => import('./pages/CalendarPage'))
-const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
-
-// ─── Araçlar ─────────────────────────────────────────────────────────────────
 const CalculationsPage = lazy(() => import('./pages/CalculationsPage'))
 const AiPromptsPage = lazy(() => import('./pages/AiPromptsPage'))
 const InheritancePage = lazy(() => import('./pages/InheritancePage'))
 const MediationDocumentsPage = lazy(() => import('./pages/MediationDocumentsPage'))
-const MediationFilesPage = lazy(() => import('./pages/MediationFilesPage'))
 const SentenceCalcPage = lazy(() => import('./pages/SentenceCalcPage'))
-const StatisticsPage = lazy(() => import('./pages/StatisticsPage'))
 
 // ─── Sayfa yüklenirken gösterilecek skeleton ──────────────────────────────────
 
