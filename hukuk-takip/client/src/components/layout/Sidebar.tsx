@@ -109,7 +109,7 @@ export default function Sidebar({
             onClick={() => { onClose(); navigate('/dashboard') }}
             className="flex items-center gap-3 cursor-pointer"
           >
-            <img src="/icon-192.png" alt="HukukTakip" className="h-10 w-10 rounded-lg" />
+            <img src="/favicon.svg" alt="HukukTakip" className="h-10 w-10 rounded-lg" />
             <p className="font-serif text-[18px] font-bold leading-tight tracking-tight text-sidebar-foreground">
               HukukTakip
             </p>

@@ -1,68 +1,74 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1e3a5f"/>
-      <stop offset="100%" stop-color="#0f1f33"/>
+      <stop offset="0%" stop-color="#1a3355"/>
+      <stop offset="100%" stop-color="#0c1a2e"/>
     </linearGradient>
     <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#e8c96a"/>
       <stop offset="50%" stop-color="#d4a94c"/>
       <stop offset="100%" stop-color="#b8841a"/>
     </linearGradient>
-    <linearGradient id="goldLight" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#f0d878"/>
+    <linearGradient id="goldBright" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#f5e08a"/>
       <stop offset="100%" stop-color="#c9952e"/>
     </linearGradient>
-    <linearGradient id="goldShine" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#f0d878" stop-opacity="0.6"/>
-      <stop offset="50%" stop-color="#e8c96a" stop-opacity="1"/>
-      <stop offset="100%" stop-color="#f0d878" stop-opacity="0.6"/>
+    <linearGradient id="shield" x1="50%" y1="0%" x2="50%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#0f2240"/>
     </linearGradient>
   </defs>
 
-  <!-- Background -->
-  <rect width="512" height="512" rx="96" ry="96" fill="url(#bg)"/>
-  <rect x="6" y="6" width="500" height="500" rx="90" ry="90" fill="none" stroke="url(#gold)" stroke-width="1.2" opacity="0.2"/>
+  <!-- Rounded background -->
+  <rect width="512" height="512" rx="108" ry="108" fill="url(#bg)"/>
 
-  <!-- Scale - large and centered -->
-  <g transform="translate(256, 240)">
+  <!-- Shield shape -->
+  <path d="M100,80 L412,80 Q432,80 432,100 L432,320 Q432,420 256,460 Q80,420 80,320 L80,100 Q80,80 100,80 Z"
+        fill="url(#shield)" stroke="url(#gold)" stroke-width="4" opacity="0.9"/>
 
-    <!-- Pillar -->
-    <rect x="-6" y="-60" width="12" height="160" rx="6" fill="url(#gold)"/>
+  <!-- Inner shield highlight -->
+  <path d="M116,96 L396,96 Q412,96 412,112 L412,310 Q412,400 256,436 Q100,400 100,310 L100,112 Q100,96 116,96 Z"
+        fill="none" stroke="url(#gold)" stroke-width="1.5" opacity="0.3"/>
 
-    <!-- Ornamental top sphere -->
-    <circle cx="0" cy="-68" r="12" fill="url(#goldLight)"/>
-    <circle cx="-3" cy="-72" r="3" fill="#f0d878" opacity="0.5"/>
+  <!-- Scale centered in shield -->
+  <g transform="translate(256, 260)">
+    <!-- Pillar with detail -->
+    <rect x="-7" y="-80" width="14" height="170" rx="4" fill="url(#gold)"/>
+    <!-- Pillar decoration lines -->
+    <line x1="-3" y1="-60" x2="-3" y2="70" stroke="url(#goldBright)" stroke-width="1" opacity="0.4"/>
+    <line x1="3" y1="-60" x2="3" y2="70" stroke="url(#goldBright)" stroke-width="1" opacity="0.4"/>
 
-    <!-- Beam -->
-    <rect x="-130" y="-52" width="260" height="8" rx="4" fill="url(#gold)"/>
+    <!-- Top sphere -->
+    <circle cx="0" cy="-88" r="14" fill="url(#goldBright)"/>
+    <circle cx="-4" cy="-92" r="4" fill="#f5e08a" opacity="0.5"/>
 
-    <!-- Left arm -->
-    <line x1="-118" y1="-44" x2="-118" y2="10" stroke="url(#goldLight)" stroke-width="3" stroke-linecap="round"/>
-    <line x1="-118" y1="-44" x2="-100" y2="-44" stroke="url(#gold)" stroke-width="3" stroke-linecap="round"/>
+    <!-- Beam with subtle curve -->
+    <path d="M-130,-72 Q0,-78 130,-72" fill="none" stroke="url(#gold)" stroke-width="9" stroke-linecap="round"/>
 
-    <!-- Left plate (flat tray seen from angle) -->
-    <ellipse cx="-118" cy="14" rx="42" ry="10" fill="none" stroke="url(#gold)" stroke-width="4"/>
-    <ellipse cx="-118" cy="14" rx="42" ry="10" fill="url(#goldLight)" opacity="0.12"/>
-    <!-- Left chains to plate -->
-    <line x1="-156" y1="8" x2="-140" y2="-44" stroke="url(#goldLight)" stroke-width="2.5" stroke-linecap="round"/>
-    <line x1="-80" y1="8" x2="-96" y2="-44" stroke="url(#goldLight)" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- Left assembly -->
+    <!-- Chains -->
+    <line x1="-120" y1="-68" x2="-140" y2="10" stroke="url(#goldBright)" stroke-width="3" stroke-linecap="round"/>
+    <line x1="-120" y1="-68" x2="-100" y2="10" stroke="url(#goldBright)" stroke-width="3" stroke-linecap="round"/>
+    <!-- Plate -->
+    <ellipse cx="-120" cy="16" rx="46" ry="12" fill="url(#gold)" opacity="0.25"/>
+    <ellipse cx="-120" cy="14" rx="46" ry="11" fill="none" stroke="url(#gold)" stroke-width="4"/>
 
-    <!-- Right arm -->
-    <line x1="118" y1="-44" x2="118" y2="10" stroke="url(#goldLight)" stroke-width="3" stroke-linecap="round"/>
-    <line x1="118" y1="-44" x2="100" y2="-44" stroke="url(#gold)" stroke-width="3" stroke-linecap="round"/>
+    <!-- Right assembly -->
+    <line x1="120" y1="-68" x2="140" y2="10" stroke="url(#goldBright)" stroke-width="3" stroke-linecap="round"/>
+    <line x1="120" y1="-68" x2="100" y2="10" stroke="url(#goldBright)" stroke-width="3" stroke-linecap="round"/>
+    <ellipse cx="120" cy="16" rx="46" ry="12" fill="url(#gold)" opacity="0.25"/>
+    <ellipse cx="120" cy="14" rx="46" ry="11" fill="none" stroke="url(#gold)" stroke-width="4"/>
 
-    <!-- Right plate -->
-    <ellipse cx="118" cy="14" rx="42" ry="10" fill="none" stroke="url(#gold)" stroke-width="4"/>
-    <ellipse cx="118" cy="14" rx="42" ry="10" fill="url(#goldLight)" opacity="0.12"/>
-    <!-- Right chains to plate -->
-    <line x1="80" y1="8" x2="96" y2="-44" stroke="url(#goldLight)" stroke-width="2.5" stroke-linecap="round"/>
-    <line x1="156" y1="8" x2="140" y2="-44" stroke="url(#goldLight)" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- Base -->
+    <path d="M-7,90 L-40,104 L40,104 L7,90 Z" fill="url(#goldBright)" opacity="0.7"/>
+    <rect x="-46" y="102" width="92" height="10" rx="5" fill="url(#gold)"/>
+  </g>
 
-    <!-- Base pedestal -->
-    <path d="M-44,100 L-28,88 L28,88 L44,100 Z" fill="url(#gold)"/>
-    <rect x="-50" y="98" width="100" height="10" rx="5" fill="url(#goldLight)"/>
-    <!-- Base shine -->
-    <rect x="-36" y="100" width="72" height="3" rx="1.5" fill="#f0d878" opacity="0.3"/>
+  <!-- Sparkle top-right -->
+  <g transform="translate(390,120)" fill="#f5e08a" opacity="0.8">
+    <path d="M0,-12 L2,-2 L12,0 L2,2 L0,12 L-2,2 L-12,0 L-2,-2 Z"/>
+  </g>
+  <g transform="translate(370,100)" fill="#f5e08a" opacity="0.4">
+    <path d="M0,-6 L1,-1 L6,0 L1,1 L0,6 L-1,1 L-6,0 L-1,-1 Z"/>
   </g>
 </svg>
