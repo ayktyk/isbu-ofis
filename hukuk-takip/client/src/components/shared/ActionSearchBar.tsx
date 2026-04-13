@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Scale,
-  Users,
+  Briefcase,
+  Calendar,
   CalendarClock,
-  Plus,
-  Settings,
+  CheckSquare,
+  Handshake,
   LayoutDashboard,
   ListChecks,
+  Plus,
+  Settings,
+  Users,
 } from 'lucide-react'
 import {
   CommandDialog,
@@ -21,17 +24,20 @@ import {
 } from '@/components/ui/command'
 import { api } from '@/lib/axios'
 
-interface SearchResult {
-  id: number | string
-  label: string
-  sublabel?: string
-  type: 'case' | 'client'
+interface SearchResults {
+  clients: { id: string; fullName: string; phone?: string; email?: string }[]
+  cases: { id: string; title: string; caseNumber?: string; courtName?: string; status: string; clientName?: string }[]
+  tasks: { id: string; title: string; status: string; priority: string }[]
+  hearings: { id: string; caseId: string; hearingDate: string; courtRoom?: string; caseTitle?: string }[]
+  mediations: { id: string; fileNo?: string; disputeType: string; disputeSubject?: string; status: string }[]
 }
+
+const EMPTY: SearchResults = { clients: [], cases: [], tasks: [], hearings: [], mediations: [] }
 
 export default function ActionSearchBar() {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<SearchResult[]>([])
+  const [results, setResults] = useState<SearchResults>(EMPTY)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
@@ -47,42 +53,24 @@ export default function ActionSearchBar() {
     return () => document.removeEventListener('keydown', down)
   }, [])
 
-  // Search API
+  // Debounced search via global /api/search
   useEffect(() => {
-    if (!query || query.length < 2) {
-      setResults([])
+    if (!query || query.trim().length < 2) {
+      setResults(EMPTY)
       return
     }
 
     const timer = setTimeout(async () => {
       setLoading(true)
       try {
-        const [casesRes, clientsRes] = await Promise.all([
-          api.get('/cases', { params: { search: query, pageSize: 5 } }).catch(() => ({ data: { data: [] } })),
-          api.get('/clients', { params: { search: query, pageSize: 5 } }).catch(() => ({ data: { data: [] } })),
-        ])
-
-        const caseResults: SearchResult[] = (casesRes.data.data || []).map((c: any) => ({
-          id: c.id,
-          label: c.title || c.caseNumber || `Dava #${c.id}`,
-          sublabel: c.courtName || c.clientName,
-          type: 'case' as const,
-        }))
-
-        const clientResults: SearchResult[] = (clientsRes.data.data || []).map((c: any) => ({
-          id: c.id,
-          label: c.fullName,
-          sublabel: c.phone || c.email,
-          type: 'client' as const,
-        }))
-
-        setResults([...caseResults, ...clientResults])
+        const res = await api.get('/search', { params: { q: query.trim() } })
+        setResults(res.data)
       } catch {
-        setResults([])
+        setResults(EMPTY)
       } finally {
         setLoading(false)
       }
-    }, 300)
+    }, 250)
 
     return () => clearTimeout(timer)
   }, [query])
@@ -96,13 +84,17 @@ export default function ActionSearchBar() {
     [navigate]
   )
 
-  const cases = results.filter((r) => r.type === 'case')
-  const clients = results.filter((r) => r.type === 'client')
+  const hasResults =
+    results.clients.length > 0 ||
+    results.cases.length > 0 ||
+    results.tasks.length > 0 ||
+    results.hearings.length > 0 ||
+    results.mediations.length > 0
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput
-        placeholder="Dava, müvekkil veya işlem ara..."
+        placeholder="Müvekkil, dava, görev, duruşma, arabuluculuk ara..."
         value={query}
         onValueChange={setQuery}
       />
@@ -111,32 +103,16 @@ export default function ActionSearchBar() {
           {loading ? 'Aranıyor...' : query.length < 2 ? 'En az 2 karakter yazın.' : 'Sonuç bulunamadı.'}
         </CommandEmpty>
 
-        {/* Search results */}
-        {cases.length > 0 && (
-          <CommandGroup heading="Davalar">
-            {cases.map((c) => (
-              <CommandItem key={`case-${c.id}`} onSelect={() => runAction(`/davalar/${c.id}`)}>
-                <Scale className="mr-2 h-4 w-4 text-law-accent" />
-                <div className="flex flex-col">
-                  <span>{c.label}</span>
-                  {c.sublabel && (
-                    <span className="text-xs text-muted-foreground">{c.sublabel}</span>
-                  )}
-                </div>
-              </CommandItem>
-            ))}
-          </CommandGroup>
-        )}
-
-        {clients.length > 0 && (
+        {/* Müvekkiller */}
+        {results.clients.length > 0 && (
           <CommandGroup heading="Müvekkiller">
-            {clients.map((c) => (
-              <CommandItem key={`client-${c.id}`} onSelect={() => runAction(`/muvekkilller/${c.id}`)}>
+            {results.clients.map((c) => (
+              <CommandItem key={`client-${c.id}`} onSelect={() => runAction(`/clients/${c.id}`)}>
                 <Users className="mr-2 h-4 w-4 text-emerald-500" />
                 <div className="flex flex-col">
-                  <span>{c.label}</span>
-                  {c.sublabel && (
-                    <span className="text-xs text-muted-foreground">{c.sublabel}</span>
+                  <span>{c.fullName}</span>
+                  {(c.phone || c.email) && (
+                    <span className="text-xs text-muted-foreground">{c.phone || c.email}</span>
                   )}
                 </div>
               </CommandItem>
@@ -144,27 +120,95 @@ export default function ActionSearchBar() {
           </CommandGroup>
         )}
 
-        {/* Quick actions - always visible */}
-        {results.length === 0 && !loading && (
+        {/* Davalar */}
+        {results.cases.length > 0 && (
+          <CommandGroup heading="Davalar">
+            {results.cases.map((c) => (
+              <CommandItem key={`case-${c.id}`} onSelect={() => runAction(`/cases/${c.id}`)}>
+                <Briefcase className="mr-2 h-4 w-4 text-law-accent" />
+                <div className="flex flex-col">
+                  <span>{c.title}</span>
+                  {(c.clientName || c.caseNumber) && (
+                    <span className="text-xs text-muted-foreground">
+                      {c.clientName}{c.clientName && c.caseNumber ? ' · ' : ''}{c.caseNumber}
+                    </span>
+                  )}
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* Görevler */}
+        {results.tasks.length > 0 && (
+          <CommandGroup heading="Görevler">
+            {results.tasks.map((t) => (
+              <CommandItem key={`task-${t.id}`} onSelect={() => runAction('/tasks')}>
+                <CheckSquare className="mr-2 h-4 w-4 text-amber-500" />
+                <div className="flex flex-col">
+                  <span>{t.title}</span>
+                  <span className="text-xs text-muted-foreground">{t.status}</span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* Duruşmalar */}
+        {results.hearings.length > 0 && (
+          <CommandGroup heading="Duruşmalar">
+            {results.hearings.map((h) => (
+              <CommandItem key={`hearing-${h.id}`} onSelect={() => runAction(`/cases/${h.caseId}`)}>
+                <Calendar className="mr-2 h-4 w-4 text-blue-500" />
+                <div className="flex flex-col">
+                  <span>{h.caseTitle || 'Duruşma'}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(h.hearingDate).toLocaleDateString('tr-TR')}{h.courtRoom ? ` · ${h.courtRoom}` : ''}
+                  </span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* Arabuluculuk */}
+        {results.mediations.length > 0 && (
+          <CommandGroup heading="Arabuluculuk">
+            {results.mediations.map((m) => (
+              <CommandItem key={`med-${m.id}`} onSelect={() => runAction('/tools/mediation-files')}>
+                <Handshake className="mr-2 h-4 w-4 text-purple-500" />
+                <div className="flex flex-col">
+                  <span>{m.disputeType}</span>
+                  {(m.fileNo || m.disputeSubject) && (
+                    <span className="text-xs text-muted-foreground">{m.fileNo || m.disputeSubject}</span>
+                  )}
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* Hızlı Erişim - sonuç yokken göster */}
+        {!hasResults && !loading && (
           <>
             <CommandGroup heading="Hızlı Erişim">
-              <CommandItem onSelect={() => runAction('/')}>
+              <CommandItem onSelect={() => runAction('/dashboard')}>
                 <LayoutDashboard className="mr-2 h-4 w-4" />
                 Dashboard
               </CommandItem>
-              <CommandItem onSelect={() => runAction('/davalar')}>
-                <Scale className="mr-2 h-4 w-4" />
+              <CommandItem onSelect={() => runAction('/cases')}>
+                <Briefcase className="mr-2 h-4 w-4" />
                 Tüm Davalar
               </CommandItem>
-              <CommandItem onSelect={() => runAction('/muvekkilller')}>
+              <CommandItem onSelect={() => runAction('/clients')}>
                 <Users className="mr-2 h-4 w-4" />
                 Tüm Müvekkiller
               </CommandItem>
-              <CommandItem onSelect={() => runAction('/durusmalar')}>
+              <CommandItem onSelect={() => runAction('/hearings')}>
                 <CalendarClock className="mr-2 h-4 w-4" />
                 Duruşmalar
               </CommandItem>
-              <CommandItem onSelect={() => runAction('/gorevler')}>
+              <CommandItem onSelect={() => runAction('/tasks')}>
                 <ListChecks className="mr-2 h-4 w-4" />
                 Görevler
               </CommandItem>
@@ -173,16 +217,16 @@ export default function ActionSearchBar() {
             <CommandSeparator />
 
             <CommandGroup heading="Hızlı İşlem">
-              <CommandItem onSelect={() => runAction('/davalar/yeni')}>
+              <CommandItem onSelect={() => runAction('/cases/new')}>
                 <Plus className="mr-2 h-4 w-4" />
                 Yeni Dava Aç
                 <CommandShortcut>⌘N</CommandShortcut>
               </CommandItem>
-              <CommandItem onSelect={() => runAction('/muvekkilller/yeni')}>
+              <CommandItem onSelect={() => runAction('/clients/new')}>
                 <Plus className="mr-2 h-4 w-4" />
                 Yeni Müvekkil Ekle
               </CommandItem>
-              <CommandItem onSelect={() => runAction('/ayarlar/profil')}>
+              <CommandItem onSelect={() => runAction('/settings')}>
                 <Settings className="mr-2 h-4 w-4" />
                 Ayarlar
               </CommandItem>
