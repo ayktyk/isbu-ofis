@@ -117,14 +117,9 @@ export default function Sidebar({
             <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-law-gold/25 bg-law-gold/15">
               <Gavel className="h-[18px] w-[18px] text-law-gold-light" />
             </div>
-            <div>
-              <p className="font-serif text-[15px] font-semibold leading-tight tracking-tight text-sidebar-foreground">
-                HukukTakip
-              </p>
-              <p className="mt-0.5 text-[11px] uppercase tracking-wide text-sidebar-muted">
-                Büro Yönetimi
-              </p>
-            </div>
+            <p className="font-serif text-[15px] font-semibold leading-tight tracking-tight text-sidebar-foreground">
+              HukukTakip
+            </p>
           </div>
           {/* Mobil kapat butonu */}
           <button
