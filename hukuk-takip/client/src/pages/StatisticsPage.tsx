@@ -42,13 +42,13 @@ const CHART_COLORS = [
 
 const STATUS_COLORS: Record<string, string> = {
   Aktif: 'hsl(201, 96%, 32%)',
-  Istinafta: 'hsl(38, 86%, 40%)',
-  Yargitayda: 'hsl(262, 52%, 47%)',
+  İstinafta: 'hsl(38, 86%, 40%)',
+  Yargıtayda: 'hsl(262, 52%, 47%)',
   Pasif: 'hsl(215, 16%, 47%)',
-  Kazanildi: 'hsl(152, 56%, 33%)',
+  Kazanıldı: 'hsl(152, 56%, 33%)',
   Kaybedildi: 'hsl(0, 72%, 42%)',
-  Uzlasma: 'hsl(25, 95%, 53%)',
-  Kapandi: 'hsl(215, 20%, 65%)',
+  Uzlaşma: 'hsl(25, 95%, 53%)',
+  Kapandı: 'hsl(215, 20%, 65%)',
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -161,7 +161,7 @@ export default function StatisticsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="page-title">Istatistikler</h1>
+          <h1 className="page-title">İstatistikler</h1>
           <p className="mt-1 text-sm text-muted-foreground">Veriler yukleniyor...</p>
         </div>
         <StatisticsSkeleton />
@@ -173,7 +173,7 @@ export default function StatisticsPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="page-title">Istatistikler</h1>
+          <h1 className="page-title">İstatistikler</h1>
           <p className="mt-1 text-sm text-muted-foreground">Veri cekilemedi.</p>
         </div>
       </div>
@@ -217,7 +217,7 @@ export default function StatisticsPage() {
       <div>
         <h1 className="page-title">Istatistikler</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Buro performansi ve dosya istatistikleri
+          Büro performansı ve dosya istatistikleri
         </p>
       </div>
 
@@ -226,7 +226,7 @@ export default function StatisticsPage() {
         <BigStat
           title="Toplam Dava"
           value={totals?.totalCases ?? 0}
-          subtitle="Tum zamanlar"
+          subtitle="Tüm zamanlar"
           icon={Briefcase}
         />
         <BigStat
@@ -257,7 +257,7 @@ export default function StatisticsPage() {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base text-law-primary">
               <BarChart3 className="h-4 w-4 text-law-accent" />
-              Aylik Dosya Sayisi
+              Aylık Dosya Sayısı
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -289,7 +289,7 @@ export default function StatisticsPage() {
               </ResponsiveContainer>
             ) : (
               <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-                Henuz veri bulunmuyor
+                Henüz veri bulunmuyor
               </div>
             )}
           </CardContent>
@@ -300,7 +300,7 @@ export default function StatisticsPage() {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base text-law-primary">
               <TrendingUp className="h-4 w-4 text-emerald-600" />
-              Aylik Tahsilat
+              Aylık Tahsilat
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -326,7 +326,7 @@ export default function StatisticsPage() {
               </ResponsiveContainer>
             ) : (
               <div className="flex h-48 items-center justify-center text-sm text-muted-foreground">
-                Henuz tahsilat verisi yok
+                Henüz tahsilat verisi yok
               </div>
             )}
           </CardContent>
@@ -340,7 +340,7 @@ export default function StatisticsPage() {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base text-law-primary">
               <PieChartIcon className="h-4 w-4 text-law-accent" />
-              Dava Turleri Dagilimi
+              Dava Türleri Dağılımı
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -380,7 +380,7 @@ export default function StatisticsPage() {
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-base text-law-primary">
               <PieChartIcon className="h-4 w-4 text-law-accent" />
-              Dava Durumlari
+              Dava Durumları
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -434,8 +434,8 @@ export default function StatisticsPage() {
                 <thead>
                   <tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">
                     <th className="pb-2 pr-4">Dava</th>
-                    <th className="hidden pb-2 pr-4 sm:table-cell">Muvekkil</th>
-                    <th className="pb-2 pr-4 text-right">Sozlesme</th>
+                    <th className="hidden pb-2 pr-4 sm:table-cell">Müvekkil</th>
+                    <th className="pb-2 pr-4 text-right">Sözleşme</th>
                     <th className="pb-2 pr-4 text-right">Tahsil</th>
                     <th className="pb-2 text-right">Kalan</th>
                   </tr>

@@ -147,7 +147,7 @@ export default function MediationFilesPage() {
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium">
-                    Arabuluculuk Turu <span className="text-red-500">*</span>
+                    Arabuluculuk Türü <span className="text-red-500">*</span>
                   </label>
                   <select
                     {...register('mediationType')}
@@ -160,7 +160,7 @@ export default function MediationFilesPage() {
                 </div>
                 <div>
                   <label className="mb-1.5 block text-sm font-medium">
-                    Uyusmazlik Turu <span className="text-red-500">*</span>
+                    Uyuşmazlık Türü <span className="text-red-500">*</span>
                   </label>
                   <select
                     {...register('disputeType')}
@@ -331,7 +331,7 @@ export default function MediationFilesPage() {
       {/* Filtreler */}
       <div className="flex gap-1.5 overflow-x-auto sm:gap-2">
         {[
-          { value: '', label: 'Tumu' },
+          { value: '', label: 'Tümü' },
           { value: 'active', label: 'Devam Eden' },
           { value: 'agreed', label: 'Anlasma' },
           { value: 'not_agreed', label: 'Anlasamama' },

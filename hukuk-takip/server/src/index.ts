@@ -165,7 +165,7 @@ if (shouldRunScheduledJobs) {
         await db.insert(notifications).values({
           userId: hearing.userId,
           type: 'hearing',
-          title: 'Durusma Hatirlatmasi',
+          title: 'Duruşma Hatırlatması',
           message: `"${hearing.caseTitle}" davasi icin 3 gun sonra durusma var.`,
           relatedId: hearing.caseId,
           relatedType: 'case',
@@ -187,7 +187,7 @@ if (shouldRunScheduledJobs) {
         await db.insert(notifications).values({
           userId: task.userId,
           type: 'task',
-          title: 'Gorev Hatirlatmasi',
+          title: 'Görev Hatırlatması',
           message: `"${task.title}" gorevi icin son 3 gun kaldi.`,
           relatedId: task.id,
           relatedType: 'task',

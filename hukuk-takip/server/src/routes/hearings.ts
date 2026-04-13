@@ -119,7 +119,7 @@ router.put('/:id', validate(updateHearingSchema), async (req: Request, res: Resp
 
   const ownedHearing = await getOwnedHearing(req.user!.userId, hearingId)
   if (!ownedHearing) {
-    res.status(404).json({ error: 'Durusma bulunamadi.' })
+    res.status(404).json({ error: 'Duruşma bulunamadı.' })
     return
   }
 
@@ -147,7 +147,7 @@ router.put('/:id', validate(updateHearingSchema), async (req: Request, res: Resp
     .returning()
 
   if (!updated) {
-    res.status(404).json({ error: 'Durusma bulunamadi.' })
+    res.status(404).json({ error: 'Duruşma bulunamadı.' })
     return
   }
 
@@ -184,7 +184,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
   const ownedHearing = await getOwnedHearing(req.user!.userId, hearingId)
   if (!ownedHearing) {
-    res.status(404).json({ error: 'Durusma bulunamadi.' })
+    res.status(404).json({ error: 'Duruşma bulunamadı.' })
     return
   }
 
@@ -194,7 +194,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     .returning()
 
   if (!deleted) {
-    res.status(404).json({ error: 'Durusma bulunamadi.' })
+    res.status(404).json({ error: 'Duruşma bulunamadı.' })
     return
   }
 
@@ -204,7 +204,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     console.error('[GoogleCalendar] Hearing delete sync failed', deleted.id, error)
   }
 
-  res.json({ message: 'Durusma silindi.' })
+  res.json({ message: 'Duruşma silindi.' })
 })
 
 export default router

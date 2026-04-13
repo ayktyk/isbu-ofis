@@ -232,6 +232,12 @@ html.theme-forest {
     background: hsl(var(--muted-foreground) / 0.4);
   }
 
+  @supports (padding-top: env(safe-area-inset-top)) {
+    body {
+      padding-top: env(safe-area-inset-top);
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
       animation-duration: 0.01ms !important;

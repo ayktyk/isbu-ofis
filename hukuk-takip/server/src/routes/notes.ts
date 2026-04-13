@@ -25,7 +25,7 @@ router.post('/', validate(createNoteSchema), async (req, res) => {
   if (clientId) {
     const ownedClient = await getOwnedClient(req.user!.userId, clientId)
     if (!ownedClient) {
-      res.status(404).json({ error: 'Muvekkil bulunamadi.' })
+      res.status(404).json({ error: 'Müvekkil bulunamadı.' })
       return
     }
   }

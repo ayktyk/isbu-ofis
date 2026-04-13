@@ -9,17 +9,17 @@ router.use(authenticate)
 
 const TR_MONTHS = [
   'Ocak',
-  'Subat',
+  'Şubat',
   'Mart',
   'Nisan',
-  'Mayis',
+  'Mayıs',
   'Haziran',
   'Temmuz',
-  'Agustos',
-  'Eylul',
+  'Ağustos',
+  'Eylül',
   'Ekim',
-  'Kasim',
-  'Aralik',
+  'Kasım',
+  'Aralık',
 ]
 
 function monthLabel(ym: string): string {
@@ -44,27 +44,27 @@ function fillMonths(
 }
 
 const CASE_TYPE_LABELS: Record<string, string> = {
-  iscilik_alacagi: 'Iscilik Alacagi',
-  bosanma: 'Bosanma',
+  iscilik_alacagi: 'İşçilik Alacağı',
+  bosanma: 'Boşanma',
   velayet: 'Velayet',
-  mal_paylasimi: 'Mal Paylasimi',
+  mal_paylasimi: 'Mal Paylaşımı',
   kira: 'Kira',
-  tuketici: 'Tuketici',
-  icra: 'Icra',
+  tuketici: 'Tüketici',
+  icra: 'İcra',
   ceza: 'Ceza',
-  idare: 'Idare',
-  diger: 'Diger',
+  idare: 'İdare',
+  diger: 'Diğer',
 }
 
 const STATUS_LABELS: Record<string, string> = {
   active: 'Aktif',
-  istinafta: 'Istinafta',
-  'yargıtayda': 'Yargitayda',
+  istinafta: 'İstinafta',
+  'yargıtayda': 'Yargıtayda',
   passive: 'Pasif',
-  won: 'Kazanildi',
+  won: 'Kazanıldı',
   lost: 'Kaybedildi',
-  settled: 'Uzlasma',
-  closed: 'Kapandi',
+  settled: 'Uzlaşma',
+  closed: 'Kapandı',
 }
 
 router.get('/', async (req, res) => {

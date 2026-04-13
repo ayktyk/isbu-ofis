@@ -214,13 +214,13 @@ function calculateInheritanceShares(form: FormState): {
   if (hasSpouse) {
     if (activeZumre === 1) {
       spousePct = 25
-      spouseLabel = '1. Zumre ile'
+      spouseLabel = '1. Zümre ile'
     } else if (activeZumre === 2) {
       spousePct = 50
-      spouseLabel = '2. Zumre ile'
+      spouseLabel = '2. Zümre ile'
     } else if (activeZumre === 3) {
       spousePct = 75
-      spouseLabel = '3. Zumre ile'
+      spouseLabel = '3. Zümre ile'
     } else {
       // No zumre heir at all, spouse takes everything
       spousePct = 100
@@ -320,8 +320,8 @@ function distributeFirstZumre(
   for (const child of form.children) {
     if (child.alive) {
       shares.push({
-        name: child.name || 'Cocuk',
-        zumre: '1. Zumre (Altsoy)',
+        name: child.name || 'Çocuk',
+        zumre: '1. Zümre (Altsoy)',
         percentage: perChildPct,
         fraction: percentageToFraction(perChildPct),
         amount: (netEstate * perChildPct) / 100,
@@ -333,7 +333,7 @@ function distributeFirstZumre(
       for (const gc of child.grandchildren) {
         shares.push({
           name: gc.name || 'Torun',
-          zumre: '1. Zumre (Halefiyat)',
+          zumre: '1. Zümre (Halefiyat)',
           percentage: perGcPct,
           fraction: percentageToFraction(perGcPct),
           amount: (netEstate * perGcPct) / 100,
@@ -353,7 +353,7 @@ function distributeFirstZumre(
   )
   if (effectiveHeirs.length < childCount && effectiveHeirs.length > 0) {
     // Need to recalculate - remove previously added and redo
-    const nonZumreShares = shares.filter((s) => s.zumre !== '1. Zumre (Altsoy)' && s.zumre !== '1. Zumre (Halefiyat)')
+    const nonZumreShares = shares.filter((s) => s.zumre !== '1. Zümre (Altsoy)' && s.zumre !== '1. Zümre (Halefiyat)')
     shares.length = 0
     shares.push(...nonZumreShares)
 
@@ -361,8 +361,8 @@ function distributeFirstZumre(
     for (const child of effectiveHeirs) {
       if (child.alive) {
         shares.push({
-          name: child.name || 'Cocuk',
-          zumre: '1. Zumre (Altsoy)',
+          name: child.name || 'Çocuk',
+          zumre: '1. Zümre (Altsoy)',
           percentage: perEffectiveChildPct,
           fraction: percentageToFraction(perEffectiveChildPct),
           amount: (netEstate * perEffectiveChildPct) / 100,
@@ -373,7 +373,7 @@ function distributeFirstZumre(
         for (const gc of child.grandchildren) {
           shares.push({
             name: gc.name || 'Torun',
-            zumre: '1. Zumre (Halefiyat)',
+            zumre: '1. Zümre (Halefiyat)',
             percentage: perGcPct,
             fraction: percentageToFraction(perGcPct),
             amount: (netEstate * perGcPct) / 100,
@@ -426,7 +426,7 @@ function distributeSecondZumre(
     if (motherAlive) {
       shares.push({
         name: 'Anne',
-        zumre: '2. Zumre (Ana-Baba)',
+        zumre: '2. Zümre (Ana-Baba)',
         percentage: motherPct,
         fraction: percentageToFraction(motherPct),
         amount: (netEstate * motherPct) / 100,
@@ -438,7 +438,7 @@ function distributeSecondZumre(
         motherPct,
         netEstate,
         shares,
-        '2. Zumre (Halefiyat - Anne Kolu)'
+        '2. Zümre (Halefiyat - Anne Kolu)'
       )
     }
   }
@@ -448,7 +448,7 @@ function distributeSecondZumre(
     if (fatherAlive) {
       shares.push({
         name: 'Baba',
-        zumre: '2. Zumre (Ana-Baba)',
+        zumre: '2. Zümre (Ana-Baba)',
         percentage: fatherPct,
         fraction: percentageToFraction(fatherPct),
         amount: (netEstate * fatherPct) / 100,
@@ -459,7 +459,7 @@ function distributeSecondZumre(
         fatherPct,
         netEstate,
         shares,
-        '2. Zumre (Halefiyat - Baba Kolu)'
+        '2. Zümre (Halefiyat - Baba Kolu)'
       )
     }
   }
@@ -598,7 +598,7 @@ function distributeGrandparentSide(
       gmPct,
       netEstate,
       shares,
-      `3. Zumre (${sideLabel} - Buyukanne)`
+      `3. Zümre (${sideLabel} - Büyükanne)`
     )
   }
   if (gfPct > 0) {
@@ -607,7 +607,7 @@ function distributeGrandparentSide(
       gfPct,
       netEstate,
       shares,
-      `3. Zumre (${sideLabel} - Buyukbaba)`
+      `3. Zümre (${sideLabel} - Büyükbaba)`
     )
   }
 }
@@ -620,11 +620,11 @@ function distributeGrandparent(
   zumreLabel: string
 ) {
   if (gp.alive) {
-    const label = zumreLabel.includes('Buyukanne') ? 'Buyukanne' : 'Buyukbaba'
-    const side = zumreLabel.includes('Anne Tarafi') ? '(Anne Tarafi)' : '(Baba Tarafi)'
+    const label = zumreLabel.includes('Büyükanne') ? 'Büyükanne' : 'Büyükbaba'
+    const side = zumreLabel.includes('Anne Tarafi') ? '(Anne Tarafı)' : '(Baba Tarafı)'
     shares.push({
       name: `${label} ${side}`,
-      zumre: '3. Zumre',
+      zumre: '3. Zümre',
       percentage: gpPct,
       fraction: percentageToFraction(gpPct),
       amount: (netEstate * gpPct) / 100,
@@ -1176,18 +1176,18 @@ export default function InheritancePage() {
             {form.hasSpouse && (
               <div className="mt-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3 text-xs text-blue-700 dark:text-blue-300">
                 <Info className="mr-1 inline h-3.5 w-3.5" />
-                Es payi: 1. Zumre ile 1/4, 2. Zumre ile 1/2, 3. Zumre ile 3/4, tek basina tamami
+                Eş payı: 1. Zümre ile 1/4, 2. Zümre ile 1/2, 3. Zümre ile 3/4, tek başına tamamı
               </div>
             )}
           </SectionCard>
 
           {/* Section 3: 1st Zumre - Children */}
           <SectionCard
-            title="1. Zumre - Altsoy (Cocuklar)"
+            title="1. Zümre - Altsoy (Çocuklar)"
             icon={<Users className="h-5 w-5 text-emerald-600" />}
             expanded={expandedSections.zumre1}
             onToggle={() => toggleSection('zumre1')}
-            badge={form.children.length > 0 ? `${form.children.length} cocuk` : undefined}
+            badge={form.children.length > 0 ? `${form.children.length} çocuk` : undefined}
           >
             <div className="space-y-3">
               {form.children.map((child, idx) => (
@@ -1205,7 +1205,7 @@ export default function InheritancePage() {
                       onChange={(e) =>
                         updateChild(child.id, { name: e.target.value })
                       }
-                      placeholder={`Cocuk ${idx + 1} adi`}
+                      placeholder={`Çocuk ${idx + 1} adı`}
                       className="input-field flex-1"
                     />
                     <button
@@ -1302,7 +1302,7 @@ export default function InheritancePage() {
                 className="inline-flex items-center gap-2 rounded-lg border border-dashed border-border px-4 py-2.5 text-sm font-medium text-muted-foreground hover:border-primary hover:text-primary transition-colors w-full justify-center"
               >
                 <Plus className="h-4 w-4" />
-                Cocuk Ekle
+                Çocuk Ekle
               </button>
             </div>
           </SectionCard>
@@ -1310,12 +1310,12 @@ export default function InheritancePage() {
           {/* Section 4: 2nd Zumre - Parents (only if no 1st zumre) */}
           {!has1stZumre && (
             <SectionCard
-              title="2. Zumre - Ana ve Baba"
+              title="2. Zümre - Ana ve Baba"
               icon={<Users className="h-5 w-5 text-amber-600" />}
               expanded={expandedSections.zumre2}
               onToggle={() => toggleSection('zumre2')}
               disabled={has1stZumre}
-              disabledMessage="1. zumrede mirascı oldugu icin 2. zumre devre disi"
+              disabledMessage="1. zümrede mirasçı olduğu için 2. zümre devre dışı"
             >
               <div className="space-y-4">
                 {/* Mother */}
@@ -1368,7 +1368,7 @@ export default function InheritancePage() {
           {/* Section 5: 3rd Zumre - Grandparents (only if no 1st or 2nd zumre) */}
           {!has1stZumre && !has2ndZumre && (
             <SectionCard
-              title="3. Zumre - Buyukanne ve Buyukbaba"
+              title="3. Zümre - Büyükanne ve Büyükbaba"
               icon={<Users className="h-5 w-5 text-purple-600" />}
               expanded={expandedSections.zumre3}
               onToggle={() => toggleSection('zumre3')}
@@ -1865,7 +1865,7 @@ function GrandparentSideBlock({
 
       {(['grandmother', 'grandfather'] as const).map((personKey) => {
         const gp = side[personKey]
-        const personLabel = personKey === 'grandmother' ? 'Buyukanne' : 'Buyukbaba'
+        const personLabel = personKey === 'grandmother' ? 'Büyükanne' : 'Büyükbaba'
         const descLabel =
           sideLabel === 'Anne Tarafi'
             ? personKey === 'grandmother'

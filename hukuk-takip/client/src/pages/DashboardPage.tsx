@@ -10,6 +10,7 @@ import {
   Users,
 } from 'lucide-react'
 import { useDashboard } from '@/hooks/useDashboard'
+import { useStatistics } from '@/hooks/useStatistics'
 import {
   caseStatusLabels,
   caseTypeLabels,
@@ -108,13 +109,19 @@ function DashboardSkeleton() {
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { data, isLoading, isError } = useDashboard()
+  const { data: stats } = useStatistics()
+
+  const currentMonth = new Date().toISOString().slice(0, 7)
+  const thisMonthCases = stats?.monthlyCases?.find((m: any) => m.month === currentMonth)?.count ?? 0
+  const thisMonthMediations = stats?.monthlyMediations?.find((m: any) => m.month === currentMonth)?.count ?? 0
+  const thisMonthCollections = stats?.monthlyCollections?.find((m: any) => m.month === currentMonth)?.amount ?? '0'
 
   if (isLoading) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="page-title">Gosterge Paneli</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Buroluk genel gorunumu hazirlaniyor</p>
+          <h1 className="page-title">Gösterge Paneli</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Büroluk genel görünümü hazırlanıyor</p>
         </div>
         <DashboardSkeleton />
       </div>
@@ -125,7 +132,7 @@ export default function DashboardPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="page-title">Gosterge Paneli</h1>
+          <h1 className="page-title">Gösterge Paneli</h1>
           <p className="mt-1 text-sm text-muted-foreground">Veri cekilemedi</p>
         </div>
         <Card className="border-red-200 bg-red-50">
@@ -146,9 +153,9 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="page-title">Gosterge Paneli</h1>
+          <h1 className="page-title">Gösterge Paneli</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Dava, gorev, durusma ve tahsilat akisiniza tek ekrandan bakin.
+            Dava, görev, duruşma ve tahsilat akışınıza tek ekrandan bakın.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
@@ -166,7 +173,7 @@ export default function DashboardPage() {
             className="inline-flex items-center gap-2 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium transition hover:bg-muted/50"
           >
             <Users className="h-4 w-4 text-law-accent" />
-            Yeni Muvekkil
+            Yeni Müvekkil
           </button>
         </div>
       </div>
@@ -175,13 +182,13 @@ export default function DashboardPage() {
         <StatCard
           title="Aktif Davalar"
           value={cases?.active ?? 0}
-          description="Calismasi suren ve temyiz asamasindakiler dahil"
+          description="Çalışması süren ve temyiz aşamasındakiler dahil"
           icon={Scale}
         />
         <StatCard
           title="Potansiyel Davalar"
           value={cases?.pending ?? 0}
-          description="Pasif veya islem bekleyen dosyalar"
+          description="Pasif veya işlem bekleyen dosyalar"
           icon={Clock3}
         />
         <StatCard
@@ -191,17 +198,39 @@ export default function DashboardPage() {
           icon={Scale}
         />
         <StatCard
-          title="Bekleyen Gorevler"
+          title="Bekleyen Görevler"
           value={pendingTasks?.length ?? 0}
-          description="Takvime alinmis acik isler"
+          description="Takvime alınmış açık işler"
           icon={ListChecks}
         />
         <StatCard
           title="Toplam Tahsilat"
           value={formatCurrency(financials?.totalCollections)}
-          description="Tum dosyalardan tahsil edilen toplam"
+          description="Tüm dosyalardan tahsil edilen toplam"
           icon={Banknote}
         />
+      </div>
+
+      {/* Bu Ay Özeti */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Card className="border-l-4 border-l-law-accent">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-muted-foreground">Bu Ay Dava</p>
+            <p className="text-xl font-bold text-law-primary">{thisMonthCases}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-amber-500">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-muted-foreground">Bu Ay Arabuluculuk</p>
+            <p className="text-xl font-bold text-law-primary">{thisMonthMediations}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-emerald-500">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-muted-foreground">Bu Ay Tahsilat</p>
+            <p className="text-xl font-bold text-emerald-600">{formatCurrency(thisMonthCollections)}</p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
@@ -210,14 +239,14 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base text-law-primary">
                 <CalendarClock className="h-4 w-4 text-law-accent" />
-                Yaklasan Durusmalar
+                Yaklaşan Duruşmalar
               </CardTitle>
               <button
                 type="button"
                 onClick={() => navigate('/hearings')}
                 className="inline-flex items-center gap-1 text-xs font-medium text-law-accent transition hover:text-law-primary"
               >
-                Tumunu gor
+                Tümünü gör
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -226,7 +255,7 @@ export default function DashboardPage() {
             {!upcomingHearings?.length ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <CalendarClock className="mb-3 h-10 w-10 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">Yaklasan durusma bulunmuyor.</p>
+                <p className="text-sm text-muted-foreground">Yaklaşan duruşma bulunmuyor.</p>
               </div>
             ) : (
               <div className="overflow-x-auto max-w-full">
@@ -283,14 +312,14 @@ export default function DashboardPage() {
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center gap-2 text-base text-law-primary">
                 <ListChecks className="h-4 w-4 text-law-accent" />
-                Bekleyen Gorevler
+                Bekleyen Görevler
               </CardTitle>
               <button
                 type="button"
                 onClick={() => navigate('/tasks')}
                 className="inline-flex items-center gap-1 text-xs font-medium text-law-accent transition hover:text-law-primary"
               >
-                Tumunu gor
+                Tümünü gör
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>
@@ -299,7 +328,7 @@ export default function DashboardPage() {
             {!pendingTasks?.length ? (
               <div className="flex flex-col items-center justify-center py-10 text-center">
                 <ListChecks className="mb-3 h-10 w-10 text-muted-foreground/30" />
-                <p className="text-sm text-muted-foreground">Bekleyen gorev bulunmuyor.</p>
+                <p className="text-sm text-muted-foreground">Bekleyen görev bulunmuyor.</p>
               </div>
             ) : (
               <div className="space-y-2">
@@ -318,7 +347,7 @@ export default function DashboardPage() {
                         </Badge>
                       </div>
                       <p className="mt-1 truncate text-xs text-muted-foreground">
-                        {task.caseTitle || 'Genel gorev'}
+                        {task.caseTitle || 'Genel görev'}
                       </p>
                     </div>
                     {task.dueDate && (
@@ -347,7 +376,7 @@ export default function DashboardPage() {
                 onClick={() => navigate('/cases')}
                 className="inline-flex items-center gap-1 text-xs font-medium text-law-accent transition hover:text-law-primary"
               >
-                Tumunu gor
+                Tümünü gör
                 <ChevronRight className="h-3.5 w-3.5" />
               </button>
             </div>

@@ -194,7 +194,7 @@ export default function CaseDetailPage() {
           <CardContent className="flex items-center gap-3 p-4">
             <User className="h-5 w-5 text-law-accent" />
             <div>
-              <p className="text-xs text-muted-foreground">Muvekkil</p>
+              <p className="text-xs text-muted-foreground">Müvekkil</p>
               <p className="text-sm font-medium">{caseData.clientName || '-'}</p>
             </div>
           </CardContent>
@@ -242,7 +242,7 @@ export default function CaseDetailPage() {
         <Card className="border-0 shadow-sm">
           <CardContent className="space-y-3 p-4">
             <div className="flex items-center justify-between">
-              <h2 className="flex items-center gap-2 text-base font-semibold"><CalendarClock className="h-4 w-4 text-law-accent" />Durusmalar</h2>
+              <h2 className="flex items-center gap-2 text-base font-semibold"><CalendarClock className="h-4 w-4 text-law-accent" />Duruşmalar</h2>
             </div>
             <form
               onSubmit={(event) => {
@@ -258,7 +258,7 @@ export default function CaseDetailPage() {
               </button>
             </form>
             <p className="text-xs text-muted-foreground">Durusmalar da Google Calendar baglantisi aktif oldugunda 3 gun once hatirlatilir.</p>
-            {hearings.length === 0 ? <p className="text-sm text-muted-foreground">Durusma bulunmuyor.</p> : hearings.map((item: any) => (
+            {hearings.length === 0 ? <p className="text-sm text-muted-foreground">Duruşma bulunmuyor.</p> : hearings.map((item: any) => (
               <div key={item.id} className="flex items-start justify-between rounded-xl border p-3">
                 <div>
                   <p className="text-sm font-medium">{formatDateTime(item.hearingDate)}</p>
@@ -272,7 +272,7 @@ export default function CaseDetailPage() {
 
         <Card className="border-0 shadow-sm">
           <CardContent className="space-y-3 p-4">
-            <h2 className="flex items-center gap-2 text-base font-semibold"><ListChecks className="h-4 w-4 text-law-accent" />Gorevler</h2>
+            <h2 className="flex items-center gap-2 text-base font-semibold"><ListChecks className="h-4 w-4 text-law-accent" />Görevler</h2>
             <form
               onSubmit={(event) => {
                 event.preventDefault()
@@ -301,7 +301,7 @@ export default function CaseDetailPage() {
               </button>
             </form>
             <p className="text-xs text-muted-foreground">Son tarih girilen gorevler Google Calendar baglantisi aktif oldugunda 3 gun once hatirlatilir.</p>
-            {tasks.length === 0 ? <p className="text-sm text-muted-foreground">Gorev bulunmuyor.</p> : tasks.map((item: any) => (
+            {tasks.length === 0 ? <p className="text-sm text-muted-foreground">Görev bulunmuyor.</p> : tasks.map((item: any) => (
               <div key={item.id} className="flex items-start justify-between rounded-xl border p-3">
                 <div>
                   <p className="text-sm font-medium">{item.title}</p>

@@ -38,7 +38,7 @@ export default function AiPromptsPage() {
   }
 
   const handleDownload = (prompt: PromptTemplate) => {
-    const mdContent = `# ${prompt.title}\n\n**Kategori:** ${prompt.category}\n**Aciklama:** ${prompt.description}\n\n---\n\n${prompt.content}`
+    const mdContent = `# ${prompt.title}\n\n**Kategori:** ${prompt.category}\n**Açıklama:** ${prompt.description}\n\n---\n\n${prompt.content}`
     const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -53,19 +53,19 @@ export default function AiPromptsPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="AI Prompt Sablonlari"
-        description="Hukuki analizler icin hazir yapay zeka prompt sablonlari"
+        title="AI Prompt Şablonları"
+        description="Hukuki analizler için hazır yapay zeka prompt şablonları"
       />
 
       {/* Info Box */}
       <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4 dark:border-blue-900 dark:bg-blue-950/30">
         <Sparkles className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600 dark:text-blue-400" />
         <div className="text-sm text-blue-800 dark:text-blue-300">
-          <p className="font-medium">Nasil Kullanilir?</p>
+          <p className="font-medium">Nasıl Kullanılır?</p>
           <p className="mt-1">
-            Asagidaki sablonlari kopyalayip Gemini, Claude veya ChatGPT gibi yapay zeka araclarinda
-            kullanabilirsiniz. Koseli parantez icindeki alanlari [...] kendi dava bilgilerinizle
-            degistirin.
+            Aşağıdaki şablonları kopyalayıp Gemini, Claude veya ChatGPT gibi yapay zeka araçlarında
+            kullanabilirsiniz. Köşeli parantez içindeki alanları [...] kendi dava bilgilerinizle
+            değiştirin.
           </p>
         </div>
       </div>
@@ -74,10 +74,10 @@ export default function AiPromptsPage() {
       <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/30">
         <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
         <div className="text-sm text-amber-800 dark:text-amber-300">
-          <p className="font-medium">Onemli Uyari</p>
+          <p className="font-medium">Önemli Uyarı</p>
           <p className="mt-1">
-            Bu sablonlar yalnizca referans amaclidir. Yapay zeka ciktilari hukuki danismanlik
-            yerine gecmez. Tum taslaklar mutlaka bir avukat tarafindan kontrol edilmelidir.
+            Bu şablonlar yalnızca referans amaçlıdır. Yapay zeka çıktıları hukuki danışmanlık
+            yerine geçmez. Tüm taslaklar mutlaka bir avukat tarafından kontrol edilmelidir.
           </p>
         </div>
       </div>
@@ -163,7 +163,7 @@ export default function AiPromptsPage() {
 
       {filteredPrompts.length === 0 && (
         <div className="py-12 text-center text-muted-foreground">
-          Bu kategoride henuz sablon bulunmuyor.
+          Bu kategoride henüz şablon bulunmuyor.
         </div>
       )}
     </div>

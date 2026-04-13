@@ -6,8 +6,8 @@ const items = [
   { to: '/dashboard', label: 'Panel', icon: LayoutDashboard },
   { to: '/cases', label: 'Davalar', icon: Briefcase },
   { to: '/calendar', label: 'Takvim', icon: Calendar },
-  { to: '/tasks', label: 'Gorevler', icon: CheckSquare },
-  { to: '/clients', label: 'Muvekkil', icon: Users },
+  { to: '/tasks', label: 'Görevler', icon: CheckSquare },
+  { to: '/clients', label: 'Müvekkil', icon: Users },
 ]
 
 export default function MobileBottomNav() {

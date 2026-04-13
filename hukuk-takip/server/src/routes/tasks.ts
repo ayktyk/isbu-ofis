@@ -129,7 +129,7 @@ router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Respons
     .returning()
 
   if (!updated) {
-    res.status(404).json({ error: 'Gorev bulunamadi.' })
+    res.status(404).json({ error: 'Görev bulunamadı.' })
     return
   }
 
@@ -171,7 +171,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     .returning()
 
   if (!updated) {
-    res.status(404).json({ error: 'Gorev bulunamadi.' })
+    res.status(404).json({ error: 'Görev bulunamadı.' })
     return
   }
 
@@ -206,7 +206,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     .returning()
 
   if (!deleted) {
-    res.status(404).json({ error: 'Gorev bulunamadi.' })
+    res.status(404).json({ error: 'Görev bulunamadı.' })
     return
   }
 
@@ -216,7 +216,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     console.error('[GoogleCalendar] Task delete sync failed', deleted.id, error)
   }
 
-  res.json({ message: 'Gorev silindi.' })
+  res.json({ message: 'Görev silindi.' })
 })
 
 export default router

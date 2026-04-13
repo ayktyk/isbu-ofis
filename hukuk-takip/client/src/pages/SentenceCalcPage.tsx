@@ -50,49 +50,49 @@ interface CalcResult {
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const CRIME_CATEGORIES: CrimeCategory[] = [
-  { id: 'genel', label: 'Genel suclar', ratio: 1 / 2, ratioLabel: '1/2' },
+  { id: 'genel', label: 'Genel suçlar', ratio: 1 / 2, ratioLabel: '1/2' },
   {
     id: 'kasten_oldurme',
-    label: 'Kasten oldurme (TCK 81, 82)',
+    label: 'Kasten öldürme (TCK 81, 82)',
     ratio: 2 / 3,
     ratioLabel: '2/3',
   },
   {
     id: 'uyusturucu',
-    label: 'Uyusturucu imal/ticareti (TCK 188)',
+    label: 'Uyuşturucu imal/ticareti (TCK 188)',
     ratio: 3 / 4,
     ratioLabel: '3/4',
     noDenetimliSerbestlik7456: true,
   },
   {
     id: 'cinsel',
-    label: 'Cinsel suclar (TCK 102, 103, 104)',
+    label: 'Cinsel suçlar (TCK 102, 103, 104)',
     ratio: 3 / 4,
     ratioLabel: '3/4',
     noDenetimliSerbestlik7456: true,
   },
   {
     id: 'teror',
-    label: 'Teror suclari (TMK)',
+    label: 'Terör suçları (TMK)',
     ratio: 3 / 4,
     ratioLabel: '3/4',
     noDenetimliSerbestlik7456: true,
   },
   {
     id: 'devlet',
-    label: 'Devlete karsi suclar (TCK 302-339)',
+    label: 'Devlete karşı suçlar (TCK 302-339)',
     ratio: 3 / 4,
     ratioLabel: '3/4',
   },
   {
     id: 'orgutlu',
-    label: 'Orgutlu suclar (TCK 314, 220)',
+    label: 'Örgütlü suçlar (TCK 314, 220)',
     ratio: 3 / 4,
     ratioLabel: '3/4',
   },
   {
     id: 'mukerrir',
-    label: 'Ikinci kez mukerrir (tekerrur)',
+    label: 'İkinci kez mükerrir (tekerrür)',
     ratio: 3 / 4,
     ratioLabel: '3/4',
   },
@@ -100,8 +100,8 @@ const CRIME_CATEGORIES: CrimeCategory[] = [
 
 const TEKERRUR_OPTIONS = [
   { id: 'yok' as const, label: 'Yok' },
-  { id: '1' as const, label: 'Birinci Tekerrur' },
-  { id: '2' as const, label: 'Ikinci Tekerrur (Mukerrir)' },
+  { id: '1' as const, label: 'Birinci Tekerrür' },
+  { id: '2' as const, label: 'İkinci Tekerrür (Mükerrir)' },
 ]
 
 // Muebbet tekerrur adjustments (yil cinsinden)
@@ -486,8 +486,8 @@ export default function SentenceCalcPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Ceza Infaz Hesaplama"
-        description="Kosullu saliverilme, denetimli serbestlik ve yatar hesabi"
+        title="Ceza İnfaz Hesaplama"
+        description="Koşullu salıverilme, denetimli serbestlik ve yatar hesabı"
       />
 
       {/* Uyari */}
@@ -506,9 +506,9 @@ export default function SentenceCalcPage() {
           />
         </svg>
         <p>
-          Bu hesaplama bilgilendirme amacidir, kesin sonuc icin infaz savciligina
-          basvurunuz. Hesaplama 5275 SK, 7242 SK ve 7456 SK hukmlerine
-          dayanmaktadir.
+          Bu hesaplama bilgilendirme amaçlıdır, kesin sonuç için infaz savcılığına
+          başvurunuz. Hesaplama 5275 SK, 7242 SK ve 7456 SK hükümlerine
+          dayanmaktadır.
         </p>
       </div>
 
@@ -516,13 +516,13 @@ export default function SentenceCalcPage() {
       <div className="rounded-lg border bg-card p-6 space-y-8">
         {/* Section 1: Ceza Turu */}
         <fieldset>
-          <legend className="text-base font-semibold mb-4">Ceza Turu</legend>
+          <legend className="text-base font-semibold mb-4">Ceza Türü</legend>
           <div className="flex flex-wrap gap-6">
             {(
               [
-                ['sureli', 'Sureli Hapis'],
-                ['muebbet', 'Muebbet Hapis'],
-                ['agir_muebbet', 'Agirlastirilmis Muebbet Hapis'],
+                ['sureli', 'Süreli Hapis'],
+                ['muebbet', 'Müebbet Hapis'],
+                ['agir_muebbet', 'Ağırlaştırılmış Müebbet Hapis'],
               ] as [PenaltyType, string][]
             ).map(([val, lbl]) => (
               <label
@@ -600,10 +600,10 @@ export default function SentenceCalcPage() {
 
         {/* Section 3: Suc Bilgileri */}
         <fieldset>
-          <legend className="text-base font-semibold mb-4">Suc Bilgileri</legend>
+          <legend className="text-base font-semibold mb-4">Suç Bilgileri</legend>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className={labelCls}>Suc Turu</label>
+              <label className={labelCls}>Suç Türü</label>
               <select
                 className={selectCls}
                 value={form.crimeCategory}
@@ -617,7 +617,7 @@ export default function SentenceCalcPage() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Tekerrur</label>
+              <label className={labelCls}>Tekerrür</label>
               <select
                 className={selectCls}
                 value={form.tekerrur}
@@ -631,7 +631,7 @@ export default function SentenceCalcPage() {
               </select>
             </div>
             <div>
-              <label className={labelCls}>Suc Tarihi</label>
+              <label className={labelCls}>Suç Tarihi</label>
               <input
                 type="date"
                 className={inputCls}
@@ -643,7 +643,7 @@ export default function SentenceCalcPage() {
               </p>
             </div>
             <div>
-              <label className={labelCls}>Infaza Baslama Tarihi</label>
+              <label className={labelCls}>İnfaza Başlama Tarihi</label>
               <input
                 type="date"
                 className={inputCls}
@@ -772,22 +772,22 @@ export default function SentenceCalcPage() {
               {result.penaltyType === 'sureli' && (
                 <>
                   <ResultCard
-                    label="Toplam Ceza Suresi"
+                    label="Toplam Ceza Süresi"
                     value={daysToYMD(result.toplamCezaGun)}
-                    sublabel={`${result.toplamCezaGun} gun`}
+                    sublabel={`${result.toplamCezaGun} gün`}
                   />
                   {result.mahsupGun > 0 && (
                     <ResultCard
                       label="Mahsup (Tutukluluk)"
                       value={`-${daysToYMD(result.mahsupGun)}`}
-                      sublabel={`${result.mahsupGun} gun dusuldu`}
+                      sublabel={`${result.mahsupGun} gün düşüldü`}
                     />
                   )}
                   {result.cocukIndirimiGun > 0 && (
                     <ResultCard
-                      label="Cocuk Indirimi"
+                      label="Çocuk İndirimi"
                       value={`-${daysToYMD(result.cocukIndirimiGun)}`}
-                      sublabel="Yas grubuna gore indirim"
+                      sublabel="Yaş grubuna göre indirim"
                     />
                   )}
                   <ResultCard
@@ -799,27 +799,27 @@ export default function SentenceCalcPage() {
               )}
 
               <ResultCard
-                label="Infaz Orani"
+                label="İnfaz Oranı"
                 value={result.infazOrani}
-                sublabel="Kosullu saliverilme orani"
+                sublabel="Koşullu salıverilme oranı"
               />
 
               <ResultCard
-                label="Kosullu Saliverilme Tarihi"
+                label="Koşullu Salıverilme Tarihi"
                 value={formatDate(result.kosulluTarih)}
                 highlight
-                sublabel={`${result.kosulluGun} gun sonra`}
+                sublabel={`${result.kosulluGun} gün sonra`}
               />
 
               {result.denetimliSerbestlikGun > 0 ? (
                 <>
                   <ResultCard
-                    label="Denetimli Serbestlik Suresi"
+                    label="Denetimli Serbestlik Süresi"
                     value={daysToYMD(result.denetimliSerbestlikGun)}
-                    sublabel={`${result.denetimliSerbestlikGun} gun`}
+                    sublabel={`${result.denetimliSerbestlikGun} gün`}
                   />
                   <ResultCard
-                    label="Denetimli Serbestlik Baslangici"
+                    label="Denetimli Serbestlik Başlangıcı"
                     value={formatDate(result.denetimliSerbestlikBaslangic)}
                     highlight
                   />
@@ -830,37 +830,37 @@ export default function SentenceCalcPage() {
                   value="Uygulanmaz"
                   sublabel={
                     !form.iyiHal
-                      ? 'Iyi hal indirimi secilmedi'
-                      : 'Suc turu nedeniyle uygulanmaz'
+                      ? 'İyi hal indirimi seçilmedi'
+                      : 'Suç türü nedeniyle uygulanmaz'
                   }
                 />
               )}
 
               <ResultCard
-                label="Bihakkin Tahliye Tarihi"
+                label="Bihakkın Tahliye Tarihi"
                 value={
                   result.penaltyType !== 'sureli'
-                    ? 'Omur boyu'
+                    ? 'Ömür boyu'
                     : formatDate(result.bihakkinTarih)
                 }
                 sublabel={
                   result.penaltyType !== 'sureli'
-                    ? 'Muebbet cezalarda cezanin tamami'
-                    : `${result.netCezaGun} gun sonra`
+                    ? 'Müebbet cezalarda cezanın tamamı'
+                    : `${result.netCezaGun} gün sonra`
                 }
               />
 
               <ResultCard
-                label="Yatar Suresi (Kapali Cezaevi)"
+                label="Yatar Süresi (Kapalı Cezaevi)"
                 value={daysToYMD(result.kapaliCezaeviGun)}
-                sublabel={`${result.kapaliCezaeviGun} gun`}
+                sublabel={`${result.kapaliCezaeviGun} gün`}
               />
 
               {result.acikCezaeviTarih && (
                 <ResultCard
-                  label="Acik Cezaevine Ayrilma (tahmini)"
+                  label="Açık Cezaevine Ayrılma (tahmini)"
                   value={formatDate(result.acikCezaeviTarih)}
-                  sublabel="Iyi halli hukumlu icin tahmini"
+                  sublabel="İyi halli hükümlü için tahmini"
                 />
               )}
             </div>

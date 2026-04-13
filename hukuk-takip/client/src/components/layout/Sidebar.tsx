@@ -23,26 +23,26 @@ import { cn } from '@/lib/utils'
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/clients', label: 'Muvekkiller', icon: Users },
+  { to: '/clients', label: 'Müvekkiller', icon: Users },
   { to: '/cases', label: 'Davalar', icon: Briefcase },
-  { to: '/hearings', label: 'Durusmalar', icon: Gavel },
-  { to: '/tasks', label: 'Gorevler', icon: CheckSquare },
+  { to: '/hearings', label: 'Duruşmalar', icon: Gavel },
+  { to: '/tasks', label: 'Görevler', icon: CheckSquare },
   { to: '/calendar', label: 'Takvim', icon: Calendar },
   { to: '/notifications', label: 'Bildirimler', icon: Bell },
-  { to: '/statistics', label: 'Istatistikler', icon: BarChart3 },
+  { to: '/statistics', label: 'İstatistikler', icon: BarChart3 },
 ]
 
 const toolItems = [
   { to: '/tools/calculations', label: 'Hesaplamalar', icon: Calculator },
-  { to: '/tools/prompts', label: 'AI Sablonlari', icon: Sparkles },
-  { to: '/tools/inheritance', label: 'Miras Payi', icon: Scale },
-  { to: '/tools/sentence', label: 'Infaz Hesabi', icon: Shield },
+  { to: '/tools/prompts', label: 'AI Şablonları', icon: Sparkles },
+  { to: '/tools/inheritance', label: 'Miras Payı', icon: Scale },
+  { to: '/tools/sentence', label: 'İnfaz Hesabı', icon: Shield },
 ]
 
 const mediationItems = [
   { to: '/tools/mediation-files', label: 'Dosya Takibi', icon: FolderOpen },
-  { to: '/tools/mediation/dava-sarti', label: 'Dava Sarti Belgeleri', icon: FileText },
-  { to: '/tools/mediation/ihtiyari', label: 'Ihtiyari Belgeleri', icon: Handshake },
+  { to: '/tools/mediation/dava-sarti', label: 'Dava Şartı Belgeleri', icon: FileText },
+  { to: '/tools/mediation/ihtiyari', label: 'İhtiyari Belgeleri', icon: Handshake },
 ]
 
 function SidebarLink({
@@ -122,7 +122,7 @@ export default function Sidebar({
                 HukukTakip
               </p>
               <p className="mt-0.5 text-[11px] uppercase tracking-wide text-sidebar-muted">
-                Buro Yonetimi
+                Büro Yönetimi
               </p>
             </div>
           </div>
@@ -130,7 +130,7 @@ export default function Sidebar({
           <button
             onClick={onClose}
             className="rounded-lg p-1.5 text-sidebar-muted transition-colors hover:bg-white/10 hover:text-sidebar-foreground md:hidden"
-            aria-label="Menuyu kapat"
+            aria-label="Menüyü kapat"
           >
             <X size={20} />
           </button>
@@ -146,14 +146,14 @@ export default function Sidebar({
           <div className="mt-3 pt-3">
             <div className="mx-2 mb-2 h-px bg-sidebar-border" />
             <p className="mb-1.5 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted/60">
-              Araclar
+              Araçlar
             </p>
             {toolItems.map(({ to, label, icon: Icon }) => (
               <SidebarLink key={to} to={to} label={label} Icon={Icon} onClick={onClose} />
             ))}
 
             <p className="mb-1.5 mt-4 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted/60">
-              Arabuluculuk Dosyalari
+              Arabuluculuk Dosyaları
             </p>
             {mediationItems.map(({ to, label, icon: Icon }) => (
               <SidebarLink key={to} to={to} label={label} Icon={Icon} onClick={onClose} />

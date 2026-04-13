@@ -272,7 +272,7 @@ function IscilikTab() {
       const kidemNetDv = Math.max(0, kidemDv - kidemDvIstisna)
 
       kalemler.push({
-        label: 'Kidem Tazminati',
+        label: 'Kıdem Tazminatı',
         brut: kidemBrut,
         kesinti: kidemNetDv,
         net: kidemBrut - kidemNetDv,
@@ -307,7 +307,7 @@ function IscilikTab() {
       const ihbarKesinti = ihbarNetGv + ihbarNetDv
 
       kalemler.push({
-        label: 'Ihbar Tazminati',
+        label: 'İhbar Tazminatı',
         brut: ihbarBrut,
         kesinti: ihbarKesinti,
         net: ihbarBrut - ihbarKesinti,
@@ -334,7 +334,7 @@ function IscilikTab() {
       const izinKesinti = izinSgk + izinIssizlik + izinNetGv + izinNetDv
 
       kalemler.push({
-        label: 'Yillik Izin Ucreti',
+        label: 'Yıllık İzin Ücreti',
         brut: izinBrut,
         kesinti: izinKesinti,
         net: izinBrut - izinKesinti,
@@ -363,7 +363,7 @@ function IscilikTab() {
       const fmKesinti = fmSgk + fmIssizlik + fmGv + fmDv
 
       kalemler.push({
-        label: 'Fazla Mesai Ucreti',
+        label: 'Fazla Mesai Ücreti',
         brut: fmBrut,
         kesinti: fmKesinti,
         net: fmBrut - fmKesinti,
@@ -392,7 +392,7 @@ function IscilikTab() {
       const ubgtKesinti = ubgtSgk + ubgtIssizlik + ubgtGv + ubgtDv
 
       kalemler.push({
-        label: 'UBGT Ucreti',
+        label: 'UBGT Ücreti',
         brut: ubgtBrut,
         kesinti: ubgtKesinti,
         net: ubgtBrut - ubgtKesinti,
@@ -463,12 +463,12 @@ function IscilikTab() {
       {/* B. UCRET BILGILERI */}
       <fieldset className="rounded-lg border p-4 space-y-3">
         <legend className="text-sm font-medium text-muted-foreground px-2">
-          B. Ucret Bilgileri (Aylik TL)
+          B. Ücret Bilgileri (Aylık TL)
         </legend>
         <div className="flex flex-wrap gap-4">
           {/* Brut/Net toggle */}
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Ucret giris tipi</label>
+            <label className="text-sm font-medium">Ücret giriş tipi</label>
             <select
               className={selectCls}
               value={form.ucretGirisTipi}
@@ -552,7 +552,7 @@ function IscilikTab() {
             />
           </div>
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Diger ayni/nakdi (brut)</label>
+            <label className="text-sm font-medium">Diğer aynî/nakdî (brüt)</label>
             <input
               type="number"
               className={inputCls}
@@ -567,7 +567,7 @@ function IscilikTab() {
       {/* D. DIGER GIRDILER */}
       <fieldset className="rounded-lg border p-4 space-y-3">
         <legend className="text-sm font-medium text-muted-foreground px-2">
-          D. Diger Girdiler
+          D. Diğer Girdiler
         </legend>
         <div className="flex flex-wrap gap-4">
           <div className="min-w-[200px]">
@@ -603,7 +603,7 @@ function IscilikTab() {
             <p className="text-xs text-muted-foreground mt-1">0 ise haftaliktan hesaplanir</p>
           </div>
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">UBGT calisinan gun</label>
+            <label className="text-sm font-medium">UBGT çalışılan gün</label>
             <input
               type="number"
               className={inputCls}
@@ -623,7 +623,7 @@ function IscilikTab() {
               value={(form.hakkaniyetOrani * 100) || ''}
               onChange={(e) => set('hakkaniyetOrani', (parseFloat(e.target.value) || 0) / 100)}
             />
-            <p className="text-xs text-muted-foreground mt-1">FM ve UBGT icin (standart: 30)</p>
+            <p className="text-xs text-muted-foreground mt-1">FM ve UBGT için (standart: 30)</p>
           </div>
           <div className="min-w-[200px]">
             <label className="text-sm font-medium">Kumulatif GV matrahi</label>
@@ -743,7 +743,7 @@ function IscilikTab() {
             Not: Bu hesaplama yaklasik degerler icerir. Kesin hesap icin bilirkisi raporu gerekebilir.
             Kidem tazminatindan yalnizca damga vergisi kesilir (SGK ve gelir vergisi yok).
             Ihbar tazminatindan gelir vergisi + damga vergisi kesilir (SGK yok).
-            FM ve UBGT icin AU istisnasi uygulanmaz.
+            FM ve UBGT için AU istisnası uygulanmaz.
           </p>
         </div>
       )}
@@ -1038,19 +1038,19 @@ function ArabulucuTab() {
         </legend>
         <div className="flex flex-wrap gap-4">
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Uyusmazlik turu</label>
+            <label className="text-sm font-medium">Uyuşmazlık türü</label>
             <select
               className={selectCls}
               value={form.tur}
               onChange={(e) => setForm((p) => ({ ...p, tur: e.target.value as ArabulucuTur }))}
             >
-              <option value="isci-isveren">Isci-Isveren</option>
+              <option value="isci-isveren">İşçi-İşveren</option>
               <option value="ticari">Ticari</option>
-              <option value="tuketici">Tuketici</option>
+              <option value="tuketici">Tüketici</option>
               <option value="kira">Kira</option>
-              <option value="aile">Aile (Bosanma vb.)</option>
-              <option value="ortaklik">Ortakligin Giderilmesi</option>
-              <option value="diger">Diger</option>
+              <option value="aile">Aile (Boşanma vb.)</option>
+              <option value="ortaklik">Ortaklığın Giderilmesi</option>
+              <option value="diger">Diğer</option>
             </select>
           </div>
           <div className="min-w-[200px]">
@@ -1524,7 +1524,7 @@ function KazaTazminatTab() {
             />
           </div>
           <div className="min-w-[200px]">
-            <label className="text-sm font-medium">Kusur orani (%)</label>
+            <label className="text-sm font-medium">Kusur oranı (%)</label>
             <input
               type="number"
               className={inputCls}
@@ -1719,13 +1719,13 @@ function HarcTab() {
             >
               <option value="asliye-hukuk">Asliye Hukuk</option>
               <option value="sulh-hukuk">Sulh Hukuk</option>
-              <option value="is-mahkemesi">Is Mahkemesi</option>
+              <option value="is-mahkemesi">İş Mahkemesi</option>
               <option value="aile">Aile Mahkemesi</option>
               <option value="ticaret">Ticaret Mahkemesi</option>
-              <option value="tuketici">Tuketici Mahkemesi</option>
-              <option value="idare">Idare Mahkemesi</option>
+              <option value="tuketici">Tüketici Mahkemesi</option>
+              <option value="idare">İdare Mahkemesi</option>
               <option value="vergi">Vergi Mahkemesi</option>
-              <option value="icra">Icra Dairesi</option>
+              <option value="icra">İcra Dairesi</option>
             </select>
           </div>
           <div className="min-w-[200px]">
@@ -1857,7 +1857,7 @@ function HarcTab() {
           <WarningBadge text="Harc tutarlari 2026 yili Harclar Kanunu Genel Tebligine goredir. UYAP uzerinden dogrulayiniz." />
 
           <div className="rounded-lg border bg-muted/30 p-4 text-xs space-y-1">
-            <p><strong>Diger masraflar (referans):</strong></p>
+            <p><strong>Diğer masraflar (referans):</strong></p>
             <p>Tebligat (normal): {formatCurrency(HARC_SABITLERI.tebligatNormal)} | Tebligat (APS): {formatCurrency(HARC_SABITLERI.tebligatAps)}</p>
             <p>Nispi basvurma harci: binde {HARC_SABITLERI.nispiBasvurmaBinde} | Nispi karar harci: binde {HARC_SABITLERI.nispiKararBinde}</p>
           </div>
@@ -1885,7 +1885,7 @@ const TAHLIYE_NEDENLERI: { value: TahliyeNedeni; label: string; madde: string }[
   { value: 'konut-ihtiyaci', label: 'Kiraya verenin konut ihtiyaci', madde: 'TBK 350/1' },
   { value: 'yeni-malik', label: 'Yeni malikin ihtiyaci', madde: 'TBK 351' },
   { value: 'esasli-tadilat', label: 'Esasli tamir/tadilat', madde: 'TBK 350/2' },
-  { value: 'tahliye-taahhut', label: 'Kiracinin tahliye taahhutnamesi', madde: 'TBK 352/1' },
+  { value: 'tahliye-taahhut', label: 'Kiracının tahliye taahhütnamesi', madde: 'TBK 352/1' },
   { value: 'ayni-ilce-konut', label: 'Ayni ilce/beldede konutu olma', madde: 'TBK 352/3' },
   { value: 'iki-hakli-ihtar', label: 'Iki hakli ihtar', madde: 'TBK 352/2' },
   { value: '10-yillik-uzama', label: '10 yillik uzama sonrasi', madde: 'TBK 347' },
@@ -2184,7 +2184,7 @@ function KiraSureleriTab() {
       {/* 10 Yillik Uzama Hesabi */}
       {form.baslangic && form.bitis && (
         <div className="rounded-lg border bg-muted/30 p-4 text-sm space-y-2">
-          <p className="font-medium text-muted-foreground">10 Yillik Uzama Hesabi (TBK m.347)</p>
+          <p className="font-medium text-muted-foreground">10 Yıllık Uzama Hesabı (TBK m.347)</p>
           {(() => {
             const bitis = new Date(form.bitis)
             const onYil = addYears(bitis, 10)
@@ -2258,13 +2258,13 @@ function KiraSureleriTab() {
 // ─── TABS ───────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: 'iscilik', label: 'Iscilik Alacaklari' },
-  { id: 'vekalet', label: 'Vekalet Ucreti' },
-  { id: 'arabulucu', label: 'Arabulucu Ucreti' },
+  { id: 'iscilik', label: 'İşçilik Alacakları' },
+  { id: 'vekalet', label: 'Vekâlet Ücreti' },
+  { id: 'arabulucu', label: 'Arabulucu Ücreti' },
   { id: 'faiz', label: 'Faiz Hesaplama' },
-  { id: 'harc', label: 'Harc Hesaplama' },
-  { id: 'kira', label: 'Kira Sureleri' },
-  { id: 'kaza', label: 'Kaza Tazminat' },
+  { id: 'harc', label: 'Harç Hesaplama' },
+  { id: 'kira', label: 'Kira Süreleri' },
+  { id: 'kaza', label: 'Kaza Tazminatı' },
 ] as const
 
 type TabId = (typeof TABS)[number]['id']
@@ -2278,7 +2278,7 @@ export default function CalculationsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Hesaplamalar"
-        description="Hukuki hesaplama araclari — iscilik alacaklari, vekalet ucreti, arabulucu ucreti, faiz, harc, kira sureleri ve kaza tazminati"
+        description="Hukuki hesaplama araçları — işçilik alacakları, vekâlet ücreti, arabulucu ücreti, faiz, harç, kira süreleri ve kaza tazminatı"
       />
 
       {/* Tab buttons */}

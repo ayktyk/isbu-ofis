@@ -21,14 +21,14 @@ const statusVariant: Record<string, 'default' | 'success' | 'danger' | 'warning'
 }
 
 const statusGroupOptions = [
-  { value: '', label: 'Tum Davalar' },
+  { value: '', label: 'Tüm Davalar' },
   { value: 'active', label: 'Aktif Davalar' },
   { value: 'pending', label: 'Potansiyel Davalar' },
   { value: 'finished', label: 'Biten Davalar' },
 ] as const
 
 const statusOptions = [
-  { value: '', label: 'Tum Durumlar' },
+  { value: '', label: 'Tüm Durumlar' },
   { value: 'active', label: 'Aktif' },
   { value: 'istinafta', label: 'Istinafta' },
   { value: 'yargıtayda', label: 'Yargitayda' },
@@ -40,17 +40,17 @@ const statusOptions = [
 ] as const
 
 const typeOptions = [
-  { value: '', label: 'Tum Turler' },
-  { value: 'iscilik_alacagi', label: 'Iscilik Alacagi' },
-  { value: 'bosanma', label: 'Bosanma' },
+  { value: '', label: 'Tüm Türler' },
+  { value: 'iscilik_alacagi', label: 'İşçilik Alacağı' },
+  { value: 'bosanma', label: 'Boşanma' },
   { value: 'velayet', label: 'Velayet' },
-  { value: 'mal_paylasimi', label: 'Mal Paylasimi' },
+  { value: 'mal_paylasimi', label: 'Mal Paylaşımı' },
   { value: 'kira', label: 'Kira' },
-  { value: 'tuketici', label: 'Tuketici' },
-  { value: 'icra', label: 'Icra' },
+  { value: 'tuketici', label: 'Tüketici' },
+  { value: 'icra', label: 'İcra' },
   { value: 'ceza', label: 'Ceza' },
-  { value: 'idare', label: 'Idare' },
-  { value: 'diger', label: 'Diger' },
+  { value: 'idare', label: 'İdare' },
+  { value: 'diger', label: 'Diğer' },
 ] as const
 
 export default function CasesPage() {
@@ -249,7 +249,7 @@ export default function CasesPage() {
                     <thead>
                       <tr className="border-b bg-slate-50 text-left text-xs uppercase tracking-[0.18em] text-muted-foreground">
                         <th className="px-4 py-3">Dava</th>
-                        <th className="hidden px-4 py-3 sm:table-cell">Muvekkil</th>
+                        <th className="hidden px-4 py-3 sm:table-cell">Müvekkil</th>
                         <th className="hidden px-4 py-3 md:table-cell">Tur</th>
                         <th className="px-4 py-3">Durum</th>
                         <th className="hidden px-4 py-3 lg:table-cell">Mahkeme</th>

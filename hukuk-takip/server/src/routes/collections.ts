@@ -55,7 +55,7 @@ router.post('/', validate(createCollectionSchema), async (req, res) => {
 
   const ownedClient = await getOwnedClient(req.user!.userId, req.body.clientId)
   if (!ownedClient) {
-    res.status(404).json({ error: 'Muvekkil bulunamadi.' })
+    res.status(404).json({ error: 'Müvekkil bulunamadı.' })
     return
   }
 
@@ -94,7 +94,7 @@ router.put('/:id', validate(updateCollectionSchema), async (req, res) => {
   if (req.body.clientId) {
     const ownedClient = await getOwnedClient(req.user!.userId, req.body.clientId)
     if (!ownedClient) {
-      res.status(404).json({ error: 'Muvekkil bulunamadi.' })
+      res.status(404).json({ error: 'Müvekkil bulunamadı.' })
       return
     }
   }
