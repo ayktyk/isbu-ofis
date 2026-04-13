@@ -11,6 +11,7 @@ export * from './schemas/expense.js'
 export * from './schemas/collection.js'
 export * from './schemas/note.js'
 export * from './schemas/mediationFile.js'
+export * from './schemas/consultation.js'
 
 // Explicit re-exports help the client bundler resolve shared runtime symbols.
 export {

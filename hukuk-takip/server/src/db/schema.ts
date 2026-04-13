@@ -77,6 +77,22 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'system',
 ])
 
+export const consultationTypeEnum = pgEnum('consultation_type', ['phone', 'in_person'])
+
+export const consultationStatusEnum = pgEnum('consultation_status', [
+  'pending',    // bekliyor
+  'converted',  // müvekkil oldu
+  'declined',   // ilgilenmedi
+])
+
+export const consultationSourceEnum = pgEnum('consultation_source', [
+  'client_referral', // müvekkil tavsiyesi
+  'past_client',     // eski müvekkil (kendisi)
+  'google',
+  'website',
+  'other',
+])
+
 export const users = pgTable(
   'users',
   {
@@ -371,6 +387,41 @@ export const mediationParties = pgTable(
     fileIdx: index('mediation_parties_file_idx').on(table.mediationFileId),
   })
 )
+
+export const consultations = pgTable(
+  'consultations',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    consultationDate: timestamp('consultation_date').notNull(),
+    fullName: varchar('full_name', { length: 255 }).notNull(),
+    phone: varchar('phone', { length: 20 }),
+    type: consultationTypeEnum('type').default('phone').notNull(),
+    subject: varchar('subject', { length: 500 }),
+    notes: text('notes'),
+    status: consultationStatusEnum('status').default('pending').notNull(),
+    source: consultationSourceEnum('source'),
+    referredByClientId: uuid('referred_by_client_id').references(() => clients.id, {
+      onDelete: 'set null',
+    }),
+    nextActionDate: date('next_action_date'),
+    convertedClientId: uuid('converted_client_id').references(() => clients.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index('consultations_user_idx').on(table.userId),
+    dateIdx: index('consultations_date_idx').on(table.consultationDate),
+    statusIdx: index('consultations_status_idx').on(table.status),
+  })
+)
+
+export type Consultation = typeof consultations.$inferSelect
+export type NewConsultation = typeof consultations.$inferInsert
 
 export type Note = typeof notes.$inferSelect
 export type NewNote = typeof notes.$inferInsert

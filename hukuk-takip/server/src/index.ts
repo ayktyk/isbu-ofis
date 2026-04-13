@@ -26,6 +26,7 @@ import mediationFilesRouter from './routes/mediationFiles.js'
 import calendarRouter from './routes/calendar.js'
 import statisticsRouter from './routes/statistics.js'
 import searchRouter from './routes/search.js'
+import consultationsRouter from './routes/consultations.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -117,6 +118,7 @@ app.use('/api/calendar', calendarRouter)
 app.use('/api/mediation-files', mediationFilesRouter)
 app.use('/api/statistics', statisticsRouter)
 app.use('/api/search', searchRouter)
+app.use('/api/consultations', consultationsRouter)
 
 if (process.env.NODE_ENV === 'production') {
   const publicPath = path.join(__dirname, 'public')

@@ -6,11 +6,14 @@ import {
   ChevronRight,
   Clock3,
   ListChecks,
+  PhoneCall,
   Scale,
+  TrendingUp,
   Users,
 } from 'lucide-react'
 import { useDashboard } from '@/hooks/useDashboard'
 import { useStatistics } from '@/hooks/useStatistics'
+import { useConsultationStats } from '@/hooks/useConsultations'
 import {
   caseStatusLabels,
   caseTypeLabels,
@@ -110,6 +113,7 @@ export default function DashboardPage() {
   const navigate = useNavigate()
   const { data, isLoading, isError } = useDashboard()
   const { data: stats } = useStatistics()
+  const { data: consultStats } = useConsultationStats()
 
   const currentMonth = new Date().toISOString().slice(0, 7)
   const thisMonthCases = stats?.monthlyCases?.find((m: any) => m.month === currentMonth)?.count ?? 0
@@ -232,6 +236,99 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Ön Görüşmeler Özeti */}
+      <Card className="border-l-4 border-l-law-accent">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-2 text-base text-law-primary">
+              <PhoneCall className="h-4 w-4 text-law-accent" />
+              Ön Görüşmeler
+            </CardTitle>
+            <button
+              type="button"
+              onClick={() => navigate('/consultations')}
+              className="inline-flex items-center gap-1 text-xs font-medium text-law-accent transition hover:text-law-primary"
+            >
+              Detay
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <p className="text-[11px] text-muted-foreground">Bugün</p>
+              <p className="text-lg font-bold text-law-primary">
+                {consultStats?.today ?? 0}
+                <span className="text-xs text-muted-foreground">/{consultStats?.dailyGoal ?? 1}</span>
+              </p>
+              <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-law-accent transition-all"
+                  style={{
+                    width: `${Math.min(100, Math.round(((consultStats?.today ?? 0) / (consultStats?.dailyGoal || 1)) * 100))}%`,
+                  }}
+                />
+              </div>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">Bu Hafta</p>
+              <p className="text-lg font-bold text-law-primary">
+                {consultStats?.week ?? 0}
+                <span className="text-xs text-muted-foreground">/{consultStats?.weeklyGoal ?? 5}</span>
+              </p>
+              <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    (consultStats?.week ?? 0) >= (consultStats?.weeklyGoal ?? 5) ? 'bg-emerald-500' : 'bg-law-accent'
+                  }`}
+                  style={{
+                    width: `${Math.min(100, Math.round(((consultStats?.week ?? 0) / (consultStats?.weeklyGoal || 1)) * 100))}%`,
+                  }}
+                />
+              </div>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">Bu Ay</p>
+              <p className="text-lg font-bold text-law-primary">
+                {consultStats?.month ?? 0}
+                <span className="text-xs text-muted-foreground">/{consultStats?.monthlyGoal ?? 20}</span>
+              </p>
+              <div className="mt-1 h-1 overflow-hidden rounded-full bg-muted">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    (consultStats?.month ?? 0) >= (consultStats?.monthlyGoal ?? 20) ? 'bg-emerald-500' : 'bg-law-accent'
+                  }`}
+                  style={{
+                    width: `${Math.min(100, Math.round(((consultStats?.month ?? 0) / (consultStats?.monthlyGoal || 1)) * 100))}%`,
+                  }}
+                />
+              </div>
+            </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                <TrendingUp className="h-3 w-3" />
+                Dönüşüm
+              </p>
+              <p className="text-lg font-bold text-emerald-600">{consultStats?.conversionRate ?? 0}%</p>
+              <p className="text-[10px] text-muted-foreground">
+                {consultStats?.converted ?? 0} müvekkil oldu
+              </p>
+            </div>
+          </div>
+          <div className="mt-3 flex justify-end">
+            <button
+              type="button"
+              onClick={() => navigate('/consultations')}
+              className="inline-flex items-center gap-1 rounded-lg bg-law-accent px-3 py-1.5 text-xs font-medium text-white hover:opacity-90"
+            >
+              <PhoneCall className="h-3.5 w-3.5" />
+              Yeni Görüşme
+            </button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-5">
         <Card className="xl:col-span-3">
