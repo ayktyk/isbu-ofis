@@ -8,6 +8,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import cron from 'node-cron'
 import { db } from './db/index.js'
+import { ensureSchema } from './db/ensureSchema.js'
 import { caseHearings, tasks, notifications, cases } from './db/schema.js'
 import { eq, and, gte, lte } from 'drizzle-orm'
 import authRouter from './routes/auth.js'
@@ -130,9 +131,10 @@ if (process.env.NODE_ENV === 'production') {
 
 app.use(errorHandler)
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server calisiyor: http://localhost:${PORT}`)
   console.log(`Ortam: ${process.env.NODE_ENV || 'development'}`)
+  await ensureSchema()
   if (!shouldRunScheduledJobs) {
     console.log('Zamanlanmis gorevler kapali. ENABLE_SCHEDULED_JOBS=true ile acilabilir.')
   }
