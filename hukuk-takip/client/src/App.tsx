@@ -1,7 +1,94 @@
-import { lazy, Suspense } from 'react'
+import { Component, lazy, Suspense, type ReactNode } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './lib/axios'
+
+// ─── Chunk yükleme hatalarını yakalar (mobilde cached eski HTML yeni chunk'ları bulamaz) ──
+
+const RELOAD_KEY = 'hz-chunk-reload'
+
+function isChunkLoadError(err: unknown): boolean {
+  if (!err) return false
+  const msg = String((err as any)?.message || err)
+  const name = String((err as any)?.name || '')
+  return (
+    name === 'ChunkLoadError' ||
+    /Loading chunk [\d]+ failed/i.test(msg) ||
+    /Failed to fetch dynamically imported module/i.test(msg) ||
+    /Importing a module script failed/i.test(msg) ||
+    /error loading dynamically imported module/i.test(msg)
+  )
+}
+
+class ChunkErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false }
+
+  static getDerivedStateFromError(err: unknown) {
+    if (isChunkLoadError(err)) {
+      if (typeof sessionStorage !== 'undefined' && !sessionStorage.getItem(RELOAD_KEY)) {
+        sessionStorage.setItem(RELOAD_KEY, '1')
+        window.location.reload()
+        return { hasError: true }
+      }
+    }
+    return { hasError: true }
+  }
+
+  componentDidCatch(err: unknown) {
+    console.error('App error:', err)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-law-bg p-6">
+          <div className="max-w-sm space-y-4 text-center">
+            <h1 className="text-lg font-semibold text-law-primary">Uygulama yüklenemedi</h1>
+            <p className="text-sm text-muted-foreground">
+              Lütfen sayfayı yenileyin. Sorun devam ederse tarayıcı önbelleğini temizleyin.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(RELOAD_KEY)
+                window.location.reload()
+              }}
+              className="rounded-lg bg-law-accent px-4 py-2 text-sm font-medium text-white"
+            >
+              Yenile
+            </button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('error', (event) => {
+    if (isChunkLoadError(event.error)) {
+      if (!sessionStorage.getItem(RELOAD_KEY)) {
+        sessionStorage.setItem(RELOAD_KEY, '1')
+        window.location.reload()
+      }
+    }
+  })
+  window.addEventListener('unhandledrejection', (event) => {
+    if (isChunkLoadError(event.reason)) {
+      if (!sessionStorage.getItem(RELOAD_KEY)) {
+        sessionStorage.setItem(RELOAD_KEY, '1')
+        window.location.reload()
+      }
+    }
+  })
+  // Başarılı yüklemede flag'i sıfırla
+  window.addEventListener('load', () => {
+    setTimeout(() => {
+      if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(RELOAD_KEY)
+    }, 5000)
+  })
+}
 
 // ─── Kritik sayfalar (ana bundle — login sonrası anında açılır) ──────────────
 
@@ -67,8 +154,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <Suspense fallback={<PageLoader />}>
-      <Routes>
+    <ChunkErrorBoundary>
+      <Suspense fallback={<PageLoader />}>
+        <Routes>
         <Route path="/login" element={<LoginPage />} />
 
         <Route
@@ -109,7 +197,8 @@ export default function App() {
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </Suspense>
+        </Routes>
+      </Suspense>
+    </ChunkErrorBoundary>
   )
 }
