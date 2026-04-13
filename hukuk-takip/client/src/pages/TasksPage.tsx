@@ -514,20 +514,22 @@ export default function TasksPage() {
 
                       <div className="flex flex-shrink-0 gap-1">
                         <button
+                          type="button"
                           onClick={() => setEditingId(task.id)}
-                          className="rounded p-1.5 text-muted-foreground/40 hover:bg-law-accent/10 hover:text-law-accent"
-                          title="Düzenle"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-law-accent/10 hover:text-law-accent active:bg-law-accent/20"
+                          aria-label="Düzenle"
                         >
                           <Pencil className="h-4 w-4" />
                         </button>
                         <button
+                          type="button"
                           onClick={() => {
                             if (confirm('Bu görevi silmek istediğinize emin misiniz?')) {
                               deleteTask.mutate(task.id)
                             }
                           }}
-                          className="rounded p-1.5 text-muted-foreground/40 hover:bg-red-50 hover:text-red-600"
-                          title="Sil"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted-foreground/60 transition-colors hover:bg-red-50 hover:text-red-600 active:bg-red-100"
+                          aria-label="Sil"
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
