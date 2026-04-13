@@ -2,8 +2,8 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
-import { createTaskSchema, taskPriorityValues, type CreateTaskInput } from '@hukuk-takip/shared'
-import { useTasks, useCreateTask, useUpdateTaskStatus, useDeleteTask } from '@/hooks/useTasks'
+import { createTaskSchema, updateTaskSchema, taskPriorityValues, taskStatusValues, type CreateTaskInput, type UpdateTaskInput } from '@hukuk-takip/shared'
+import { useTasks, useCreateTask, useUpdateTask, useUpdateTaskStatus, useDeleteTask } from '@/hooks/useTasks'
 import { useCases } from '@/hooks/useCases'
 import {
   formatRelativeDate,
@@ -25,6 +25,7 @@ import {
   X,
   Loader2,
   Save,
+  Pencil,
 } from 'lucide-react'
 
 const priorityVariant: Record<string, 'danger' | 'warning' | 'secondary' | 'outline'> = {
@@ -50,11 +51,148 @@ const priorityOptions = [
   { value: 'low', label: 'Düşük' },
 ]
 
+// ─── Edit Form Component ─────────────────────────────────────────────────────
+
+function EditTaskForm({
+  task,
+  casesList,
+  onClose,
+}: {
+  task: any
+  casesList: any[]
+  onClose: () => void
+}) {
+  const updateTask = useUpdateTask(task.id)
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm<UpdateTaskInput>({
+    resolver: zodResolver(updateTaskSchema),
+    defaultValues: {
+      title: task.title || '',
+      description: task.description || '',
+      priority: task.priority || 'medium',
+      status: task.status || 'pending',
+      caseId: task.caseId || '',
+      dueDate: task.dueDate ? new Date(task.dueDate).toISOString().split('T')[0] : '',
+      label: task.label || '',
+    },
+  })
+
+  function onSubmit(data: UpdateTaskInput) {
+    updateTask.mutate(data, { onSuccess: onClose })
+  }
+
+  return (
+    <Card className="border-law-accent/30 bg-law-accent/5">
+      <CardContent className="p-4">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
+          <div>
+            <label className="mb-1 block text-sm font-medium">Başlık</label>
+            <input
+              {...register('title')}
+              className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+              autoFocus
+            />
+            {errors.title && <p className="mt-1 text-xs text-red-600">{errors.title.message}</p>}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium">Durum</label>
+              <select
+                {...register('status')}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+              >
+                {taskStatusValues.map((s: string) => (
+                  <option key={s} value={s}>{taskStatusLabels[s] || s}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Öncelik</label>
+              <select
+                {...register('priority')}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+              >
+                {taskPriorityValues.map((p: string) => (
+                  <option key={p} value={p}>{taskPriorityLabels[p] || p}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Dava</label>
+              <select
+                {...register('caseId')}
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+              >
+                <option value="">Seçilmedi</option>
+                {casesList.map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.title}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">Son Tarih</label>
+              <input
+                {...register('dueDate')}
+                type="date"
+                className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">Açıklama</label>
+            <textarea
+              {...register('description')}
+              rows={2}
+              className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">Etiket</label>
+            <input
+              {...register('label')}
+              className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+              placeholder="Arabuluculuk, Baro Aidatı..."
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/50"
+            >
+              İptal
+            </button>
+            <button
+              type="submit"
+              disabled={updateTask.isPending}
+              className="inline-flex items-center gap-2 rounded-lg bg-law-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {updateTask.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Kaydet
+            </button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── Main Page ───────────────────────────────────────────────────────────────
+
 export default function TasksPage() {
   const navigate = useNavigate()
   const [status, setStatus] = useState('')
   const [priority, setPriority] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
 
   const { data, isLoading, isError } = useTasks({
     status: status || undefined,
@@ -291,6 +429,18 @@ export default function TasksPage() {
               {tasks.map((task: any) => {
                 const overdue = task.dueDate && isOverdue(task.dueDate) && task.status !== 'completed'
                 const completed = task.status === 'completed'
+
+                if (editingId === task.id) {
+                  return (
+                    <EditTaskForm
+                      key={task.id}
+                      task={task}
+                      casesList={casesList}
+                      onClose={() => setEditingId(null)}
+                    />
+                  )
+                }
+
                 return (
                   <Card
                     key={task.id}
@@ -362,16 +512,26 @@ export default function TasksPage() {
                         </div>
                       </div>
 
-                      <button
-                        onClick={() => {
-                          if (confirm('Bu görevi silmek istediğinize emin misiniz?')) {
-                            deleteTask.mutate(task.id)
-                          }
-                        }}
-                        className="flex-shrink-0 rounded p-1.5 text-muted-foreground/40 hover:bg-red-50 hover:text-red-600"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <div className="flex flex-shrink-0 gap-1">
+                        <button
+                          onClick={() => setEditingId(task.id)}
+                          className="rounded p-1.5 text-muted-foreground/40 hover:bg-law-accent/10 hover:text-law-accent"
+                          title="Düzenle"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (confirm('Bu görevi silmek istediğinize emin misiniz?')) {
+                              deleteTask.mutate(task.id)
+                            }
+                          }}
+                          className="rounded p-1.5 text-muted-foreground/40 hover:bg-red-50 hover:text-red-600"
+                          title="Sil"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
                     </CardContent>
                   </Card>
                 )
