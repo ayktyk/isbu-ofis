@@ -7,13 +7,32 @@ import MobileBottomNav from './MobileBottomNav'
 import ActionSearchBar from '@/components/shared/ActionSearchBar'
 import { api } from '@/lib/axios'
 
+// iOS Safari requestIdleCallback desteklemiyor — setTimeout fallback
+type IdleHandle = number | ReturnType<typeof setTimeout>
+
+function scheduleIdle(cb: () => void, timeout = 3000): IdleHandle {
+  if (typeof window !== 'undefined' && typeof (window as any).requestIdleCallback === 'function') {
+    return (window as any).requestIdleCallback(cb, { timeout })
+  }
+  return setTimeout(cb, 1500)
+}
+
+function cancelIdle(handle: IdleHandle) {
+  if (typeof window !== 'undefined' && typeof (window as any).cancelIdleCallback === 'function') {
+    try {
+      ;(window as any).cancelIdleCallback(handle)
+      return
+    } catch {}
+  }
+  clearTimeout(handle as ReturnType<typeof setTimeout>)
+}
+
 // Prefetch secondary data after initial render is complete (not blocking)
 function usePrefetchCoreData() {
   const qc = useQueryClient()
 
   useEffect(() => {
-    // Wait for initial paint + idle time before prefetching
-    const id = requestIdleCallback(() => {
+    const id = scheduleIdle(() => {
       const prefetch = (key: unknown[], url: string) => {
         qc.prefetchQuery({
           queryKey: key,
@@ -28,9 +47,9 @@ function usePrefetchCoreData() {
       prefetch(['cases', undefined], '/cases')
       prefetch(['clients', undefined], '/clients')
       prefetch(['tasks', undefined], '/tasks')
-    }, { timeout: 3000 })
+    }, 3000)
 
-    return () => cancelIdleCallback(id)
+    return () => cancelIdle(id)
   }, [qc])
 }
 
