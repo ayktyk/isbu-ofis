@@ -112,7 +112,7 @@ export default function Sidebar({
             <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-law-gold/25 bg-law-gold/15">
               <Gavel className="h-[18px] w-[18px] text-law-gold-light" />
             </div>
-            <p className="font-serif text-[15px] font-semibold leading-tight tracking-tight text-sidebar-foreground">
+            <p className="font-serif text-[18px] font-bold leading-tight tracking-tight text-sidebar-foreground">
               HukukTakip
             </p>
           </button>
