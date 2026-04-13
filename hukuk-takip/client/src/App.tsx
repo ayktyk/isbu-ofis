@@ -20,18 +20,35 @@ function isChunkLoadError(err: unknown): boolean {
   )
 }
 
-class ChunkErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
-  state = { hasError: false }
+function hardReload() {
+  try {
+    const url = new URL(window.location.href)
+    url.searchParams.set('_r', String(Date.now()))
+    window.location.replace(url.toString())
+  } catch {
+    window.location.reload()
+  }
+}
+
+class ChunkErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean; errorInfo: string }
+> {
+  state = { hasError: false, errorInfo: '' }
 
   static getDerivedStateFromError(err: unknown) {
+    const info =
+      (err as any)?.stack?.toString?.() ||
+      (err as any)?.message ||
+      String(err)
     if (isChunkLoadError(err)) {
       if (typeof sessionStorage !== 'undefined' && !sessionStorage.getItem(RELOAD_KEY)) {
         sessionStorage.setItem(RELOAD_KEY, '1')
-        window.location.reload()
-        return { hasError: true }
+        hardReload()
+        return { hasError: true, errorInfo: info }
       }
     }
-    return { hasError: true }
+    return { hasError: true, errorInfo: info }
   }
 
   componentDidCatch(err: unknown) {
@@ -42,21 +59,49 @@ class ChunkErrorBoundary extends Component<{ children: ReactNode }, { hasError: 
     if (this.state.hasError) {
       return (
         <div className="flex min-h-screen items-center justify-center bg-law-bg p-6">
-          <div className="max-w-sm space-y-4 text-center">
+          <div className="max-w-md space-y-4 text-center">
             <h1 className="text-lg font-semibold text-law-primary">Uygulama yüklenemedi</h1>
             <p className="text-sm text-muted-foreground">
               Lütfen sayfayı yenileyin. Sorun devam ederse tarayıcı önbelleğini temizleyin.
             </p>
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(RELOAD_KEY)
-                window.location.reload()
-              }}
-              className="rounded-lg bg-law-accent px-4 py-2 text-sm font-medium text-white"
-            >
-              Yenile
-            </button>
+            <div className="flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(RELOAD_KEY)
+                  hardReload()
+                }}
+                className="rounded-lg bg-law-accent px-4 py-2 text-sm font-medium text-white"
+              >
+                Yenile
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  try {
+                    if (typeof caches !== 'undefined') {
+                      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+                    }
+                    if ('serviceWorker' in navigator) {
+                      navigator.serviceWorker
+                        .getRegistrations()
+                        .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+                    }
+                    localStorage.clear()
+                    sessionStorage.clear()
+                  } catch {}
+                  setTimeout(hardReload, 300)
+                }}
+                className="rounded-lg border border-law-accent px-4 py-2 text-xs font-medium text-law-accent"
+              >
+                Önbelleği temizle ve yenile
+              </button>
+            </div>
+            {this.state.errorInfo && (
+              <pre className="mt-4 max-h-48 overflow-auto rounded bg-muted p-2 text-left text-[10px] text-muted-foreground">
+                {this.state.errorInfo}
+              </pre>
+            )}
           </div>
         </div>
       )
@@ -70,7 +115,7 @@ if (typeof window !== 'undefined') {
     if (isChunkLoadError(event.error)) {
       if (!sessionStorage.getItem(RELOAD_KEY)) {
         sessionStorage.setItem(RELOAD_KEY, '1')
-        window.location.reload()
+        hardReload()
       }
     }
   })
@@ -78,7 +123,7 @@ if (typeof window !== 'undefined') {
     if (isChunkLoadError(event.reason)) {
       if (!sessionStorage.getItem(RELOAD_KEY)) {
         sessionStorage.setItem(RELOAD_KEY, '1')
-        window.location.reload()
+        hardReload()
       }
     }
   })
