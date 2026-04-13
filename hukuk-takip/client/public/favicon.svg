@@ -5,55 +5,64 @@
       <stop offset="100%" stop-color="#0f1f33"/>
     </linearGradient>
     <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#d4a94c"/>
-      <stop offset="50%" stop-color="#c9952e"/>
+      <stop offset="0%" stop-color="#e8c96a"/>
+      <stop offset="50%" stop-color="#d4a94c"/>
       <stop offset="100%" stop-color="#b8841a"/>
     </linearGradient>
     <linearGradient id="goldLight" x1="0%" y1="0%" x2="0%" y2="100%">
-      <stop offset="0%" stop-color="#e8c96a"/>
+      <stop offset="0%" stop-color="#f0d878"/>
       <stop offset="100%" stop-color="#c9952e"/>
     </linearGradient>
-    <filter id="glow">
-      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#d4a94c" flood-opacity="0.3"/>
-    </filter>
-    <filter id="shadow">
-      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.3"/>
-    </filter>
+    <linearGradient id="goldShine" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f0d878" stop-opacity="0.6"/>
+      <stop offset="50%" stop-color="#e8c96a" stop-opacity="1"/>
+      <stop offset="100%" stop-color="#f0d878" stop-opacity="0.6"/>
+    </linearGradient>
   </defs>
 
-  <!-- Background rounded square -->
+  <!-- Background -->
   <rect width="512" height="512" rx="96" ry="96" fill="url(#bg)"/>
+  <rect x="6" y="6" width="500" height="500" rx="90" ry="90" fill="none" stroke="url(#gold)" stroke-width="1.2" opacity="0.2"/>
 
-  <!-- Subtle inner border -->
-  <rect x="8" y="8" width="496" height="496" rx="88" ry="88" fill="none" stroke="url(#gold)" stroke-width="1.5" opacity="0.25"/>
+  <!-- Scale - large and centered -->
+  <g transform="translate(256, 240)">
 
-  <!-- Scale/Balance - centered and larger -->
-  <g transform="translate(256, 256)" filter="url(#shadow)">
-    <!-- Center pillar -->
-    <rect x="-5" y="-20" width="10" height="120" rx="5" fill="url(#gold)"/>
+    <!-- Pillar -->
+    <rect x="-6" y="-60" width="12" height="160" rx="6" fill="url(#gold)"/>
 
-    <!-- Fulcrum diamond -->
-    <polygon points="0,-36 16,-20 0,-4 -16,-20" fill="url(#goldLight)"/>
+    <!-- Ornamental top sphere -->
+    <circle cx="0" cy="-68" r="12" fill="url(#goldLight)"/>
+    <circle cx="-3" cy="-72" r="3" fill="#f0d878" opacity="0.5"/>
 
     <!-- Beam -->
-    <rect x="-120" y="-24" width="240" height="7" rx="3.5" fill="url(#gold)"/>
+    <rect x="-130" y="-52" width="260" height="8" rx="4" fill="url(#gold)"/>
 
-    <!-- Left chain -->
-    <line x1="-106" y1="-17" x2="-106" y2="36" stroke="url(#goldLight)" stroke-width="3.5" stroke-linecap="round"/>
-    <!-- Left pan (bowl shape) -->
-    <path d="M-140,36 C-140,36 -130,60 -106,64 C-82,60 -72,36 -72,36" fill="none" stroke="url(#gold)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Left arm -->
+    <line x1="-118" y1="-44" x2="-118" y2="10" stroke="url(#goldLight)" stroke-width="3" stroke-linecap="round"/>
+    <line x1="-118" y1="-44" x2="-100" y2="-44" stroke="url(#gold)" stroke-width="3" stroke-linecap="round"/>
 
-    <!-- Right chain -->
-    <line x1="106" y1="-17" x2="106" y2="36" stroke="url(#goldLight)" stroke-width="3.5" stroke-linecap="round"/>
-    <!-- Right pan (bowl shape) -->
-    <path d="M72,36 C72,36 82,60 106,64 C130,60 140,36 140,36" fill="none" stroke="url(#gold)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+    <!-- Left plate (flat tray seen from angle) -->
+    <ellipse cx="-118" cy="14" rx="42" ry="10" fill="none" stroke="url(#gold)" stroke-width="4"/>
+    <ellipse cx="-118" cy="14" rx="42" ry="10" fill="url(#goldLight)" opacity="0.12"/>
+    <!-- Left chains to plate -->
+    <line x1="-156" y1="8" x2="-140" y2="-44" stroke="url(#goldLight)" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="-80" y1="8" x2="-96" y2="-44" stroke="url(#goldLight)" stroke-width="2.5" stroke-linecap="round"/>
+
+    <!-- Right arm -->
+    <line x1="118" y1="-44" x2="118" y2="10" stroke="url(#goldLight)" stroke-width="3" stroke-linecap="round"/>
+    <line x1="118" y1="-44" x2="100" y2="-44" stroke="url(#gold)" stroke-width="3" stroke-linecap="round"/>
+
+    <!-- Right plate -->
+    <ellipse cx="118" cy="14" rx="42" ry="10" fill="none" stroke="url(#gold)" stroke-width="4"/>
+    <ellipse cx="118" cy="14" rx="42" ry="10" fill="url(#goldLight)" opacity="0.12"/>
+    <!-- Right chains to plate -->
+    <line x1="80" y1="8" x2="96" y2="-44" stroke="url(#goldLight)" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="156" y1="8" x2="140" y2="-44" stroke="url(#goldLight)" stroke-width="2.5" stroke-linecap="round"/>
 
     <!-- Base pedestal -->
-    <rect x="-36" y="96" width="72" height="8" rx="4" fill="url(#gold)"/>
-    <!-- Base stem flare -->
-    <path d="M-5,100 L-24,96 L24,96 L5,100 Z" fill="url(#goldLight)" opacity="0.6"/>
+    <path d="M-44,100 L-28,88 L28,88 L44,100 Z" fill="url(#gold)"/>
+    <rect x="-50" y="98" width="100" height="10" rx="5" fill="url(#goldLight)"/>
+    <!-- Base shine -->
+    <rect x="-36" y="100" width="72" height="3" rx="1.5" fill="#f0d878" opacity="0.3"/>
   </g>
-
-  <!-- Subtle gold glow ring -->
-  <circle cx="256" cy="256" r="180" fill="none" stroke="url(#gold)" stroke-width="1" opacity="0.15" filter="url(#glow)"/>
 </svg>
