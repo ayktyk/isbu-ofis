@@ -7,29 +7,30 @@ import MobileBottomNav from './MobileBottomNav'
 import ActionSearchBar from '@/components/shared/ActionSearchBar'
 import { api } from '@/lib/axios'
 
-// Prefetch all core data on mount so tab switches are instant
+// Prefetch secondary data after initial render is complete (not blocking)
 function usePrefetchCoreData() {
   const qc = useQueryClient()
 
   useEffect(() => {
-    const prefetch = (key: unknown[], url: string) => {
-      qc.prefetchQuery({
-        queryKey: key,
-        queryFn: async () => {
-          const res = await api.get(url)
-          return res.data
-        },
-        staleTime: 1000 * 60 * 5,
-      })
-    }
+    // Wait for initial paint + idle time before prefetching
+    const id = requestIdleCallback(() => {
+      const prefetch = (key: unknown[], url: string) => {
+        qc.prefetchQuery({
+          queryKey: key,
+          queryFn: async () => {
+            const res = await api.get(url)
+            return res.data
+          },
+          staleTime: 1000 * 60 * 5,
+        })
+      }
 
-    prefetch(['dashboard'], '/dashboard')
-    prefetch(['cases', undefined], '/cases')
-    prefetch(['clients', undefined], '/clients')
-    prefetch(['tasks', undefined], '/tasks')
-    prefetch(['hearings', undefined], '/hearings')
-    prefetch(['calendar'], '/calendar')
-    prefetch(['statistics'], '/statistics')
+      prefetch(['cases', undefined], '/cases')
+      prefetch(['clients', undefined], '/clients')
+      prefetch(['tasks', undefined], '/tasks')
+    }, { timeout: 3000 })
+
+    return () => cancelIdleCallback(id)
   }, [qc])
 }
 

@@ -3,23 +3,23 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api } from './lib/axios'
 
-// ─── Sık kullanılan sayfalar (ana bundle — anında açılır) ────────────────────
+// ─── Kritik sayfalar (ana bundle — login sonrası anında açılır) ──────────────
 
 import AppLayout from './components/layout/AppLayout'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
-import ClientsPage from './pages/ClientsPage'
-import CasesPage from './pages/CasesPage'
-import CaseDetailPage from './pages/CaseDetailPage'
-import HearingsPage from './pages/HearingsPage'
-import TasksPage from './pages/TasksPage'
-import CalendarPage from './pages/CalendarPage'
-import NotificationsPage from './pages/NotificationsPage'
-import StatisticsPage from './pages/StatisticsPage'
-import MediationFilesPage from './pages/MediationFilesPage'
 
-// ─── Nadir kullanılan sayfalar (lazy — gerektiğinde yüklenir) ────────────────
+// ─── Diğer sayfalar (lazy — gerektiğinde yüklenir) ──────────────────────────
 
+const ClientsPage = lazy(() => import('./pages/ClientsPage'))
+const CasesPage = lazy(() => import('./pages/CasesPage'))
+const CaseDetailPage = lazy(() => import('./pages/CaseDetailPage'))
+const HearingsPage = lazy(() => import('./pages/HearingsPage'))
+const TasksPage = lazy(() => import('./pages/TasksPage'))
+const CalendarPage = lazy(() => import('./pages/CalendarPage'))
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
+const StatisticsPage = lazy(() => import('./pages/StatisticsPage'))
+const MediationFilesPage = lazy(() => import('./pages/MediationFilesPage'))
 const ClientFormPage = lazy(() => import('./pages/ClientFormPage'))
 const ClientDetailPage = lazy(() => import('./pages/ClientDetailPage'))
 const CaseFormPage = lazy(() => import('./pages/CaseFormPage'))
