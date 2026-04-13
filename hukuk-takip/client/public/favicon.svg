@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e3a5f"/>
+      <stop offset="100%" stop-color="#0f1f33"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4a94c"/>
+      <stop offset="50%" stop-color="#c9952e"/>
+      <stop offset="100%" stop-color="#b8841a"/>
+    </linearGradient>
+    <linearGradient id="goldLight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#e8c96a"/>
+      <stop offset="100%" stop-color="#c9952e"/>
+    </linearGradient>
+    <filter id="innerShadow">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="96" ry="96" fill="url(#bg)"/>
+
+  <!-- Subtle inner border -->
+  <rect x="8" y="8" width="496" height="496" rx="88" ry="88" fill="none" stroke="url(#gold)" stroke-width="2" opacity="0.3"/>
+
+  <!-- Scale/Balance icon -->
+  <g transform="translate(256, 190)" filter="url(#innerShadow)">
+    <!-- Center pillar -->
+    <rect x="-4" y="-8" width="8" height="80" rx="4" fill="url(#gold)"/>
+
+    <!-- Top triangle/fulcrum -->
+    <polygon points="-12,-16 12,-16 0,-28" fill="url(#goldLight)"/>
+
+    <!-- Beam -->
+    <rect x="-100" y="-12" width="200" height="6" rx="3" fill="url(#gold)"/>
+
+    <!-- Left chain -->
+    <line x1="-88" y1="-6" x2="-88" y2="40" stroke="url(#goldLight)" stroke-width="3" stroke-linecap="round"/>
+    <!-- Left pan -->
+    <path d="M-118,40 Q-88,55 -58,40" fill="none" stroke="url(#gold)" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Right chain -->
+    <line x1="88" y1="-6" x2="88" y2="40" stroke="url(#goldLight)" stroke-width="3" stroke-linecap="round"/>
+    <!-- Right pan -->
+    <path d="M58,40 Q88,55 118,40" fill="none" stroke="url(#gold)" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Base -->
+    <rect x="-28" y="68" width="56" height="6" rx="3" fill="url(#gold)"/>
+  </g>
+
+  <!-- "HT" monogram text -->
+  <text x="256" y="400" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-weight="700" font-size="80" fill="url(#goldLight)" letter-spacing="8">HT</text>
+
+  <!-- Thin separator line above text -->
+  <line x1="176" y1="330" x2="336" y2="330" stroke="url(#gold)" stroke-width="1.5" opacity="0.5"/>
+</svg>
