@@ -109,9 +109,7 @@ export default function Sidebar({
             onClick={() => { onClose(); navigate('/dashboard') }}
             className="flex items-center gap-3 cursor-pointer"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-law-gold/25 bg-law-gold/15">
-              <Gavel className="h-[18px] w-[18px] text-law-gold-light" />
-            </div>
+            <img src="/icon-192.png" alt="HukukTakip" className="h-10 w-10 rounded-lg" />
             <p className="font-serif text-[18px] font-bold leading-tight tracking-tight text-sidebar-foreground">
               HukukTakip
             </p>
