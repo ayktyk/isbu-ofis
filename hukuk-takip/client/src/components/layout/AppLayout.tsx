@@ -1,15 +1,45 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Outlet } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import MobileBottomNav from './MobileBottomNav'
 import ActionSearchBar from '@/components/shared/ActionSearchBar'
+import { api } from '@/lib/axios'
+
+// Prefetch all core data on mount so tab switches are instant
+function usePrefetchCoreData() {
+  const qc = useQueryClient()
+
+  useEffect(() => {
+    const prefetch = (key: unknown[], url: string) => {
+      qc.prefetchQuery({
+        queryKey: key,
+        queryFn: async () => {
+          const res = await api.get(url)
+          return res.data
+        },
+        staleTime: 1000 * 60 * 5,
+      })
+    }
+
+    prefetch(['dashboard'], '/dashboard')
+    prefetch(['cases', undefined], '/cases')
+    prefetch(['clients', undefined], '/clients')
+    prefetch(['tasks', undefined], '/tasks')
+    prefetch(['hearings', undefined], '/hearings')
+    prefetch(['calendar'], '/calendar')
+    prefetch(['statistics'], '/statistics')
+  }, [qc])
+}
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), [])
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
+
+  usePrefetchCoreData()
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

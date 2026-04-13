@@ -8,6 +8,6 @@ export function useDashboard() {
       const res = await api.get('/dashboard')
       return res.data
     },
-    staleTime: 0, // invalidation sonrasi aninda yenilensin
+    staleTime: 1000 * 60 * 2, // 2 dakika cache, mutation invalidation ile yenilenir
   })
 }
