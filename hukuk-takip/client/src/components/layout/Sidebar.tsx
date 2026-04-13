@@ -1,5 +1,5 @@
 import type { ElementType } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   BarChart3,
   Bell,
@@ -7,15 +7,12 @@ import {
   Calculator,
   Calendar,
   CheckSquare,
-  FileText,
   FolderOpen,
   Gavel,
-  Handshake,
   LayoutDashboard,
   Scale,
   Settings,
   Shield,
-  Sparkles,
   Users,
   X,
 } from 'lucide-react'
@@ -25,6 +22,7 @@ const navItems = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { to: '/clients', label: 'Müvekkiller', icon: Users },
   { to: '/cases', label: 'Davalar', icon: Briefcase },
+  { to: '/tools/mediation-files', label: 'Arabuluculuk Dosyaları', icon: FolderOpen },
   { to: '/hearings', label: 'Duruşmalar', icon: Gavel },
   { to: '/tasks', label: 'Görevler', icon: CheckSquare },
   { to: '/calendar', label: 'Takvim', icon: Calendar },
@@ -34,15 +32,8 @@ const navItems = [
 
 const toolItems = [
   { to: '/tools/calculations', label: 'Hesaplamalar', icon: Calculator },
-  { to: '/tools/prompts', label: 'AI Şablonları', icon: Sparkles },
   { to: '/tools/inheritance', label: 'Miras Payı', icon: Scale },
   { to: '/tools/sentence', label: 'İnfaz Hesabı', icon: Shield },
-]
-
-const mediationItems = [
-  { to: '/tools/mediation-files', label: 'Dosya Takibi', icon: FolderOpen },
-  { to: '/tools/mediation/dava-sarti', label: 'Dava Şartı Belgeleri', icon: FileText },
-  { to: '/tools/mediation/ihtiyari', label: 'İhtiyari Belgeleri', icon: Handshake },
 ]
 
 function SidebarLink({
@@ -93,6 +84,7 @@ export default function Sidebar({
   open: boolean
   onClose: () => void
 }) {
+  const navigate = useNavigate()
   return (
     <>
       {/* Mobil overlay */}
@@ -113,14 +105,17 @@ export default function Sidebar({
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/[0.03] to-transparent" />
 
         <div className="relative flex items-center justify-between px-5 py-5">
-          <div className="flex items-center gap-3">
+          <button
+            onClick={() => { onClose(); navigate('/dashboard') }}
+            className="flex items-center gap-3 cursor-pointer"
+          >
             <div className="flex h-9 w-9 items-center justify-center rounded-lg border border-law-gold/25 bg-law-gold/15">
               <Gavel className="h-[18px] w-[18px] text-law-gold-light" />
             </div>
             <p className="font-serif text-[15px] font-semibold leading-tight tracking-tight text-sidebar-foreground">
               HukukTakip
             </p>
-          </div>
+          </button>
           {/* Mobil kapat butonu */}
           <button
             onClick={onClose}
@@ -144,13 +139,6 @@ export default function Sidebar({
               Araçlar
             </p>
             {toolItems.map(({ to, label, icon: Icon }) => (
-              <SidebarLink key={to} to={to} label={label} Icon={Icon} onClick={onClose} />
-            ))}
-
-            <p className="mb-1.5 mt-4 px-3 text-[10px] font-semibold uppercase tracking-widest text-sidebar-muted/60">
-              Arabuluculuk Dosyaları
-            </p>
-            {mediationItems.map(({ to, label, icon: Icon }) => (
               <SidebarLink key={to} to={to} label={label} Icon={Icon} onClick={onClose} />
             ))}
           </div>
