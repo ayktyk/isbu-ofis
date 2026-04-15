@@ -135,14 +135,14 @@ if (typeof window !== 'undefined') {
   })
 }
 
-// ─── Kritik sayfalar (ana bundle — login sonrası anında açılır) ──────────────
+// ─── Layout eager (protected route hemen layout'u render eder) ────────────────
 
 import AppLayout from './components/layout/AppLayout'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
 
-// ─── Diğer sayfalar (lazy — gerektiğinde yüklenir) ──────────────────────────
+// ─── Tüm sayfalar lazy — mobilde ilk açılış hızı için ──────────────────────
 
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
 const ClientsPage = lazy(() => import('./pages/ClientsPage'))
 const CasesPage = lazy(() => import('./pages/CasesPage'))
 const CaseDetailPage = lazy(() => import('./pages/CaseDetailPage'))
