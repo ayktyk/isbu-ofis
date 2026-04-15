@@ -1,7 +1,8 @@
-import { Component, lazy, Suspense, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useEffect, type ReactNode } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from './lib/axios'
+import { readCachedUser, writeCachedUser, clearCachedUser } from './lib/authCache'
 
 // ─── Chunk yükleme hatalarını yakalar (mobilde cached eski HTML yeni chunk'ları bulamaz) ──
 
@@ -179,7 +180,10 @@ function PageLoader() {
 // ─── Korumalı route bileşeni ──────────────────────────────────────────────────
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { data: user, isLoading, isError } = useQuery({
+  const queryClient = useQueryClient()
+  const cachedUser = readCachedUser()
+
+  const { data: user, isLoading, isError, isFetched } = useQuery({
     queryKey: ['auth', 'me'],
     queryFn: async () => {
       const res = await api.get('/auth/me')
@@ -187,10 +191,40 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     },
     retry: false,
     staleTime: 1000 * 60 * 5,
+    initialData: cachedUser ?? undefined,
   })
 
-  if (isLoading) return <PageLoader />
-  if (isError || !user) return <Navigate to="/login" replace />
+  useEffect(() => {
+    if (user) writeCachedUser(user)
+  }, [user])
+
+  useEffect(() => {
+    if (isError && !user) {
+      clearCachedUser()
+      queryClient.removeQueries({ queryKey: ['auth', 'me'] })
+    }
+  }, [isError, user, queryClient])
+
+  // Cache varsa dashboard'u ve kritik sayfalari arka planda prefetch et
+  useEffect(() => {
+    if (!cachedUser) return
+    queryClient.prefetchQuery({
+      queryKey: ['dashboard'],
+      queryFn: async () => (await api.get('/dashboard')).data,
+    })
+    // Notification sayisini da pesinen cek
+    queryClient.prefetchQuery({
+      queryKey: ['notifications', { unread: true }],
+      queryFn: async () => (await api.get('/notifications', { params: { unread: true } })).data,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Cache varsa hemen render et (arka planda yenilenir). Yoksa klasik loader.
+  if (!cachedUser && isLoading) return <PageLoader />
+  if (!cachedUser && (isError || !user)) return <Navigate to="/login" replace />
+  // Cache vardi ama sunucu 401/403 donduruyorsa (session expire) logine at.
+  if (cachedUser && isFetched && isError) return <Navigate to="/login" replace />
 
   return <>{children}</>
 }

@@ -6,6 +6,7 @@ import {
   ChevronRight,
   Clock3,
   ListChecks,
+  MessageSquare,
   PhoneCall,
   Scale,
   TrendingUp,
@@ -179,10 +180,18 @@ export default function DashboardPage() {
             <Users className="h-4 w-4 text-law-accent" />
             Yeni Müvekkil
           </button>
+          <button
+            type="button"
+            onClick={() => navigate('/consultations')}
+            className="inline-flex items-center gap-2 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium transition hover:bg-muted/50"
+          >
+            <MessageSquare className="h-4 w-4 text-law-accent" />
+            Yeni Görüşme
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
         <StatCard
           title="Aktif Davalar"
           value={cases?.active ?? 0}
@@ -192,14 +201,8 @@ export default function DashboardPage() {
         <StatCard
           title="Potansiyel Davalar"
           value={cases?.pending ?? 0}
-          description="Pasif veya işlem bekleyen dosyalar"
+          description="Pasif dosyalar + potansiyel görüşmeler"
           icon={Clock3}
-        />
-        <StatCard
-          title="Biten Davalar"
-          value={cases?.finished ?? 0}
-          description="Kazanilan, kaybedilen, uzlasilan ve kapananlar"
-          icon={Scale}
         />
         <StatCard
           title="Bekleyen Görevler"

@@ -12,6 +12,7 @@ const partySchema = z.object({
   address: z.string().max(2000).optional().or(z.literal('')),
   lawyerName: z.string().max(255).optional().or(z.literal('')),
   lawyerBarNo: z.string().max(50).optional().or(z.literal('')),
+  lawyerPhone: z.string().max(20).optional().or(z.literal('')),
 })
 
 export const createMediationFileSchema = z.object({

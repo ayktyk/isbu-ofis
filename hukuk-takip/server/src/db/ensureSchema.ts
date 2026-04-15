@@ -40,6 +40,21 @@ CREATE TABLE IF NOT EXISTS "consultations" (
 CREATE INDEX IF NOT EXISTS "consultations_user_idx" ON "consultations" ("user_id");
 CREATE INDEX IF NOT EXISTS "consultations_date_idx" ON "consultations" ("consultation_date");
 CREATE INDEX IF NOT EXISTS "consultations_status_idx" ON "consultations" ("status");
+
+-- Yeni enum değerleri (veri kaybı yok, sadece ekleme)
+DO $$ BEGIN
+  ALTER TYPE "consultation_status" ADD VALUE IF NOT EXISTS 'potential';
+EXCEPTION WHEN others THEN null;
+END $$;
+
+DO $$ BEGIN
+  ALTER TYPE "consultation_source" ADD VALUE IF NOT EXISTS 'friend';
+EXCEPTION WHEN others THEN null;
+END $$;
+
+-- Yeni kolonlar (idempotent)
+ALTER TABLE "consultations" ADD COLUMN IF NOT EXISTS "source_detail" varchar(255);
+ALTER TABLE "mediation_parties" ADD COLUMN IF NOT EXISTS "lawyer_phone" varchar(20);
 `
 
 export async function ensureSchema() {

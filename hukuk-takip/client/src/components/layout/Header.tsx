@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/axios'
 import { getInitials } from '@/lib/utils'
 import { useUnreadCount } from '@/hooks/useNotifications'
+import { clearCachedUser } from '@/lib/authCache'
 
 export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
   const navigate = useNavigate()
@@ -23,6 +24,7 @@ export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
   const logoutMutation = useMutation({
     mutationFn: () => api.post('/auth/logout'),
     onSuccess: () => {
+      clearCachedUser()
       queryClient.clear()
       navigate('/login')
     },

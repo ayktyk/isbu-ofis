@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/axios'
 import { toast } from 'sonner'
@@ -17,6 +17,9 @@ import {
   Eye,
   EyeOff,
   Trash2,
+  Calendar,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -114,6 +117,32 @@ export default function SettingsPage() {
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('gemini_api_key') || '')
   const [showGeminiKey, setShowGeminiKey] = useState(false)
   const hasGeminiKey = !!localStorage.getItem('gemini_api_key')
+
+  // Google Calendar entegrasyonu
+  const { data: calendarStatus, isLoading: calendarLoading } = useQuery<{
+    configured: boolean
+    calendarLabel: string | null
+    reminderDays: number
+    timeZone: string
+    mode: string
+  }>({
+    queryKey: ['calendar', 'integration'],
+    queryFn: async () => (await api.get('/calendar/integration')).data,
+    staleTime: 60_000,
+  })
+
+  const resyncMutation = useMutation({
+    mutationFn: async () => (await api.post('/calendar/resync')).data,
+    onSuccess: (data) => {
+      toast.success(
+        `Google Calendar güncellendi: ${data.syncedHearings} duruşma, ${data.syncedTasks} görev.` +
+          (data.failedCount ? ` ${data.failedCount} başarısız.` : '')
+      )
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Senkronizasyon başarısız.')
+    },
+  })
 
   // Şifre değiştirme
   const [currentPassword, setCurrentPassword] = useState('')
@@ -345,6 +374,80 @@ export default function SettingsPage() {
             Her istek sırasında anahtarınız sunucuya gönderilir ve işlem sonrası bellekten silinir.
             Sunucudaki .env dosyasında da varsayılan anahtar tanımlıysa, kişisel anahtarınız öncelikli kullanılır.
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Google Calendar Entegrasyonu */}
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Calendar className="h-4 w-4 text-law-accent" />
+            Google Calendar Entegrasyonu
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Duruşma ve görev hatırlatmaları Google Calendar'a otomatik eklenir.
+            Süresi dolmadan {calendarStatus?.reminderDays ?? 3} gün önce popup + e-posta bildirimi gönderilir.
+          </p>
+
+          {calendarLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" /> Durum kontrol ediliyor...
+            </div>
+          ) : calendarStatus?.configured ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between rounded-lg border bg-green-50 p-3 dark:bg-green-950/30">
+                <div className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  <div>
+                    <p className="text-sm font-medium text-green-800 dark:text-green-300">
+                      Bağlı
+                    </p>
+                    <p className="text-xs text-green-700/80 dark:text-green-400/80">
+                      Takvim: {calendarStatus.calendarLabel} · Saat dilimi: {calendarStatus.timeZone}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  onClick={() => resyncMutation.mutate()}
+                  disabled={resyncMutation.isPending}
+                  className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50 cursor-pointer"
+                >
+                  {resyncMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  Tüm Kayıtları Senkronize Et
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+              <div className="flex items-start gap-2">
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="text-xs text-amber-800 dark:text-amber-300">
+                  <p className="font-semibold">Entegrasyon yapılandırılmamış</p>
+                  <p className="mt-1">
+                    Etkinleştirmek için sunucuya aşağıdaki ortam değişkenlerini ekleyin:
+                  </p>
+                  <ul className="ml-4 mt-2 list-disc space-y-0.5 font-mono text-[11px]">
+                    <li>GOOGLE_CALENDAR_ID</li>
+                    <li>GOOGLE_SERVICE_ACCOUNT_EMAIL</li>
+                    <li>GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY</li>
+                  </ul>
+                  <p className="mt-2">
+                    Google Cloud Console → Service Account oluşturun, JSON key indirin,
+                    Calendar API etkinleştirin ve takvimi service account e-postasıyla paylaşın.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

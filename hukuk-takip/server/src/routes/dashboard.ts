@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { and, desc, eq, gte, lte, sql } from 'drizzle-orm'
 import { db } from '../db/index.js'
-import { caseHearings, cases, clients, collections, tasks } from '../db/schema.js'
+import { caseHearings, cases, clients, collections, consultations, tasks } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
 
 const router = Router()
@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
   const now = new Date()
   const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
-  const [caseStats, upcomingHearings, pendingTasks, recentCases, totalCollections, outstandingFees] =
+  const [caseStats, upcomingHearings, pendingTasks, recentCases, totalCollections, outstandingFees, potentialConsultations] =
     await Promise.all([
       db
         .select({
@@ -109,6 +109,11 @@ router.get('/', async (req, res) => {
         .having(sql`${cases.contractedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`)
         .orderBy(sql`${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`)
         .limit(10),
+
+      db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(consultations)
+        .where(and(eq(consultations.userId, userId), eq(consultations.status, 'potential'))),
     ])
 
   const caseCount = {
@@ -138,6 +143,10 @@ router.get('/', async (req, res) => {
       caseCount[stat.status as 'won' | 'lost' | 'settled' | 'closed'] = stat.count
     }
   }
+
+  // Potansiyel görüşmeleri de "potansiyel davalar" sayısına ekle
+  const potentialConsultationCount = potentialConsultations[0]?.count ?? 0
+  caseCount.pending += potentialConsultationCount
 
   res.json({
     cases: caseCount,

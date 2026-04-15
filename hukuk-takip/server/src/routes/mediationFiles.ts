@@ -122,6 +122,7 @@ router.post('/', validate(createMediationFileSchema), async (req: Request, res: 
         address: p.address || null,
         lawyerName: p.lawyerName || null,
         lawyerBarNo: p.lawyerBarNo || null,
+        lawyerPhone: p.lawyerPhone || null,
       }))
     )
   }
@@ -175,6 +176,7 @@ router.put('/:id', validate(updateMediationFileSchema), async (req: Request, res
           address: p.address || null,
           lawyerName: p.lawyerName || null,
           lawyerBarNo: p.lawyerBarNo || null,
+          lawyerPhone: p.lawyerPhone || null,
         }))
       )
     }

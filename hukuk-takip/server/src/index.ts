@@ -7,10 +7,8 @@ import rateLimit from 'express-rate-limit'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import cron from 'node-cron'
-import { db } from './db/index.js'
 import { ensureSchema } from './db/ensureSchema.js'
-import { caseHearings, tasks, notifications, cases } from './db/schema.js'
-import { eq, and, gte, lte } from 'drizzle-orm'
+import { runReminderScan } from './services/notificationScheduler.js'
 import authRouter from './routes/auth.js'
 import clientsRouter from './routes/clients.js'
 import casesRouter from './routes/cases.js'
@@ -35,7 +33,8 @@ const __dirname = path.dirname(__filename)
 
 const app = express()
 const PORT = process.env.PORT || 3001
-const shouldRunScheduledJobs = process.env.ENABLE_SCHEDULED_JOBS === 'true'
+// Varsayilan olarak acik. Kapatmak icin ENABLE_SCHEDULED_JOBS=false yapilabilir.
+const shouldRunScheduledJobs = process.env.ENABLE_SCHEDULED_JOBS !== 'false'
 
 function parseOriginList(value?: string) {
   if (!value) return []
@@ -135,77 +134,41 @@ app.listen(PORT, async () => {
   console.log(`Server calisiyor: http://localhost:${PORT}`)
   console.log(`Ortam: ${process.env.NODE_ENV || 'development'}`)
   await ensureSchema()
-  if (!shouldRunScheduledJobs) {
-    console.log('Zamanlanmis gorevler kapali. ENABLE_SCHEDULED_JOBS=true ile acilabilir.')
+
+  if (shouldRunScheduledJobs) {
+    // Basta bir kez tara (eksik bildirimleri yakalamak icin)
+    try {
+      const result = await runReminderScan()
+      console.log(
+        `Bildirim taramasi (baslangic): ${result.hearings} durusma, ${result.taskCount} gorev eklendi, ${result.skipped} mevcut.`
+      )
+    } catch (err) {
+      console.error('Bildirim taramasi (baslangic) hatasi:', err)
+    }
+  } else {
+    console.log('Zamanlanmis gorevler kapali. ENABLE_SCHEDULED_JOBS kaldirilarak acilabilir.')
   }
 })
 
 if (shouldRunScheduledJobs) {
+  // Her gun 09:00'da tara
   cron.schedule('0 9 * * *', async () => {
     try {
-      const now = new Date()
-      const threeDaysLater = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
-      const threeDaysStart = new Date(threeDaysLater)
-      threeDaysStart.setHours(0, 0, 0, 0)
-      const threeDaysEnd = new Date(threeDaysLater)
-      threeDaysEnd.setHours(23, 59, 59, 999)
-
-      const upcomingHearings = await db
-        .select({
-          id: caseHearings.id,
-          caseId: caseHearings.caseId,
-          hearingDate: caseHearings.hearingDate,
-          caseTitle: cases.title,
-          userId: cases.userId,
-        })
-        .from(caseHearings)
-        .innerJoin(cases, eq(caseHearings.caseId, cases.id))
-        .where(
-          and(
-            gte(caseHearings.hearingDate, threeDaysStart),
-            lte(caseHearings.hearingDate, threeDaysEnd)
-          )
-        )
-
-      for (const hearing of upcomingHearings) {
-        await db.insert(notifications).values({
-          userId: hearing.userId,
-          type: 'hearing',
-          title: 'Duruşma Hatırlatması',
-          message: `"${hearing.caseTitle}" davasi icin 3 gun sonra durusma var.`,
-          relatedId: hearing.caseId,
-          relatedType: 'case',
-          isRead: false,
-        })
-      }
-
-      const upcomingTasks = await db
-        .select()
-        .from(tasks)
-        .where(
-          and(
-            gte(tasks.dueDate, threeDaysStart),
-            lte(tasks.dueDate, threeDaysEnd)
-          )
-        )
-
-      for (const task of upcomingTasks) {
-        await db.insert(notifications).values({
-          userId: task.userId,
-          type: 'task',
-          title: 'Görev Hatırlatması',
-          message: `"${task.title}" gorevi icin son 3 gun kaldi.`,
-          relatedId: task.id,
-          relatedType: 'task',
-          isRead: false,
-        })
-      }
-
+      const result = await runReminderScan()
       console.log(
-        `Bildirim cron calisti: ${upcomingHearings.length} durusma, ${upcomingTasks.length} gorev`
+        `Bildirim cron: ${result.hearings} durusma, ${result.taskCount} gorev eklendi, ${result.skipped} mevcut.`
       )
     } catch (err) {
       console.error('Bildirim cron hatasi:', err)
+    }
+  })
+
+  // Yeni eklenen gorev/durusma icin: her saat basi hizli tara
+  cron.schedule('0 * * * *', async () => {
+    try {
+      await runReminderScan()
+    } catch (err) {
+      console.error('Bildirim saatlik tarama hatasi:', err)
     }
   })
 }

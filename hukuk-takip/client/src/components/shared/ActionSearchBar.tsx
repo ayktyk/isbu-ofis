@@ -8,6 +8,7 @@ import {
   Handshake,
   LayoutDashboard,
   ListChecks,
+  MessageSquare,
   Plus,
   Settings,
   Users,
@@ -30,9 +31,10 @@ interface SearchResults {
   tasks: { id: string; title: string; status: string; priority: string }[]
   hearings: { id: string; caseId: string; hearingDate: string; courtRoom?: string; caseTitle?: string }[]
   mediations: { id: string; fileNo?: string; disputeType: string; disputeSubject?: string; status: string }[]
+  consultations: { id: string; fullName: string; phone?: string; subject?: string; status: string; consultationDate: string }[]
 }
 
-const EMPTY: SearchResults = { clients: [], cases: [], tasks: [], hearings: [], mediations: [] }
+const EMPTY: SearchResults = { clients: [], cases: [], tasks: [], hearings: [], mediations: [], consultations: [] }
 
 export default function ActionSearchBar() {
   const [open, setOpen] = useState(false)
@@ -55,7 +57,7 @@ export default function ActionSearchBar() {
 
   // Debounced search via global /api/search
   useEffect(() => {
-    if (!query || query.trim().length < 2) {
+    if (!query || query.trim().length < 1) {
       setResults(EMPTY)
       return
     }
@@ -70,7 +72,7 @@ export default function ActionSearchBar() {
       } finally {
         setLoading(false)
       }
-    }, 250)
+    }, 200)
 
     return () => clearTimeout(timer)
   }, [query])
@@ -89,7 +91,8 @@ export default function ActionSearchBar() {
     results.cases.length > 0 ||
     results.tasks.length > 0 ||
     results.hearings.length > 0 ||
-    results.mediations.length > 0
+    results.mediations.length > 0 ||
+    results.consultations.length > 0
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
@@ -100,7 +103,7 @@ export default function ActionSearchBar() {
       />
       <CommandList>
         <CommandEmpty>
-          {loading ? 'Aranıyor...' : query.length < 2 ? 'En az 2 karakter yazın.' : 'Sonuç bulunamadı.'}
+          {loading ? 'Aranıyor...' : query.length < 1 ? 'Arama için yazmaya başlayın.' : 'Sonuç bulunamadı.'}
         </CommandEmpty>
 
         {/* Müvekkiller */}
@@ -164,6 +167,23 @@ export default function ActionSearchBar() {
                   <span>{h.caseTitle || 'Duruşma'}</span>
                   <span className="text-xs text-muted-foreground">
                     {new Date(h.hearingDate).toLocaleDateString('tr-TR')}{h.courtRoom ? ` · ${h.courtRoom}` : ''}
+                  </span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* Görüşmeler */}
+        {results.consultations.length > 0 && (
+          <CommandGroup heading="Görüşmeler">
+            {results.consultations.map((c) => (
+              <CommandItem key={`cons-${c.id}`} onSelect={() => runAction('/consultations')}>
+                <MessageSquare className="mr-2 h-4 w-4 text-cyan-500" />
+                <div className="flex flex-col">
+                  <span>{c.fullName}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {c.subject || c.phone || new Date(c.consultationDate).toLocaleDateString('tr-TR')}
                   </span>
                 </div>
               </CommandItem>

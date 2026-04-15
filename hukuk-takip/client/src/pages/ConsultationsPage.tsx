@@ -62,9 +62,10 @@ function formatDateTime(value?: string | null) {
   })
 }
 
-const statusVariant: Record<string, 'success' | 'warning' | 'secondary'> = {
+const statusVariant: Record<string, 'success' | 'warning' | 'secondary' | 'default'> = {
   converted: 'success',
   pending: 'warning',
+  potential: 'default',
   declined: 'secondary',
 }
 
@@ -98,6 +99,7 @@ function EditConsultationForm({
       notes: consultation.notes || '',
       status: consultation.status || 'pending',
       source: consultation.source || '',
+      sourceDetail: consultation.sourceDetail || '',
       referredByClientId: consultation.referredByClientId || '',
       nextActionDate: consultation.nextActionDate
         ? new Date(consultation.nextActionDate).toISOString().split('T')[0]
@@ -193,6 +195,16 @@ function EditConsultationForm({
                 </select>
               </div>
             )}
+            {source === 'other' && (
+              <div>
+                <label className="mb-1 block text-sm font-medium">Kategori (ör. akraba, komşu)</label>
+                <input
+                  {...register('sourceDetail')}
+                  placeholder="Kendi kategorinizi yazın"
+                  className="w-full rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+                />
+              </div>
+            )}
           </div>
 
           <div>
@@ -286,6 +298,7 @@ export default function ConsultationsPage() {
       notes: '',
       status: 'pending',
       source: '',
+      sourceDetail: '',
       referredByClientId: '',
       nextActionDate: '',
     },
@@ -491,6 +504,16 @@ export default function ConsultationsPage() {
                         <option key={c.id} value={c.id}>{c.fullName}</option>
                       ))}
                     </select>
+                  </div>
+                )}
+                {formSource === 'other' && (
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium">Kategori (ör. akraba, komşu)</label>
+                    <input
+                      {...register('sourceDetail')}
+                      placeholder="Kendi kategorinizi yazın"
+                      className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-law-accent"
+                    />
                   </div>
                 )}
               </div>

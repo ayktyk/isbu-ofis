@@ -81,6 +81,7 @@ export const consultationTypeEnum = pgEnum('consultation_type', ['phone', 'in_pe
 
 export const consultationStatusEnum = pgEnum('consultation_status', [
   'pending',    // bekliyor
+  'potential',  // potansiyel müvekkil
   'converted',  // müvekkil oldu
   'declined',   // ilgilenmedi
 ])
@@ -88,6 +89,7 @@ export const consultationStatusEnum = pgEnum('consultation_status', [
 export const consultationSourceEnum = pgEnum('consultation_source', [
   'client_referral', // müvekkil tavsiyesi
   'past_client',     // eski müvekkil (kendisi)
+  'friend',          // arkadaş
   'google',
   'website',
   'other',
@@ -381,6 +383,7 @@ export const mediationParties = pgTable(
     address: text('address'),
     lawyerName: varchar('lawyer_name', { length: 255 }),
     lawyerBarNo: varchar('lawyer_bar_no', { length: 50 }),
+    lawyerPhone: varchar('lawyer_phone', { length: 20 }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => ({
@@ -403,6 +406,7 @@ export const consultations = pgTable(
     notes: text('notes'),
     status: consultationStatusEnum('status').default('pending').notNull(),
     source: consultationSourceEnum('source'),
+    sourceDetail: varchar('source_detail', { length: 255 }),
     referredByClientId: uuid('referred_by_client_id').references(() => clients.id, {
       onDelete: 'set null',
     }),
@@ -429,3 +433,4 @@ export type MediationFile = typeof mediationFiles.$inferSelect
 export type NewMediationFile = typeof mediationFiles.$inferInsert
 export type MediationParty = typeof mediationParties.$inferSelect
 export type NewMediationParty = typeof mediationParties.$inferInsert
+

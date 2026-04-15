@@ -21,6 +21,7 @@
     "drizzle-orm": "^0.44.2",
     "express": "^5.0.1",
     "express-rate-limit": "^7.5.0",
+    "googleapis": "^171.4.0",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",

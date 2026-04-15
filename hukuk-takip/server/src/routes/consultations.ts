@@ -39,6 +39,7 @@ router.get('/', async (req: Request, res: Response) => {
       notes: consultations.notes,
       status: consultations.status,
       source: consultations.source,
+      sourceDetail: consultations.sourceDetail,
       referredByClientId: consultations.referredByClientId,
       referredByClientName: clients.fullName,
       nextActionDate: consultations.nextActionDate,
@@ -74,7 +75,7 @@ router.get('/stats', async (req: Request, res: Response) => {
   const todayEnd = new Date(now)
   todayEnd.setHours(23, 59, 59, 999)
 
-  const [todayCount, weekCount, monthCount, monthConverted] = await Promise.all([
+  const [todayCount, weekCount, monthCount, monthConverted, potentialCount] = await Promise.all([
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(consultations)
@@ -113,12 +114,22 @@ router.get('/stats', async (req: Request, res: Response) => {
           gte(consultations.consultationDate, monthStart)
         )
       ),
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(consultations)
+      .where(
+        and(
+          eq(consultations.userId, userId),
+          eq(consultations.status, 'potential')
+        )
+      ),
   ])
 
   const today = todayCount[0]?.count || 0
   const week = weekCount[0]?.count || 0
   const month = monthCount[0]?.count || 0
   const converted = monthConverted[0]?.count || 0
+  const potential = potentialCount[0]?.count || 0
   const conversionRate = month > 0 ? Math.round((converted / month) * 100) : 0
 
   res.json({
@@ -126,6 +137,7 @@ router.get('/stats', async (req: Request, res: Response) => {
     week,
     month,
     converted,
+    potential,
     conversionRate,
     weeklyGoal: 5,
     monthlyGoal: 20,
@@ -141,6 +153,7 @@ router.post('/', validate(createConsultationSchema), async (req: Request, res: R
     nextActionDate,
     referredByClientId,
     source,
+    sourceDetail,
     phone,
     subject,
     notes,
@@ -156,6 +169,7 @@ router.post('/', validate(createConsultationSchema), async (req: Request, res: R
       nextActionDate: nextActionDate || null,
       referredByClientId: referredByClientId || null,
       source: source || null,
+      sourceDetail: sourceDetail || null,
       phone: phone || null,
       subject: subject || null,
       notes: notes || null,
@@ -179,6 +193,7 @@ router.put('/:id', validate(updateConsultationSchema), async (req: Request, res:
   if (req.body.nextActionDate === '') updateData.nextActionDate = null
   if (req.body.referredByClientId === '') updateData.referredByClientId = null
   if (req.body.source === '') updateData.source = null
+  if (req.body.sourceDetail === '') updateData.sourceDetail = null
 
   const [updated] = await db
     .update(consultations)

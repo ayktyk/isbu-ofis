@@ -91,8 +91,8 @@ export default function MediationFilesPage() {
       endDate: '',
       notes: '',
       parties: [
-        { side: 'applicant', fullName: '', tcNo: '', phone: '', email: '', address: '', lawyerName: '', lawyerBarNo: '' },
-        { side: 'respondent', fullName: '', tcNo: '', phone: '', email: '', address: '', lawyerName: '', lawyerBarNo: '' },
+        { side: 'applicant', fullName: '', tcNo: '', phone: '', email: '', address: '', lawyerName: '', lawyerBarNo: '', lawyerPhone: '' },
+        { side: 'respondent', fullName: '', tcNo: '', phone: '', email: '', address: '', lawyerName: '', lawyerBarNo: '', lawyerPhone: '' },
       ],
     },
   })
@@ -210,6 +210,7 @@ export default function MediationFilesPage() {
                         address: '',
                         lawyerName: '',
                         lawyerBarNo: '',
+                        lawyerPhone: '',
                       })
                     }
                     className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium text-muted-foreground transition hover:bg-muted hover:text-foreground"
@@ -284,6 +285,11 @@ export default function MediationFilesPage() {
                         <input
                           {...register(`parties.${index}.lawyerBarNo`)}
                           placeholder="Baro Sicil No"
+                          className="rounded-lg border px-3 py-2 text-sm outline-none focus:border-law-accent"
+                        />
+                        <input
+                          {...register(`parties.${index}.lawyerPhone`)}
+                          placeholder="Vekil Telefonu"
                           className="rounded-lg border px-3 py-2 text-sm outline-none focus:border-law-accent"
                         />
                       </div>
@@ -547,6 +553,7 @@ function PartyCard({ party }: { party: any }) {
         <p className="mt-1 text-xs text-muted-foreground">
           Vekil: {party.lawyerName}
           {party.lawyerBarNo ? ` (${party.lawyerBarNo})` : ''}
+          {party.lawyerPhone ? ` — Tel: ${party.lawyerPhone}` : ''}
         </p>
       )}
       {party.address && (
