@@ -1,5 +1,6 @@
-import type { ElementType } from 'react'
+import { useCallback, type ElementType } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import {
   BarChart3,
   Bell,
@@ -18,21 +19,29 @@ import {
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { api } from '@/lib/axios'
 
-const navItems = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { to: '/clients', label: 'Müvekkiller', icon: Users },
-  { to: '/cases', label: 'Davalar', icon: Briefcase },
+// Her menu ogesi icin: route + opsiyonel prefetch meta (hangi query + URL on yuklenecek).
+// Hover/touch aninda veri on cekilerek sekme gecisinde beklemeyi sifira yaklastiririz.
+const navItems: Array<{
+  to: string
+  label: string
+  icon: ElementType
+  prefetch?: { queryKey: unknown[]; url: string }
+}> = [
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, prefetch: { queryKey: ['dashboard'], url: '/dashboard' } },
+  { to: '/clients', label: 'Müvekkiller', icon: Users, prefetch: { queryKey: ['clients', undefined], url: '/clients' } },
+  { to: '/cases', label: 'Davalar', icon: Briefcase, prefetch: { queryKey: ['cases', undefined], url: '/cases' } },
   { to: '/tools/mediation-files', label: 'Arabuluculuk Dosyaları', icon: FolderOpen },
-  { to: '/hearings', label: 'Duruşmalar', icon: Gavel },
-  { to: '/tasks', label: 'Görevler', icon: CheckSquare },
-  { to: '/consultations', label: 'Görüşmeler', icon: PhoneCall },
-  { to: '/calendar', label: 'Takvim', icon: Calendar },
-  { to: '/notifications', label: 'Bildirimler', icon: Bell },
-  { to: '/statistics', label: 'İstatistikler', icon: BarChart3 },
+  { to: '/hearings', label: 'Duruşmalar', icon: Gavel, prefetch: { queryKey: ['hearings', undefined], url: '/hearings' } },
+  { to: '/tasks', label: 'Görevler', icon: CheckSquare, prefetch: { queryKey: ['tasks', undefined], url: '/tasks' } },
+  { to: '/consultations', label: 'Görüşmeler', icon: PhoneCall, prefetch: { queryKey: ['consultations'], url: '/consultations' } },
+  { to: '/calendar', label: 'Takvim', icon: Calendar, prefetch: { queryKey: ['calendar', undefined], url: '/calendar' } },
+  { to: '/notifications', label: 'Bildirimler', icon: Bell, prefetch: { queryKey: ['notifications', undefined], url: '/notifications' } },
+  { to: '/statistics', label: 'İstatistikler', icon: BarChart3, prefetch: { queryKey: ['statistics'], url: '/statistics' } },
 ]
 
-const toolItems = [
+const toolItems: Array<{ to: string; label: string; icon: ElementType }> = [
   { to: '/tools/calculations', label: 'Hesaplamalar', icon: Calculator },
   { to: '/tools/inheritance', label: 'Miras Payı', icon: Scale },
   { to: '/tools/sentence', label: 'İnfaz Hesabı', icon: Shield },
@@ -43,16 +52,21 @@ function SidebarLink({
   label,
   Icon,
   onClick,
+  onPrefetch,
 }: {
   to: string
   label: string
   Icon: ElementType
   onClick?: () => void
+  onPrefetch?: () => void
 }) {
   return (
     <NavLink
       to={to}
       onClick={onClick}
+      onMouseEnter={onPrefetch}
+      onFocus={onPrefetch}
+      onTouchStart={onPrefetch}
       className={({ isActive }) =>
         cn(
           'group flex items-center gap-3 rounded-lg px-3 py-2 text-[13px] font-medium transition-all duration-200',
@@ -87,6 +101,18 @@ export default function Sidebar({
   onClose: () => void
 }) {
   const navigate = useNavigate()
+  const qc = useQueryClient()
+  const prefetch = useCallback(
+    (meta?: { queryKey: unknown[]; url: string }) => {
+      if (!meta) return
+      qc.prefetchQuery({
+        queryKey: meta.queryKey,
+        queryFn: async () => (await api.get(meta.url)).data,
+        staleTime: 1000 * 60 * 5,
+      })
+    },
+    [qc]
+  )
   return (
     <>
       {/* Mobil overlay */}
@@ -129,8 +155,15 @@ export default function Sidebar({
         <div className="mx-5 h-px bg-gradient-to-r from-law-gold/30 via-law-gold/10 to-transparent" />
 
         <nav className="relative flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-          {navItems.map(({ to, label, icon: Icon }) => (
-            <SidebarLink key={to} to={to} label={label} Icon={Icon} onClick={onClose} />
+          {navItems.map((item) => (
+            <SidebarLink
+              key={item.to}
+              to={item.to}
+              label={item.label}
+              Icon={item.icon}
+              onClick={onClose}
+              onPrefetch={item.prefetch ? () => prefetch(item.prefetch) : undefined}
+            />
           ))}
 
           <div className="mt-3 pt-3">

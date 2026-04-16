@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, Suspense } from 'react'
 import { Outlet } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import Sidebar from './Sidebar'
 import Header from './Header'
 import MobileBottomNav from './MobileBottomNav'
 import ActionSearchBar from '@/components/shared/ActionSearchBar'
+import { InlinePageLoader } from '@/App'
 import { api } from '@/lib/axios'
 
 // iOS Safari requestIdleCallback desteklemiyor — setTimeout fallback
@@ -53,6 +54,41 @@ function usePrefetchCoreData() {
   }, [qc])
 }
 
+// Render Free plan bosta kalinca servis uyur (30-60sn soguk kalkis).
+// Kullanici sekmesi acikken her 14 dakikada /api/health pingle — uyku olmasin.
+// Sekmesi gizliyken ping etmez (gereksiz trafik/batarya).
+function useBackendKeepWarm() {
+  useEffect(() => {
+    let stopped = false
+
+    const ping = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') return
+      // fire-and-forget — hata olsa sessiz gec
+      api.get('/health', { timeout: 8000 }).catch(() => {})
+    }
+
+    // Sayfa yuklendiginde hemen bir warmup pingi at (API cache persisted ama
+    // backend uykuda olabilir; arka planda uyandir).
+    ping()
+
+    const interval = setInterval(() => {
+      if (!stopped) ping()
+    }, 14 * 60 * 1000) // 14 dakika
+
+    // Sayfa gizlenip tekrar gorunur oldugunda pingle (RAM'den donuste backend soguk olabilir)
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') ping()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+
+    return () => {
+      stopped = true
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [])
+}
+
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -60,6 +96,7 @@ export default function AppLayout() {
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
 
   usePrefetchCoreData()
+  useBackendKeepWarm()
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -67,7 +104,11 @@ export default function AppLayout() {
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onMenuToggle={toggleSidebar} />
         <main className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-20 sm:p-4 md:p-6 md:pb-6">
-          <Outlet />
+          {/* Ic Suspense: sekme degistiginde layout kalir, yalnizca icerik
+              alani skeleton gosterir — bos/titrek ekran olmaz. */}
+          <Suspense fallback={<InlinePageLoader />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
       <MobileBottomNav />

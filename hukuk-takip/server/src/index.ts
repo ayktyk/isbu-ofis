@@ -140,7 +140,7 @@ app.listen(PORT, async () => {
     try {
       const result = await runReminderScan()
       console.log(
-        `Bildirim taramasi (baslangic): ${result.hearings} durusma, ${result.taskCount} gorev eklendi, ${result.skipped} mevcut.`
+        `Bildirim taramasi (baslangic): ${result.upcomingHearings} yaklasan durusma, ${result.upcomingTasks} yaklasan gorev, ${result.overdueHearings} geciken durusma, ${result.overdueTasks} geciken gorev eklendi, ${result.skipped} mevcut.`
       )
     } catch (err) {
       console.error('Bildirim taramasi (baslangic) hatasi:', err)
@@ -156,19 +156,19 @@ if (shouldRunScheduledJobs) {
     try {
       const result = await runReminderScan()
       console.log(
-        `Bildirim cron: ${result.hearings} durusma, ${result.taskCount} gorev eklendi, ${result.skipped} mevcut.`
+        `Bildirim cron: ${result.upcomingHearings}+${result.upcomingTasks} yaklasan, ${result.overdueHearings}+${result.overdueTasks} geciken eklendi, ${result.skipped} mevcut.`
       )
     } catch (err) {
       console.error('Bildirim cron hatasi:', err)
     }
   })
 
-  // Yeni eklenen gorev/durusma icin: her saat basi hizli tara
-  cron.schedule('0 * * * *', async () => {
+  // Yeni eklenen gorev/durusma icin: her 15 dakikada bir hizli tara
+  cron.schedule('*/15 * * * *', async () => {
     try {
       await runReminderScan()
     } catch (err) {
-      console.error('Bildirim saatlik tarama hatasi:', err)
+      console.error('Bildirim 15dk tarama hatasi:', err)
     }
   })
 }

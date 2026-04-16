@@ -116,9 +116,12 @@ router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Respons
     }
   }
 
-  const updateData: Record<string, unknown> = { ...req.body, updatedAt: new Date() }
+  const { dueDate, caseId, label, ...rest } = req.body
+  const updateData: Record<string, unknown> = { ...rest, updatedAt: new Date() }
 
-  if (req.body.dueDate) updateData.dueDate = new Date(req.body.dueDate)
+  if ('caseId' in req.body) updateData.caseId = caseId || null
+  if ('label' in req.body) updateData.label = label || null
+  if ('dueDate' in req.body) updateData.dueDate = dueDate ? new Date(dueDate) : null
   if (req.body.status === 'completed') updateData.completedAt = new Date()
   if (req.body.status && req.body.status !== 'completed') updateData.completedAt = null
 

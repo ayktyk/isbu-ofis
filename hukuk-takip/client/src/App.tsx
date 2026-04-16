@@ -177,6 +177,21 @@ function PageLoader() {
   )
 }
 
+// Layout icinde sekme degistiginde tam ekran flash olmasin diye ince skeleton.
+export function InlinePageLoader() {
+  return (
+    <div className="space-y-4 p-1">
+      <div className="h-8 w-48 animate-pulse rounded bg-muted" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-24 animate-pulse rounded-xl bg-muted" />
+        ))}
+      </div>
+      <div className="h-64 animate-pulse rounded-xl bg-muted" />
+    </div>
+  )
+}
+
 // ─── Korumalı route bileşeni ──────────────────────────────────────────────────
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
