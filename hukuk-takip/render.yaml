@@ -11,5 +11,8 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      # Cron Render Free'de garantili değil (uykuya dalar). Asıl mekanizma
+      # on-demand scan (notifications + dashboard endpoint'lerinde). Cron açık
+      # kalır ki servis uyanıkken ek sigorta olsun.
       - key: ENABLE_SCHEDULED_JOBS
-        value: "false"
+        value: "true"

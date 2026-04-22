@@ -11,9 +11,19 @@ import {
   tasks,
 } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
+import { ensureRecentReminderScan } from '../services/notificationScheduler.js'
 
 const router = Router()
 router.use(authenticate)
+
+// Dashboard/summary çağrılarında arka planda reminder scan tetikle (fire-and-forget).
+// Cron güvenilmezse bile kullanıcının her dashboard ziyareti bildirimleri güncel tutar.
+function triggerReminderScanInBackground() {
+  const scan = ensureRecentReminderScan(false)
+  if (scan) {
+    scan.catch(() => {}) // Logging scheduler içinde; dashboard'u bloklama
+  }
+}
 
 // Owner'ın tahsilat toplamını tutar: hem dava bazlı (collections.user_id ya da case.user_id)
 // hem arabuluculuk bazlı (mediation.user_id) tahsilatları toplar.
@@ -25,6 +35,7 @@ const userOwnedCollectionsClause = (userId: string) =>
   )`
 
 router.get('/', async (req, res) => {
+  triggerReminderScanInBackground()
   const userId = req.user!.userId
   const now = new Date()
   const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -242,6 +253,7 @@ router.get('/', async (req, res) => {
 // DashboardPage'in 3 ayrı query yerine bunu kullanması performans için.
 
 router.get('/summary', async (req, res) => {
+  triggerReminderScanInBackground()
   const userId = req.user!.userId
   const now = new Date()
   const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)

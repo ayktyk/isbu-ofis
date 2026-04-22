@@ -4,14 +4,30 @@ import { db } from '../db/index.js'
 import { notifications } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
 import { getSingleValue } from '../utils/request.js'
+import {
+  ensureRecentReminderScan,
+  getLastReminderScanAt,
+} from '../services/notificationScheduler.js'
 
 const router = Router()
 router.use(authenticate)
 
 // ─── GET /api/notifications ─────────────────────────────────────────────────
+// Render Free cron garantili değil — her istekte 10 dk cooldown'lı scan
+// tetikleyip DB'yi güncel tutarız. İlk istek bekler (yeni bildirimleri görsün),
+// cooldown içindeyse skip.
 
 router.get('/', async (req, res) => {
   const unread = getSingleValue(req.query.unread)
+
+  // Fresh scan gerekirse çalıştır. Cooldown içindeyse null döner, skip.
+  // Scan başarısız olursa bildirim listesi yine döner (scan tek başına fatal değil).
+  try {
+    const scan = ensureRecentReminderScan(false)
+    if (scan) await scan
+  } catch (err) {
+    // Loglandı, devam
+  }
 
   const conditions = [eq(notifications.userId, req.user!.userId)]
 
@@ -26,6 +42,31 @@ router.get('/', async (req, res) => {
     .orderBy(desc(notifications.createdAt))
 
   res.json(data)
+})
+
+// ─── POST /api/notifications/scan ────────────────────────────────────────────
+// Manuel tarama tetikleyici. force=1 ile cooldown ezilebilir.
+// Client "şimdi kontrol et" butonu veya dashboard açılışı bunu kullanır.
+
+router.post('/scan', async (req, res) => {
+  const force = getSingleValue(req.query.force) === '1'
+  const scan = ensureRecentReminderScan(force)
+
+  if (!scan) {
+    res.json({
+      skipped: true,
+      lastScanAt: getLastReminderScanAt(),
+      message: 'Son tarama yakın zamandaydı, atlandı.',
+    })
+    return
+  }
+
+  try {
+    const result = await scan
+    res.json({ skipped: false, result, lastScanAt: getLastReminderScanAt() })
+  } catch (err) {
+    res.status(500).json({ error: 'Tarama başarısız', details: String(err) })
+  }
 })
 
 // ─── PATCH /api/notifications/read-all ──────────────────────────────────────

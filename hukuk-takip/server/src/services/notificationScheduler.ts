@@ -10,6 +10,46 @@ type ScanResult = {
   skipped: number
 }
 
+// ─── On-demand scan cooldown & single-flight ─────────────────────────────────
+// Render Free + Vercel gibi ortamlarda cron güvenilir olmadığı için kullanıcı
+// bildirim/dashboard endpoint'lerini çağırdığında arka planda scan tetikleriz.
+// Concurrent çağrıları tek bir promise'a bağlar, 10 dakikadan yeni bir scan
+// varsa yeniden çalıştırmaz.
+
+const MIN_SCAN_INTERVAL_MS = 10 * 60 * 1000 // 10 dakika
+let lastScanAt = 0
+let inFlight: Promise<ScanResult> | null = null
+
+// Cooldown dahilinde skip eder; aksi halde scan'i tetikler ve sonucunu döndürür.
+// İsteyen caller await eder, istemeyen fire-and-forget kullanır.
+export function ensureRecentReminderScan(force = false): Promise<ScanResult> | null {
+  const now = Date.now()
+  if (!force && lastScanAt && now - lastScanAt < MIN_SCAN_INTERVAL_MS) {
+    return null // Yakın zamanda tarandı, yeniden tarama yok
+  }
+  if (inFlight) return inFlight
+
+  inFlight = runReminderScan()
+    .then((result) => {
+      lastScanAt = Date.now()
+      return result
+    })
+    .catch((err) => {
+      console.error('ensureRecentReminderScan hata:', err)
+      // Hata olsa da inFlight temizle ki bir sonraki deneme yapılabilsin
+      throw err
+    })
+    .finally(() => {
+      inFlight = null
+    })
+
+  return inFlight
+}
+
+export function getLastReminderScanAt(): number {
+  return lastScanAt
+}
+
 
 function startOfDay(date: Date) {
   const copy = new Date(date)
