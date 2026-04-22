@@ -7,6 +7,7 @@ import {
   getCalendarIntegrationStatus,
   syncHearingToGoogleCalendar,
   syncTaskToGoogleCalendar,
+  runCalendarDiagnostic,
 } from '../utils/googleCalendar.js'
 
 const router = Router()
@@ -14,6 +15,14 @@ router.use(authenticate)
 
 router.get('/integration', (_req: Request, res: Response) => {
   res.json(getCalendarIntegrationStatus())
+})
+
+// Aşamalı teşhis: config → token → calendar erişim → event yazma/silme.
+// Her adım success/error detayı döner. Bağlantı problemi olduğunda hangi
+// adımda ne mesaj aldığı hemen görülür.
+router.get('/debug', async (_req: Request, res: Response) => {
+  const result = await runCalendarDiagnostic()
+  res.json(result)
 })
 
 router.post('/resync', async (req: Request, res: Response) => {

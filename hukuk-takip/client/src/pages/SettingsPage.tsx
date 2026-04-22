@@ -131,6 +131,8 @@ export default function SettingsPage() {
     staleTime: 60_000,
   })
 
+  const [calendarDebug, setCalendarDebug] = useState<any | null>(null)
+
   const resyncMutation = useMutation({
     mutationFn: async () => (await api.post('/calendar/resync')).data,
     onSuccess: (data) => {
@@ -149,11 +151,31 @@ export default function SettingsPage() {
           `Google Calendar güncellendi: ${data.syncedHearings} duruşma, ${data.syncedTasks} görev.`
         )
       }
+      // Her resync sonrası otomatik debug çalıştır ki hataları anında görsün
+      if (data.failedCount > 0) {
+        runDebug()
+      }
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || 'Senkronizasyon başarısız.')
     },
   })
+
+  const debugMutation = useMutation({
+    mutationFn: async () => (await api.get('/calendar/debug')).data,
+    onSuccess: (data) => {
+      setCalendarDebug(data)
+      if (data.ok) toast.success('Bağlantı testi başarılı.')
+      else toast.error('Bağlantı testi: bazı adımlar başarısız. Detaylar aşağıda.')
+    },
+    onError: (err: any) => {
+      toast.error(err?.response?.data?.error || 'Test başarısız.')
+    },
+  })
+
+  function runDebug() {
+    debugMutation.mutate()
+  }
 
   // Şifre değiştirme
   const [currentPassword, setCurrentPassword] = useState('')
@@ -422,7 +444,19 @@ export default function SettingsPage() {
                 </div>
               </div>
 
-              <div className="flex justify-end">
+              <div className="flex flex-wrap justify-end gap-2">
+                <button
+                  onClick={runDebug}
+                  disabled={debugMutation.isPending}
+                  className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-50 cursor-pointer"
+                >
+                  {debugMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4" />
+                  )}
+                  Bağlantıyı Test Et
+                </button>
                 <button
                   onClick={() => resyncMutation.mutate()}
                   disabled={resyncMutation.isPending}
@@ -436,6 +470,62 @@ export default function SettingsPage() {
                   Tüm Kayıtları Senkronize Et
                 </button>
               </div>
+
+              {/* Debug sonucu — her adımın durumu */}
+              {calendarDebug && (
+                <div
+                  className={`rounded-lg border p-3 text-xs ${
+                    calendarDebug.ok
+                      ? 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30'
+                      : 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30'
+                  }`}
+                >
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="font-semibold">
+                      Bağlantı Testi:{' '}
+                      {calendarDebug.ok ? (
+                        <span className="text-green-700 dark:text-green-400">BAŞARILI</span>
+                      ) : (
+                        <span className="text-red-700 dark:text-red-400">BAŞARISIZ</span>
+                      )}
+                    </p>
+                    <button
+                      onClick={() => setCalendarDebug(null)}
+                      className="text-[11px] text-muted-foreground hover:underline"
+                    >
+                      Kapat
+                    </button>
+                  </div>
+                  <ol className="space-y-2">
+                    {(calendarDebug.steps || []).map((step: any, i: number) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span
+                          className={`mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${
+                            step.ok ? 'bg-green-600' : 'bg-red-600'
+                          }`}
+                        >
+                          {step.ok ? '✓' : '✗'}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-mono text-[11px] font-semibold">
+                            {i + 1}. {step.name}
+                          </p>
+                          {step.detail && (
+                            <p className="mt-0.5 whitespace-pre-wrap break-all text-[11px] text-muted-foreground">
+                              {step.detail}
+                            </p>
+                          )}
+                          {step.error && (
+                            <p className="mt-0.5 whitespace-pre-wrap break-all rounded bg-red-100 p-1.5 font-mono text-[11px] text-red-800 dark:bg-red-900/40 dark:text-red-300">
+                              {step.error}
+                            </p>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              )}
             </div>
           ) : (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">

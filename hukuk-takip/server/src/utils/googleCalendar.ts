@@ -396,3 +396,176 @@ export async function deleteTaskFromGoogleCalendar(taskId: string) {
 export async function deleteHearingFromGoogleCalendar(hearingId: string) {
   return deleteCalendarEvent('hearing', hearingId)
 }
+
+// Aşamalı teşhis — her adımda ne oldu / ne hata alındı raporla.
+// Settings sayfasındaki "Bağlantıyı Test Et" butonu bunu çağırır.
+export async function runCalendarDiagnostic() {
+  type Step = {
+    name: string
+    ok: boolean
+    detail?: string
+    error?: string
+  }
+  const steps: Step[] = []
+  const startedAt = new Date().toISOString()
+
+  // 1) Config kontrolü
+  const config = getCalendarConfig()
+  if (!config) {
+    steps.push({
+      name: 'config',
+      ok: false,
+      error:
+        'Ortam değişkenleri eksik: GOOGLE_CALENDAR_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY',
+    })
+    return { startedAt, ok: false, steps }
+  }
+
+  const privateKeyRaw = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || ''
+  const keyDiagnostic = {
+    hasBegin: /BEGIN PRIVATE KEY/.test(privateKeyRaw) || /BEGIN PRIVATE KEY/.test(config.privateKey),
+    hasEnd: /END PRIVATE KEY/.test(privateKeyRaw) || /END PRIVATE KEY/.test(config.privateKey),
+    containsLiteralBackslashN: privateKeyRaw.includes('\\n'),
+    containsRealNewline: config.privateKey.includes('\n'),
+    rawLength: privateKeyRaw.length,
+    normalizedLength: config.privateKey.length,
+  }
+  steps.push({
+    name: 'config',
+    ok: true,
+    detail: `calendarId=${config.calendarId}, sa=${config.clientEmail}, key: begin=${keyDiagnostic.hasBegin} end=${keyDiagnostic.hasEnd} newlines=${keyDiagnostic.containsRealNewline} (rawLen=${keyDiagnostic.rawLength}, normLen=${keyDiagnostic.normalizedLength})`,
+  })
+
+  // 2) Access token
+  let accessToken: string | null = null
+  try {
+    accessToken = await getGoogleAccessToken()
+    if (!accessToken) {
+      steps.push({ name: 'token', ok: false, error: 'Access token null döndü' })
+      return { startedAt, ok: false, steps }
+    }
+    steps.push({
+      name: 'token',
+      ok: true,
+      detail: `Access token alındı (${accessToken.slice(0, 12)}... uzunluk=${accessToken.length})`,
+    })
+  } catch (err) {
+    steps.push({ name: 'token', ok: false, error: err instanceof Error ? err.message : String(err) })
+    return { startedAt, ok: false, steps }
+  }
+
+  // 3) Calendar erişimi (GET metadata)
+  try {
+    const calResp = await fetch(
+      `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(config.calendarId)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    )
+    if (!calResp.ok) {
+      const body = await calResp.text()
+      steps.push({
+        name: 'calendar_access',
+        ok: false,
+        error: `${calResp.status} ${calResp.statusText}: ${body}`,
+      })
+      return { startedAt, ok: false, steps }
+    }
+    const cal = (await calResp.json()) as { summary?: string; timeZone?: string }
+    steps.push({
+      name: 'calendar_access',
+      ok: true,
+      detail: `Takvim okundu: "${cal.summary}" (${cal.timeZone})`,
+    })
+  } catch (err) {
+    steps.push({
+      name: 'calendar_access',
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return { startedAt, ok: false, steps }
+  }
+
+  // 4) Test event oluştur
+  const testPayload: CalendarEventPayload = {
+    summary: 'Isbu Ofis - Bağlantı testi',
+    description: 'Bu olay teşhis amaçlıdır ve hemen silinecektir.',
+    start: { dateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), timeZone: config.timeZone },
+    end: { dateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000 + 30 * 60 * 1000).toISOString(), timeZone: config.timeZone },
+    reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 10 }] },
+    extendedProperties: {
+      private: {
+        appSource: 'isbu-ofis',
+        appEntity: `diagnostic:${Date.now()}`,
+      },
+    },
+  }
+
+  let testEventId: string | null = null
+  try {
+    const createResp = await fetch(
+      `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(config.calendarId)}/events`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(testPayload),
+      }
+    )
+    if (!createResp.ok) {
+      const body = await createResp.text()
+      steps.push({
+        name: 'event_create',
+        ok: false,
+        error: `${createResp.status} ${createResp.statusText}: ${body}`,
+      })
+      return { startedAt, ok: false, steps }
+    }
+    const created = (await createResp.json()) as { id?: string; htmlLink?: string }
+    testEventId = created.id || null
+    steps.push({
+      name: 'event_create',
+      ok: true,
+      detail: `Test etkinliği oluşturuldu: id=${testEventId}`,
+    })
+  } catch (err) {
+    steps.push({
+      name: 'event_create',
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    })
+    return { startedAt, ok: false, steps }
+  }
+
+  // 5) Test event sil (temizlik)
+  if (testEventId) {
+    try {
+      const delResp = await fetch(
+        `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(config.calendarId)}/events/${encodeURIComponent(testEventId)}`,
+        {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      )
+      if (!delResp.ok && delResp.status !== 410) {
+        const body = await delResp.text()
+        steps.push({
+          name: 'event_delete',
+          ok: false,
+          error: `${delResp.status}: ${body}`,
+        })
+      } else {
+        steps.push({ name: 'event_delete', ok: true, detail: 'Test etkinliği silindi' })
+      }
+    } catch (err) {
+      steps.push({
+        name: 'event_delete',
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
+  }
+
+  const allOk = steps.every((s) => s.ok)
+  return { startedAt, ok: allOk, steps }
+}
