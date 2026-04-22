@@ -69,9 +69,20 @@ router.post('/resync', async (req: Request, res: Response) => {
       )
     )
 
-  const failures: string[] = []
+  type FailureDetail = {
+    type: 'task' | 'hearing'
+    id: string
+    title: string | null
+    error: string
+  }
+  const failures: FailureDetail[] = []
   let syncedTasks = 0
   let syncedHearings = 0
+
+  function formatError(error: unknown): string {
+    if (error instanceof Error) return error.message
+    return String(error)
+  }
 
   for (const task of taskRows) {
     try {
@@ -86,7 +97,12 @@ router.post('/resync', async (req: Request, res: Response) => {
       })
       syncedTasks += 1
     } catch (error) {
-      failures.push(`task:${task.id}`)
+      failures.push({
+        type: 'task',
+        id: task.id,
+        title: task.title,
+        error: formatError(error),
+      })
       console.error('[GoogleCalendar] Task resync failed', task.id, error)
     }
   }
@@ -107,10 +123,28 @@ router.post('/resync', async (req: Request, res: Response) => {
       })
       syncedHearings += 1
     } catch (error) {
-      failures.push(`hearing:${hearing.id}`)
+      failures.push({
+        type: 'hearing',
+        id: hearing.id,
+        title: hearing.caseTitle,
+        error: formatError(error),
+      })
       console.error('[GoogleCalendar] Hearing resync failed', hearing.id, error)
     }
   }
+
+  // İlk failure'dan özet hata mesajı üret — UI'da gösterilecek.
+  // Tekrar eden 403/401 hataları büyük ihtimalle paylaşım/yetki sorunudur.
+  const firstError = failures[0]?.error || null
+  const hint = firstError
+    ? firstError.includes('403')
+      ? 'Servis hesabı takvime yazamıyor. Google Calendar\'da takvimi service account e-postasıyla "Etkinlikleri değiştir" yetkisiyle paylaşmanız gerekiyor.'
+      : firstError.includes('401')
+        ? 'Yetkilendirme hatası. GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY veya EMAIL değerlerini kontrol edin.'
+        : firstError.includes('404')
+          ? 'Takvim bulunamadı. GOOGLE_CALENDAR_ID doğru mu?'
+          : null
+    : null
 
   res.json({
     configured: true,
@@ -118,6 +152,8 @@ router.post('/resync', async (req: Request, res: Response) => {
     syncedHearings,
     failedCount: failures.length,
     failures,
+    firstError,
+    hint,
   })
 })
 

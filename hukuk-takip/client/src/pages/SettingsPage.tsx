@@ -134,10 +134,21 @@ export default function SettingsPage() {
   const resyncMutation = useMutation({
     mutationFn: async () => (await api.post('/calendar/resync')).data,
     onSuccess: (data) => {
-      toast.success(
-        `Google Calendar güncellendi: ${data.syncedHearings} duruşma, ${data.syncedTasks} görev.` +
-          (data.failedCount ? ` ${data.failedCount} başarısız.` : '')
-      )
+      if (data.failedCount > 0 && data.hint) {
+        toast.error(
+          `Senkronizasyon başarısız (${data.failedCount}). ${data.hint}`,
+          { duration: 15000 }
+        )
+      } else if (data.failedCount > 0) {
+        toast.error(
+          `${data.syncedHearings} duruşma, ${data.syncedTasks} görev senkronlandı. ${data.failedCount} başarısız — ilk hata: ${data.firstError || 'bilinmiyor'}`,
+          { duration: 15000 }
+        )
+      } else {
+        toast.success(
+          `Google Calendar güncellendi: ${data.syncedHearings} duruşma, ${data.syncedTasks} görev.`
+        )
+      }
     },
     onError: (err: any) => {
       toast.error(err?.response?.data?.error || 'Senkronizasyon başarısız.')
