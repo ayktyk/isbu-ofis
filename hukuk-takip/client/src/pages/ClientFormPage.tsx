@@ -4,6 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { createClientSchema, type CreateClientInput } from '@hukuk-takip/shared'
 import { useClient, useCreateClient, useUpdateClient } from '@/hooks/useClients'
+import { useMobileKeyboardFix } from '@/hooks/useMobileKeyboardFix'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ArrowLeft, Save, Loader2, UserPlus, UserCog } from 'lucide-react'
@@ -13,6 +14,7 @@ export default function ClientFormPage() {
   const { id } = useParams()
   const isEdit = !!id
 
+  useMobileKeyboardFix()
   const { data: client, isLoading: loadingClient } = useClient(id)
   const createClient = useCreateClient()
   const updateClient = useUpdateClient(id || '')
@@ -188,8 +190,8 @@ export default function ClientFormPage() {
           </CardContent>
         </Card>
 
-        {/* Butonlar */}
-        <div className="flex items-center justify-end gap-3">
+        {/* Butonlar — mobilde sticky footer, desktop'ta normal akış */}
+        <div className="sticky bottom-0 -mx-3 flex flex-col-reverse gap-2 border-t bg-background px-3 py-3 pb-[calc(env(safe-area-inset-bottom)+12px)] shadow-[0_-4px_12px_rgba(0,0,0,0.04)] sm:static sm:mx-0 sm:flex-row sm:items-center sm:justify-end sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0 sm:pb-0 sm:shadow-none">
           <button
             type="button"
             onClick={() => navigate(-1)}
@@ -200,7 +202,7 @@ export default function ClientFormPage() {
           <button
             type="submit"
             disabled={isPending}
-            className="inline-flex items-center gap-2 rounded-lg bg-law-accent px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#1d4ed8] disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-law-accent px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-[#1d4ed8] disabled:opacity-50 sm:w-auto"
           >
             {isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

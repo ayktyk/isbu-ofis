@@ -242,12 +242,13 @@ export const collections = pgTable(
   'collections',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    caseId: uuid('case_id')
-      .references(() => cases.id, { onDelete: 'cascade' })
-      .notNull(),
-    clientId: uuid('client_id')
-      .references(() => clients.id, { onDelete: 'restrict' })
-      .notNull(),
+    // Polimorfik — caseId VEYA mediationFileId dolu olmalı (CHECK constraint ile DB'de zorlanır)
+    caseId: uuid('case_id').references(() => cases.id, { onDelete: 'cascade' }),
+    mediationFileId: uuid('mediation_file_id').references((): any => mediationFiles.id, {
+      onDelete: 'cascade',
+    }),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'restrict' }),
+    userId: uuid('user_id').references(() => users.id, { onDelete: 'restrict' }),
     amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
     currency: varchar('currency', { length: 3 }).default('TRY').notNull(),
     collectionDate: date('collection_date').notNull(),
@@ -258,6 +259,8 @@ export const collections = pgTable(
   },
   (table) => ({
     caseIdx: index('collections_case_idx').on(table.caseId),
+    mediationIdx: index('collections_mediation_idx').on(table.mediationFileId),
+    userIdx: index('collections_user_idx').on(table.userId),
   })
 )
 
@@ -358,6 +361,8 @@ export const mediationFiles = pgTable(
     status: mediationStatusEnum('status').default('active').notNull(),
     startDate: date('start_date'),
     endDate: date('end_date'),
+    agreedFee: decimal('agreed_fee', { precision: 12, scale: 2 }),
+    currency: varchar('currency', { length: 3 }).default('TRY').notNull(),
     notes: text('notes'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),

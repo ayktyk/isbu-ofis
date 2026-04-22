@@ -57,6 +57,64 @@ ALTER TABLE "consultations" ADD COLUMN IF NOT EXISTS "source_detail" varchar(255
 ALTER TABLE "mediation_parties" ADD COLUMN IF NOT EXISTS "lawyer_phone" varchar(20);
 `
 
+// rev2 (2026-04): Polimorfik collections + arabuluculuk anlaşılan ücret.
+// TAM ADDITIVE — hiçbir kolon drop edilmez, hiçbir satır silinmez.
+// case_id ve client_id NOT NULL → nullable olur (mevcut satırlar etkilenmez).
+// mediation_file_id, user_id eklenir (user_id backfill edilir).
+// mediation_files'a agreed_fee + currency eklenir.
+const REV2_COLLECTIONS_POLY_SQL = `
+-- mediation_files: anlaşılan ücret + para birimi
+ALTER TABLE "mediation_files" ADD COLUMN IF NOT EXISTS "agreed_fee" numeric(12,2);
+ALTER TABLE "mediation_files" ADD COLUMN IF NOT EXISTS "currency" varchar(3) NOT NULL DEFAULT 'TRY';
+
+-- collections: polimorfik hale getir
+ALTER TABLE "collections" ADD COLUMN IF NOT EXISTS "mediation_file_id" uuid;
+ALTER TABLE "collections" ADD COLUMN IF NOT EXISTS "user_id" uuid;
+
+-- FK (mediation_file_id → mediation_files.id). Idempotent.
+DO $$ BEGIN
+  ALTER TABLE "collections"
+    ADD CONSTRAINT "collections_mediation_file_id_fk"
+    FOREIGN KEY ("mediation_file_id") REFERENCES "mediation_files"("id") ON DELETE CASCADE;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+-- FK (user_id → users.id). Idempotent.
+DO $$ BEGIN
+  ALTER TABLE "collections"
+    ADD CONSTRAINT "collections_user_id_fk"
+    FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE RESTRICT;
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+-- user_id backfill (mevcut satırlarda eksikse case.user_id'den al)
+UPDATE "collections" c
+SET "user_id" = (SELECT "user_id" FROM "cases" WHERE "id" = c."case_id")
+WHERE c."user_id" IS NULL AND c."case_id" IS NOT NULL;
+
+-- Index'ler
+CREATE INDEX IF NOT EXISTS "collections_mediation_idx" ON "collections" ("mediation_file_id");
+CREATE INDEX IF NOT EXISTS "collections_user_idx" ON "collections" ("user_id");
+
+-- NOT NULL kısıtlarını kaldır (polimorfik için)
+ALTER TABLE "collections" ALTER COLUMN "case_id" DROP NOT NULL;
+ALTER TABLE "collections" ALTER COLUMN "client_id" DROP NOT NULL;
+
+-- XOR check constraint: case_id veya mediation_file_id dolu olmalı (ikisi birden OLAMAZ)
+DO $$ BEGIN
+  ALTER TABLE "collections"
+    ADD CONSTRAINT "collections_source_check"
+    CHECK (
+      ("case_id" IS NOT NULL AND "mediation_file_id" IS NULL) OR
+      ("case_id" IS NULL AND "mediation_file_id" IS NOT NULL)
+    );
+EXCEPTION WHEN duplicate_object THEN null;
+WHEN check_violation THEN
+  -- Mevcut veri uyumsuzsa (neredeyse imkansız ama) log'la, yine de boot'u engelle
+  RAISE NOTICE 'collections_source_check: mevcut veri uyumsuz, constraint eklenmedi';
+END $$;
+`
+
 export async function ensureSchema() {
   if (!process.env.DATABASE_URL) {
     console.warn('ensureSchema: DATABASE_URL yok, atlaniyor.')
@@ -66,6 +124,8 @@ export async function ensureSchema() {
   try {
     await sql.unsafe(CONSULTATIONS_SQL)
     console.log('Schema guard: consultations hazir.')
+    await sql.unsafe(REV2_COLLECTIONS_POLY_SQL)
+    console.log('Schema guard: polimorfik collections + mediation agreed_fee hazir.')
   } catch (err) {
     console.error('Schema guard hatasi:', err)
   } finally {

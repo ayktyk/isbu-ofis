@@ -66,7 +66,7 @@ app.use(
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 500,
+    max: 1500,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Cok fazla istek gonderildi. 15 dakika sonra tekrar deneyin.' },

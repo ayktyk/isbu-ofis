@@ -181,6 +181,67 @@ router.get('/:id', async (req, res) => {
   res.json(caseData)
 })
 
+// Tek roundtrip — dava detay sayfası için tüm veriyi birleştirilmiş döner.
+// CaseDetailPage 6 ayrı istek yerine bunu kullanır.
+router.get('/:id/detail', async (req, res) => {
+  const caseId = getSingleValue(req.params.id)
+  if (!caseId) {
+    res.status(400).json({ error: 'Gecersiz dava id.' })
+    return
+  }
+
+  const ownedCase = await getOwnedCase(req.user!.userId, caseId)
+  if (!ownedCase) {
+    res.status(404).json({ error: 'Dava bulunamadi.' })
+    return
+  }
+
+  const [caseRow] = await db
+    .select({
+      id: cases.id,
+      caseNumber: cases.caseNumber,
+      courtName: cases.courtName,
+      caseType: cases.caseType,
+      status: cases.status,
+      title: cases.title,
+      description: cases.description,
+      startDate: cases.startDate,
+      closeDate: cases.closeDate,
+      contractedFee: cases.contractedFee,
+      currency: cases.currency,
+      customCaseType: cases.customCaseType,
+      clientId: cases.clientId,
+      clientName: clients.fullName,
+      clientPhone: clients.phone,
+      createdAt: cases.createdAt,
+      updatedAt: cases.updatedAt,
+    })
+    .from(cases)
+    .leftJoin(clients, eq(cases.clientId, clients.id))
+    .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId)))
+    .limit(1)
+
+  const [hearings, caseTasks, caseExpenses, caseCollections, caseNotes, caseDocuments] =
+    await Promise.all([
+      db.select().from(caseHearings).where(eq(caseHearings.caseId, caseId)).orderBy(desc(caseHearings.hearingDate)),
+      db.select().from(tasks).where(eq(tasks.caseId, caseId)).orderBy(desc(tasks.createdAt)),
+      db.select().from(expenses).where(eq(expenses.caseId, caseId)).orderBy(desc(expenses.createdAt)),
+      db.select().from(collections).where(eq(collections.caseId, caseId)).orderBy(desc(collections.createdAt)),
+      db.select().from(notes).where(eq(notes.caseId, caseId)).orderBy(desc(notes.createdAt)),
+      db.select().from(documents).where(eq(documents.caseId, caseId)).orderBy(desc(documents.createdAt)),
+    ])
+
+  res.json({
+    case: caseRow,
+    hearings,
+    tasks: caseTasks,
+    expenses: caseExpenses,
+    collections: caseCollections,
+    notes: caseNotes,
+    documents: caseDocuments,
+  })
+})
+
 router.post('/', validate(createCaseSchema), async (req, res) => {
   const [newCase] = await db
     .insert(cases)

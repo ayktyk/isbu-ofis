@@ -12,6 +12,7 @@ import {
 } from '@hukuk-takip/shared'
 import { ArrowLeft, Loader2, Plus, Save, Scale } from 'lucide-react'
 import { useCase, useCreateCase, useUpdateCase } from '@/hooks/useCases'
+import { useMobileKeyboardFix } from '@/hooks/useMobileKeyboardFix'
 import { useClients, useCreateClient } from '@/hooks/useClients'
 import { caseStatusLabels, caseTypeLabels } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,6 +26,7 @@ export default function CaseFormPage() {
   const { id } = useParams()
   const isEdit = Boolean(id)
 
+  useMobileKeyboardFix()
   const { data: caseData, isLoading: loadingCase } = useCase(id)
   const createCase = useCreateCase()
   const updateCase = useUpdateCase(id || '')
@@ -319,7 +321,7 @@ export default function CaseFormPage() {
           </CardContent>
         </Card>
 
-        <div className="flex items-center justify-end gap-3">
+        <div className="sticky bottom-0 -mx-3 flex flex-col-reverse gap-2 border-t bg-background px-3 py-3 pb-[calc(env(safe-area-inset-bottom)+12px)] shadow-[0_-4px_12px_rgba(0,0,0,0.04)] sm:static sm:mx-0 sm:flex-row sm:items-center sm:justify-end sm:gap-3 sm:border-0 sm:bg-transparent sm:p-0 sm:pb-0 sm:shadow-none">
           <button
             type="button"
             onClick={() => navigate(-1)}
@@ -330,7 +332,7 @@ export default function CaseFormPage() {
           <button
             type="submit"
             disabled={isPending}
-            className="inline-flex items-center gap-2 rounded-xl bg-law-accent px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-law-accent px-5 py-2.5 text-sm font-medium text-white shadow-sm transition hover:opacity-90 disabled:opacity-50 sm:w-auto"
           >
             {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
             {isEdit ? 'Guncelle' : 'Kaydet'}

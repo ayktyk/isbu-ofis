@@ -16,13 +16,7 @@ import {
   User,
 } from 'lucide-react'
 import {
-  useCase,
-  useCaseCollections,
-  useCaseDocuments,
-  useCaseExpenses,
-  useCaseHearings,
-  useCaseNotes,
-  useCaseTasks,
+  useCaseDetail,
   useCreateCollection,
   useCreateDocument,
   useCreateExpense,
@@ -83,13 +77,15 @@ export default function CaseDetailPage() {
   const [documentDescription, setDocumentDescription] = useState('')
   const [documentFiles, setDocumentFiles] = useState<File[]>([])
 
-  const { data: caseData, isLoading, isError } = useCase(id)
-  const { data: hearingsData } = useCaseHearings(id)
-  const { data: tasksData } = useCaseTasks(id)
-  const { data: expensesData } = useCaseExpenses(id)
-  const { data: collectionsData } = useCaseCollections(id)
-  const { data: documentsData } = useCaseDocuments(id)
-  const { data: notesData } = useCaseNotes(id)
+  // Tek roundtrip — 6 istek yerine tek endpoint detay verisini birleştirir
+  const { data: detail, isLoading, isError } = useCaseDetail(id)
+  const caseData = detail?.case
+  const hearingsData = detail?.hearings
+  const tasksData = detail?.tasks
+  const expensesData = detail?.expenses
+  const collectionsData = detail?.collections
+  const documentsData = detail?.documents
+  const notesData = detail?.notes
 
   const deleteCase = useDeleteCase()
   const createHearing = useCreateHearing()
@@ -105,12 +101,12 @@ export default function CaseDetailPage() {
   const createNote = useCreateNote()
   const deleteNote = useDeleteNote()
 
-  const hearings = hearingsData?.hearings || hearingsData || []
-  const tasks = tasksData?.tasks || tasksData || []
-  const expenses = expensesData?.expenses || expensesData || []
-  const collections = collectionsData?.collections || collectionsData || []
-  const documents = documentsData?.documents || documentsData || []
-  const notes = notesData?.notes || notesData || []
+  const hearings = hearingsData || []
+  const tasks = tasksData || []
+  const expenses = expensesData || []
+  const collections = collectionsData || []
+  const documents = documentsData || []
+  const notes = notesData || []
 
   const totalExpenses = expenses.reduce((sum: number, item: any) => sum + Number.parseFloat(item.amount || '0'), 0)
   const totalCollections = collections.reduce((sum: number, item: any) => sum + Number.parseFloat(item.amount || '0'), 0)

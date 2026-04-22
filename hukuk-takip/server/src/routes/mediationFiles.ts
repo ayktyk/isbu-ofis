@@ -1,13 +1,14 @@
 import { Router, type Request, type Response } from 'express'
 import { and, desc, eq } from 'drizzle-orm'
 import { db } from '../db/index.js'
-import { mediationFiles, mediationParties } from '../db/schema.js'
+import { collections, mediationFiles, mediationParties } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import {
   createMediationFileSchema,
   updateMediationFileSchema,
 } from '../../../shared/dist/index.js'
+import { getOwnedMediationFile } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
 
 const router = Router()
@@ -98,7 +99,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
 // Create mediation file
 router.post('/', validate(createMediationFileSchema), async (req: Request, res: Response) => {
-  const { parties, startDate, endDate, ...rest } = req.body
+  const { parties, startDate, endDate, agreedFee, currency, ...rest } = req.body
 
   const [file] = await db
     .insert(mediationFiles)
@@ -107,6 +108,8 @@ router.post('/', validate(createMediationFileSchema), async (req: Request, res: 
       userId: req.user!.userId,
       startDate: startDate || null,
       endDate: endDate || null,
+      agreedFee: agreedFee && agreedFee !== '' ? agreedFee : null,
+      currency: currency || 'TRY',
     })
     .returning()
 
@@ -143,11 +146,13 @@ router.put('/:id', validate(updateMediationFileSchema), async (req: Request, res
     return
   }
 
-  const { parties, startDate, endDate, ...rest } = req.body
+  const { parties, startDate, endDate, agreedFee, currency, ...rest } = req.body
 
   const updateData: Record<string, unknown> = { ...rest, updatedAt: new Date() }
   if (startDate !== undefined) updateData.startDate = startDate || null
   if (endDate !== undefined) updateData.endDate = endDate || null
+  if (agreedFee !== undefined) updateData.agreedFee = agreedFee && agreedFee !== '' ? agreedFee : null
+  if (currency !== undefined) updateData.currency = currency || 'TRY'
 
   const [updated] = await db
     .update(mediationFiles)
@@ -188,6 +193,29 @@ router.put('/:id', validate(updateMediationFileSchema), async (req: Request, res
     .where(eq(mediationParties.mediationFileId, id))
 
   res.json({ ...updated, parties: updatedParties })
+})
+
+// List collections for a mediation file
+router.get('/:id/collections', async (req: Request, res: Response) => {
+  const id = getSingleValue(req.params.id)
+  if (!id) {
+    res.status(400).json({ error: 'Gecersiz id.' })
+    return
+  }
+
+  const owned = await getOwnedMediationFile(req.user!.userId, id)
+  if (!owned) {
+    res.status(404).json({ error: 'Dosya bulunamadi.' })
+    return
+  }
+
+  const data = await db
+    .select()
+    .from(collections)
+    .where(eq(collections.mediationFileId, id))
+    .orderBy(desc(collections.createdAt))
+
+  res.json(data)
 })
 
 // Delete mediation file

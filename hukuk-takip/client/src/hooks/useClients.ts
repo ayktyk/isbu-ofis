@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { api } from '@/lib/axios'
 import { toast } from 'sonner'
 import type { CreateClientInput, UpdateClientInput } from '@hukuk-takip/shared'
@@ -10,6 +10,8 @@ export function useClients(params?: { search?: string; page?: number; pageSize?:
       const res = await api.get('/clients', { params })
       return res.data
     },
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 60 * 2,
   })
 }
 

@@ -64,6 +64,42 @@ function StatCard({
   )
 }
 
+function OutstandingStatCard({
+  total,
+  cases,
+  mediations,
+}: {
+  total: string
+  cases: string
+  mediations: string
+}) {
+  const totalNum = parseFloat(total || '0')
+  const caseNum = parseFloat(cases || '0')
+  const medNum = parseFloat(mediations || '0')
+  return (
+    <Card className="overflow-hidden border-0 bg-gradient-to-br from-amber-50 via-white to-white shadow-sm ring-1 ring-amber-200/60">
+      <CardContent className="p-3 sm:p-5">
+        <div className="flex items-start justify-between gap-2 sm:gap-4">
+          <div className="min-w-0 space-y-1 sm:space-y-2">
+            <p className="truncate text-[11px] font-medium text-amber-700 sm:text-[13px]">
+              Bekleyen Tahsilat
+            </p>
+            <p className="text-xl font-semibold tracking-tight text-amber-800 sm:text-3xl">
+              {formatCurrency(totalNum)}
+            </p>
+            <p className="hidden text-[11px] text-muted-foreground sm:block">
+              Dava {formatCurrency(caseNum)} · Arabuluculuk {formatCurrency(medNum)}
+            </p>
+          </div>
+          <div className="flex-shrink-0 rounded-xl bg-amber-200/60 p-2 sm:rounded-2xl sm:p-3">
+            <TrendingUp className="h-4 w-4 text-amber-700 sm:h-5 sm:w-5" />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 function DashboardSkeleton() {
   return (
     <div className="space-y-6">
@@ -119,7 +155,10 @@ export default function DashboardPage() {
   const currentMonth = new Date().toISOString().slice(0, 7)
   const thisMonthCases = stats?.monthlyCases?.find((m: any) => m.month === currentMonth)?.count ?? 0
   const thisMonthMediations = stats?.monthlyMediations?.find((m: any) => m.month === currentMonth)?.count ?? 0
-  const thisMonthCollections = stats?.monthlyCollections?.find((m: any) => m.month === currentMonth)?.amount ?? '0'
+  const thisMonthIncomeRow = stats?.monthlyIncome?.find((m: any) => m.month === currentMonth)
+  const thisMonthCaseIncome = thisMonthIncomeRow?.caseAmount ?? '0'
+  const thisMonthMediationIncome = thisMonthIncomeRow?.mediationAmount ?? '0'
+  const thisMonthCollections = thisMonthIncomeRow?.total ?? stats?.monthlyCollections?.find((m: any) => m.month === currentMonth)?.amount ?? '0'
 
   if (isLoading) {
     return (
@@ -191,7 +230,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-5">
         <StatCard
           title="Aktif Davalar"
           value={cases?.active ?? 0}
@@ -213,8 +252,13 @@ export default function DashboardPage() {
         <StatCard
           title="Toplam Tahsilat"
           value={formatCurrency(financials?.totalCollections)}
-          description="Tüm dosyalardan tahsil edilen toplam"
+          description="Dava + arabuluculuk tüm tahsilatlar"
           icon={Banknote}
+        />
+        <OutstandingStatCard
+          total={financials?.outstandingTotal || '0'}
+          cases={financials?.outstandingByCases || '0'}
+          mediations={financials?.outstandingByMediations || '0'}
         />
       </div>
 
@@ -234,8 +278,16 @@ export default function DashboardPage() {
         </Card>
         <Card className="border-l-4 border-l-emerald-500">
           <CardContent className="p-3 sm:p-4">
-            <p className="text-[11px] font-medium text-muted-foreground">Bu Ay Tahsilat</p>
-            <p className="text-xl font-bold text-emerald-600">{formatCurrency(thisMonthCollections)}</p>
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-medium text-muted-foreground">Bu Ay Tahsilat</p>
+                <p className="text-xl font-bold text-emerald-600">{formatCurrency(thisMonthCollections)}</p>
+              </div>
+            </div>
+            <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+              <span>Dava: <span className="font-medium text-foreground">{formatCurrency(thisMonthCaseIncome)}</span></span>
+              <span>Arabuluculuk: <span className="font-medium text-foreground">{formatCurrency(thisMonthMediationIncome)}</span></span>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -519,10 +571,20 @@ export default function DashboardPage() {
 
         <Card className="xl:col-span-2">
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base text-law-primary">
-              <Banknote className="h-4 w-4 text-law-accent" />
-              Beklenen Tahsilatlar
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base text-law-primary">
+                <Banknote className="h-4 w-4 text-law-accent" />
+                Beklenen Tahsilatlar
+              </CardTitle>
+              {financials?.outstandingTotal && parseFloat(financials.outstandingTotal) > 0 ? (
+                <div className="text-right">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Toplam</p>
+                  <p className="text-sm font-semibold text-amber-700">
+                    {formatCurrency(financials.outstandingTotal)}
+                  </p>
+                </div>
+              ) : null}
+            </div>
           </CardHeader>
           <CardContent>
             {!outstandingFees?.length ? (
@@ -532,27 +594,39 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-2">
-                {outstandingFees.slice(0, 5).map((fee: any) => (
-                  <button
-                    key={fee.id}
-                    type="button"
-                    onClick={() => navigate(`/cases/${fee.id}`)}
-                    className="flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition hover:bg-slate-50"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="font-medium">{fee.title}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{fee.clientName || '-'}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-semibold text-law-primary">
-                        {formatCurrency(fee.remaining)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Toplam: {formatCurrency(fee.contractedFee)}
-                      </p>
-                    </div>
-                  </button>
-                ))}
+                {outstandingFees.slice(0, 5).map((fee: any) => {
+                  const isMediation = fee.source === 'mediation'
+                  return (
+                    <button
+                      key={`${fee.source || 'case'}-${fee.id}`}
+                      type="button"
+                      onClick={() =>
+                        navigate(isMediation ? `/tools/mediation-files` : `/cases/${fee.id}`)
+                      }
+                      className="flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition hover:bg-slate-50"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <p className="truncate font-medium">{fee.title}</p>
+                          {isMediation ? (
+                            <Badge variant="outline" className="text-[9px]">
+                              Arabuluculuk
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">{fee.clientName || '-'}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-law-primary">
+                          {formatCurrency(fee.remaining)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Toplam: {formatCurrency(fee.contractedFee)}
+                        </p>
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             )}
           </CardContent>

@@ -183,6 +183,7 @@ export default function StatisticsPage() {
   const {
     monthlyCases,
     monthlyCollections,
+    monthlyIncome,
     monthlyMediations,
     casesByType,
     casesByStatus,
@@ -197,10 +198,11 @@ export default function StatisticsPage() {
     Arabuluculuk: monthlyMediations?.[i]?.count ?? 0,
   }))
 
-  // Collection bar data
-  const collectionBarData = (monthlyCollections || []).map((mc: any) => ({
+  // Gelir — stacked bar (dava + arabuluculuk kırılımı)
+  const incomeBarData = (monthlyIncome || monthlyCollections || []).map((mc: any) => ({
     name: shortMonth(mc.label),
-    Tahsilat: parseFloat(mc.amount) || 0,
+    Dava: parseFloat(mc.caseAmount ?? mc.amount ?? '0') || 0,
+    Arabuluculuk: parseFloat(mc.mediationAmount ?? '0') || 0,
   }))
 
   // Pie chart data
@@ -238,16 +240,39 @@ export default function StatisticsPage() {
         <BigStat
           title="Toplam Tahsilat"
           value={formatCurrency(totals?.totalCollected)}
+          subtitle={`Dava ${formatCurrency(totals?.totalCaseIncome)} · Arabuluculuk ${formatCurrency(totals?.totalMediationIncome)}`}
           icon={Banknote}
           color="text-emerald-600"
         />
         <BigStat
-          title="Tahsilat Orani"
-          value={`%${totals?.collectionRate?.toFixed(1) ?? '0'}`}
-          subtitle={`Beklenen: ${formatCurrency(totals?.totalExpected)}`}
+          title="Bekleyen Tahsilat"
+          value={formatCurrency(totals?.totalExpected)}
+          subtitle={`Tahsilat oranı: %${totals?.collectionRate?.toFixed(1) ?? '0'}`}
           icon={Target}
           color="text-amber-600"
         />
+      </div>
+
+      {/* Bu Ay */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Card className="border-l-4 border-l-law-accent">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-muted-foreground">Bu Ay Dava Geliri</p>
+            <p className="text-xl font-bold text-law-primary">{formatCurrency(totals?.thisMonthCaseIncome)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-amber-500">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-muted-foreground">Bu Ay Arabuluculuk Geliri</p>
+            <p className="text-xl font-bold text-law-primary">{formatCurrency(totals?.thisMonthMediationIncome)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-emerald-500">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-muted-foreground">Bu Ay Toplam</p>
+            <p className="text-xl font-bold text-emerald-600">{formatCurrency(totals?.thisMonthTotal)}</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* ─── Charts Row 1: Monthly Cases + Collections ─────────── */}
@@ -295,18 +320,30 @@ export default function StatisticsPage() {
           </CardContent>
         </Card>
 
-        {/* Monthly collections */}
+        {/* Monthly income — dava + arabuluculuk stacked */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="flex items-center gap-2 text-base text-law-primary">
-              <TrendingUp className="h-4 w-4 text-emerald-600" />
-              Aylık Tahsilat
-            </CardTitle>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="flex items-center gap-2 text-base text-law-primary">
+                <TrendingUp className="h-4 w-4 text-emerald-600" />
+                Aylık Gelir
+              </CardTitle>
+              <div className="flex flex-wrap gap-3 text-[11px]">
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full" style={{ background: CHART_COLORS[0] }} />
+                  Dava: <span className="font-semibold text-foreground">{formatCurrency(totals?.totalCaseIncome)}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full" style={{ background: CHART_COLORS[1] }} />
+                  Arabuluculuk: <span className="font-semibold text-foreground">{formatCurrency(totals?.totalMediationIncome)}</span>
+                </span>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
-            {collectionBarData.length > 0 ? (
+            {incomeBarData.length > 0 ? (
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={collectionBarData}>
+                <BarChart data={incomeBarData}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                   <XAxis
                     dataKey="name"
@@ -321,7 +358,8 @@ export default function StatisticsPage() {
                     tickLine={false}
                   />
                   <Tooltip content={<ChartTooltip isCurrency />} />
-                  <Bar dataKey="Tahsilat" fill={CHART_COLORS[2]} radius={[4, 4, 0, 0]} maxBarSize={40} />
+                  <Bar dataKey="Dava" stackId="inc" fill={CHART_COLORS[0]} maxBarSize={40} />
+                  <Bar dataKey="Arabuluculuk" stackId="inc" fill={CHART_COLORS[1]} maxBarSize={40} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -442,8 +480,17 @@ export default function StatisticsPage() {
                 </thead>
                 <tbody className="divide-y">
                   {expectedCollections.map((row: any) => (
-                    <tr key={row.caseId} className="hover:bg-muted/30 transition-colors">
-                      <td className="py-2.5 pr-4 font-medium">{row.title}</td>
+                    <tr key={`${row.source || 'case'}-${row.caseId}`} className="hover:bg-muted/30 transition-colors">
+                      <td className="py-2.5 pr-4 font-medium">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate">{row.title}</span>
+                          {row.source === 'mediation' ? (
+                            <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-medium text-amber-700">
+                              ARABULUCULUK
+                            </span>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className="hidden py-2.5 pr-4 text-muted-foreground sm:table-cell">
                         {row.clientName || '-'}
                       </td>

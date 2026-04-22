@@ -15,6 +15,13 @@ const partySchema = z.object({
   lawyerPhone: z.string().max(20).optional().or(z.literal('')),
 })
 
+const currencySchema = z.string().length(3).default('TRY')
+const agreedFeeSchema = z
+  .string()
+  .regex(/^\d+(\.\d{1,2})?$/, 'Geçerli bir tutar girin')
+  .optional()
+  .or(z.literal(''))
+
 export const createMediationFileSchema = z.object({
   fileNo: z.string().max(100).optional().or(z.literal('')),
   mediationType: z.enum(mediationTypeValues, {
@@ -24,6 +31,8 @@ export const createMediationFileSchema = z.object({
   disputeSubject: z.string().max(5000).optional().or(z.literal('')),
   startDate: z.string().optional().or(z.literal('')),
   endDate: z.string().optional().or(z.literal('')),
+  agreedFee: agreedFeeSchema,
+  currency: currencySchema.optional(),
   notes: z.string().max(5000).optional().or(z.literal('')),
   parties: z.array(partySchema).min(1, 'En az bir taraf ekleyin'),
 })
@@ -36,6 +45,8 @@ export const updateMediationFileSchema = z.object({
   status: z.enum(mediationStatusValues).optional(),
   startDate: z.string().optional().or(z.literal('')),
   endDate: z.string().optional().or(z.literal('')),
+  agreedFee: agreedFeeSchema,
+  currency: currencySchema.optional(),
   notes: z.string().max(5000).optional().or(z.literal('')),
   parties: z.array(partySchema).optional(),
 })
