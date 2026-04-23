@@ -36,3 +36,7 @@ hukuk-takip/shared/src/**/*.js
 # DB backups (README kalsın, dump'lar ignore)
 hukuk-takip/backups/*.sql
 hukuk-takip/backups/*.dump
+
+# Hassas yardımcılar
+_key_b64.txt
+_convert_key.mjs
