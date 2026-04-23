@@ -82,6 +82,7 @@ router.post('/resync', async (req: Request, res: Response) => {
     type: 'task' | 'hearing'
     id: string
     title: string | null
+    date: string | null
     error: string
   }
   const failures: FailureDetail[] = []
@@ -91,6 +92,17 @@ router.post('/resync', async (req: Request, res: Response) => {
   function formatError(error: unknown): string {
     if (error instanceof Error) return error.message
     return String(error)
+  }
+
+  function toIsoOrNull(value: Date | string | null | undefined): string | null {
+    if (!value) return null
+    const d = value instanceof Date ? value : new Date(value)
+    if (Number.isNaN(d.getTime())) return null
+    try {
+      return d.toISOString()
+    } catch {
+      return null
+    }
   }
 
   for (const task of taskRows) {
@@ -110,6 +122,7 @@ router.post('/resync', async (req: Request, res: Response) => {
         type: 'task',
         id: task.id,
         title: task.title,
+        date: toIsoOrNull(task.dueDate),
         error: formatError(error),
       })
       console.error('[GoogleCalendar] Task resync failed', task.id, error)
@@ -136,6 +149,7 @@ router.post('/resync', async (req: Request, res: Response) => {
         type: 'hearing',
         id: hearing.id,
         title: hearing.caseTitle,
+        date: toIsoOrNull(hearing.hearingDate),
         error: formatError(error),
       })
       console.error('[GoogleCalendar] Hearing resync failed', hearing.id, error)
@@ -152,7 +166,9 @@ router.post('/resync', async (req: Request, res: Response) => {
         ? 'Yetkilendirme hatası. GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY veya EMAIL değerlerini kontrol edin.'
         : firstError.includes('404')
           ? 'Takvim bulunamadı. GOOGLE_CALENDAR_ID doğru mu?'
-          : null
+          : /Invalid (start|end) time|gecersiz|cok eski|okunamadi|ISO formatina/i.test(firstError)
+            ? 'Bazı kayıtların tarihi geçersiz veya çok eski. Aşağıdaki listeye bakıp ilgili görev/duruşma tarihlerini düzeltin.'
+            : null
     : null
 
   res.json({

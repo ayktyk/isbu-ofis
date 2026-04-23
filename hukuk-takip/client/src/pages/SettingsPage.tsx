@@ -133,6 +133,15 @@ export default function SettingsPage() {
 
   const [calendarDebug, setCalendarDebug] = useState<any | null>(null)
 
+  type ResyncFailure = {
+    type: 'task' | 'hearing'
+    id: string
+    title: string | null
+    date: string | null
+    error: string
+  }
+  const [resyncFailures, setResyncFailures] = useState<ResyncFailure[] | null>(null)
+
   const resyncMutation = useMutation({
     mutationFn: async () => (await api.post('/calendar/resync')).data,
     onSuccess: (data) => {
@@ -151,6 +160,8 @@ export default function SettingsPage() {
           `Google Calendar güncellendi: ${data.syncedHearings} duruşma, ${data.syncedTasks} görev.`
         )
       }
+      // Başarısız kayıtların detayını UI'a taşı — tarih/başlık/hata görünür olsun
+      setResyncFailures(Array.isArray(data.failures) && data.failures.length > 0 ? data.failures : null)
       // Her resync sonrası otomatik debug çalıştır ki hataları anında görsün
       if (data.failedCount > 0) {
         runDebug()
@@ -524,6 +535,60 @@ export default function SettingsPage() {
                       </li>
                     ))}
                   </ol>
+                </div>
+              )}
+
+              {/* Başarısız senkron listesi — hangi kaydın neden düştüğü burada net */}
+              {resyncFailures && resyncFailures.length > 0 && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs dark:border-red-800 dark:bg-red-950/30">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="font-semibold text-red-800 dark:text-red-300">
+                      Senkronlanamayan Kayıtlar ({resyncFailures.length})
+                    </p>
+                    <button
+                      onClick={() => setResyncFailures(null)}
+                      className="text-[11px] text-muted-foreground hover:underline"
+                    >
+                      Kapat
+                    </button>
+                  </div>
+                  <div className="max-h-64 overflow-auto">
+                    <table className="w-full text-[11px]">
+                      <thead className="sticky top-0 bg-red-50 text-left text-red-800 dark:bg-red-950/30 dark:text-red-300">
+                        <tr>
+                          <th className="px-1 py-1 font-semibold">Tip</th>
+                          <th className="px-1 py-1 font-semibold">Başlık</th>
+                          <th className="px-1 py-1 font-semibold">Tarih</th>
+                          <th className="px-1 py-1 font-semibold">Hata</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {resyncFailures.map((f) => (
+                          <tr key={`${f.type}-${f.id}`} className="border-t border-red-200 align-top dark:border-red-800">
+                            <td className="px-1 py-1">{f.type === 'task' ? 'Görev' : 'Duruşma'}</td>
+                            <td className="px-1 py-1 break-words">{f.title || '(başlıksız)'}</td>
+                            <td className="px-1 py-1 whitespace-nowrap">
+                              {f.date
+                                ? new Date(f.date).toLocaleString('tr-TR', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                  })
+                                : '—'}
+                            </td>
+                            <td className="px-1 py-1 break-words font-mono text-[10px] text-red-700 dark:text-red-300">
+                              {f.error}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-2 text-[11px] text-red-700 dark:text-red-300">
+                    İpucu: Listedeki kayıtların tarihlerini kontrol edin. Boş, çok eski (1970 öncesi) veya bozuk tarihler senkronlanamaz.
+                  </p>
                 </div>
               )}
             </div>

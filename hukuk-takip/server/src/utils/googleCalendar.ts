@@ -267,14 +267,30 @@ function addMinutes(value: Date, amount: number) {
   return new Date(value.getTime() + amount * 60 * 1000)
 }
 
+// Google Calendar geçerli tarih sınırı: 1970-01-01 UTC altındaki değerleri
+// "Invalid start time" diye reddediyor. Ayrıca NaN / bozuk Date de ISO
+// üretmeden RangeError atar. buildTask/Hearing içinden kullanılan tek noktalı guard.
+const MIN_CALENDAR_MS = Date.UTC(1970, 0, 1)
+
+function ensureValidCalendarDate(date: Date, rawInput: unknown, label: string): void {
+  const ms = date.getTime()
+  if (!Number.isFinite(ms)) {
+    throw new Error(`${label} icin takvim tarihi okunamadi (${String(rawInput)}).`)
+  }
+  if (ms < MIN_CALENDAR_MS) {
+    throw new Error(`${label} icin takvim tarihi cok eski: ${date.toISOString()} (1970 oncesi kabul edilmiyor).`)
+  }
+}
+
 function buildTaskEventPayload(
   input: TaskCalendarSyncInput,
   reminderMinutes: number,
   timeZone: string
 ): CalendarEventPayload {
   const dueDate = toDate(input.dueDate)
+  const taskLabel = `Gorev "${input.title}"`
   if (!dueDate) {
-    throw new Error('Task due date is required for Google Calendar sync')
+    throw new Error(`${taskLabel} icin son tarih bos — takvime eklenemiyor.`)
   }
 
   const descriptionLines = [
@@ -295,13 +311,25 @@ function buildTaskEventPayload(
   if (!hasUserTime) {
     eventStart.setHours(9, 0, 0, 0)
   }
-  const eventEnd = new Date(eventStart.getTime() + 30 * 60 * 1000) // 30 dakika
+  ensureValidCalendarDate(eventStart, input.dueDate, taskLabel)
+
+  // eventEnd kesinlikle start'tan sonra olmalı; savunmacı +30dk
+  const eventEnd = new Date(Math.max(eventStart.getTime() + 30 * 60 * 1000, eventStart.getTime() + 1))
+
+  let startIso: string
+  let endIso: string
+  try {
+    startIso = eventStart.toISOString()
+    endIso = eventEnd.toISOString()
+  } catch {
+    throw new Error(`${taskLabel} icin takvim tarihi ISO formatina cevrilemedi (${input.dueDate}).`)
+  }
 
   return {
     summary: `Gorev: ${input.title}`,
     description: descriptionLines.join('\n'),
-    start: { dateTime: eventStart.toISOString(), timeZone },
-    end: { dateTime: eventEnd.toISOString(), timeZone },
+    start: { dateTime: startIso, timeZone },
+    end: { dateTime: endIso, timeZone },
     reminders: buildReminderOverrides(reminderMinutes),
     extendedProperties: {
       private: {
@@ -318,9 +346,11 @@ function buildHearingEventPayload(
   timeZone: string
 ): CalendarEventPayload {
   const hearingDate = toDate(input.hearingDate)
+  const hearingLabel = `Durusma "${input.caseTitle || 'Dava'}"`
   if (!hearingDate) {
-    throw new Error('Hearing date is required for Google Calendar sync')
+    throw new Error(`${hearingLabel} icin tarih bos — takvime eklenemiyor.`)
   }
+  ensureValidCalendarDate(hearingDate, input.hearingDate, hearingLabel)
 
   const descriptionLines = [
     input.caseTitle ? `Dava: ${input.caseTitle}` : null,
@@ -332,13 +362,23 @@ function buildHearingEventPayload(
   ].filter(Boolean)
 
   const location = [input.courtName, input.courtRoom].filter(Boolean).join(' / ')
+  const eventEnd = addMinutes(hearingDate, 60)
+
+  let startIso: string
+  let endIso: string
+  try {
+    startIso = hearingDate.toISOString()
+    endIso = eventEnd.toISOString()
+  } catch {
+    throw new Error(`${hearingLabel} icin takvim tarihi ISO formatina cevrilemedi (${input.hearingDate}).`)
+  }
 
   return {
     summary: `Durusma: ${input.caseTitle || 'Dava'}`,
     description: descriptionLines.join('\n'),
     location: location || undefined,
-    start: { dateTime: hearingDate.toISOString(), timeZone },
-    end: { dateTime: addMinutes(hearingDate, 60).toISOString(), timeZone },
+    start: { dateTime: startIso, timeZone },
+    end: { dateTime: endIso, timeZone },
     reminders: buildReminderOverrides(reminderMinutes),
     extendedProperties: {
       private: {

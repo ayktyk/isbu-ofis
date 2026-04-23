@@ -40,6 +40,10 @@
   --law-surface: 0 0% 100%;
   --law-primary: 222 47% 11%;
   --law-accent: 201 96% 32%;
+  /* Tipografi — tema bazında override edilebilir */
+  --font-sans: 'Lato', system-ui, -apple-system, sans-serif;
+  --font-serif: 'EB Garamond', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', 'Liberation Mono', monospace;
 }
 
 /* Dark */
@@ -182,6 +186,90 @@ html.theme-forest {
   --law-accent: 152 56% 33%;
 }
 
+/* ───────────────────────────────────────────────────────────────────────────
+   Themis · Parşömen — krem kağıt + ink-black + altın nota
+   Ruh: eski tapu senedi / finansal almanak. Dolgu değil boşluk konuşur.
+   ─────────────────────────────────────────────────────────────────────────── */
+html.theme-parchment {
+  --background: 36 44% 87%;           /* #efe3cc — krem parşömen */
+  --foreground: 30 22% 8%;            /* #1a1510 — ink-black */
+  --card: 42 64% 93%;                 /* #fbf3df — raised kart */
+  --card-foreground: 30 22% 8%;
+  --popover: 42 64% 93%;
+  --popover-foreground: 30 22% 8%;
+  --primary: 30 22% 8%;                /* primary action = ink black (mühür) */
+  --primary-foreground: 42 64% 93%;
+  --secondary: 39 46% 90%;             /* #f6ecd6 — liste alanı */
+  --secondary-foreground: 30 22% 8%;
+  --muted: 39 40% 84%;                 /* #e6d9be — pill / progress track */
+  --muted-foreground: 32 22% 35%;      /* #6b5d48 — caption */
+  --accent: 37 72% 32%;                /* #8a6418 — gold aksan */
+  --accent-foreground: 42 64% 93%;
+  --destructive: 13 64% 37%;           /* #9a3a22 — danger */
+  --destructive-foreground: 42 64% 93%;
+  --border: 36 28% 78%;                /* soft warm hair ayraç */
+  --input: 36 28% 78%;
+  --ring: 37 72% 32%;
+  --radius: 0.625rem;                  /* 10px — parşömen dili yumuşak köşe */
+  --gold: 37 72% 32%;
+  --gold-light: 40 48% 78%;            /* #e4d5ab — goldSoft */
+  --sidebar-bg: 30 22% 8%;             /* ink black sidebar */
+  --sidebar-fg: 42 40% 88%;
+  --sidebar-muted: 32 22% 55%;
+  --sidebar-accent: 37 72% 32%;
+  --sidebar-border: 30 22% 14%;
+  --sidebar-active: 37 72% 32% / 0.18;
+  --law-bg: 36 44% 87%;
+  --law-surface: 42 64% 93%;
+  --law-primary: 30 22% 8%;
+  --law-accent: 37 72% 32%;
+  --font-sans: 'Inter Tight', 'Lato', system-ui, sans-serif;
+  --font-serif: 'Fraunces', 'EB Garamond', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   Themis · Modern Mahkeme (Chamber) — lacivert + soluk altın + elektrik mavi
+   Ruh: yüksek katlı cam büro. Linear / Superhuman hızı. Klavye-ilk.
+   ─────────────────────────────────────────────────────────────────────────── */
+html.theme-chamber {
+  --background: 222 22% 96%;           /* #f3f4f7 — soğuk krem-gri */
+  --foreground: 222 60% 12%;           /* #0d1a33 — ink lacivert */
+  --card: 0 0% 100%;                   /* #ffffff — kart */
+  --card-foreground: 222 60% 12%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 222 60% 12%;
+  --primary: 215 67% 37%;              /* #1f4e9e — seal (elektrik lacivert-mavi) */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 222 20% 93%;            /* #eaecf1 — inset / ⌘K chip */
+  --secondary-foreground: 222 50% 22%;
+  --muted: 222 20% 93%;
+  --muted-foreground: 220 16% 49%;     /* #697694 */
+  --accent: 36 60% 44%;                /* #b3872e — soluk altın (değer/para/marka) */
+  --accent-foreground: 0 0% 100%;
+  --destructive: 9 56% 41%;            /* #a53a2d */
+  --destructive-foreground: 0 0% 100%;
+  --border: 221 20% 88%;               /* soft cool hair ayraç */
+  --input: 220 20% 88%;
+  --ring: 215 67% 37%;
+  --radius: 0.75rem;                   /* 12px — kart-temelli dil */
+  --gold: 36 60% 44%;
+  --gold-light: 42 72% 88%;            /* #f4e8cc — goldSoft */
+  --sidebar-bg: 222 60% 10%;           /* derin lacivert sidebar */
+  --sidebar-fg: 222 22% 92%;
+  --sidebar-muted: 220 16% 58%;
+  --sidebar-accent: 215 67% 55%;       /* nav aktif state biraz daha parlak */
+  --sidebar-border: 222 50% 16%;
+  --sidebar-active: 215 67% 55% / 0.18;
+  --law-bg: 222 22% 96%;
+  --law-surface: 0 0% 100%;
+  --law-primary: 215 67% 37%;
+  --law-accent: 36 60% 44%;
+  --font-sans: 'Inter', 'Lato', system-ui, sans-serif;
+  --font-serif: 'Playfair Display', 'EB Garamond', Georgia, serif;
+  --font-mono: 'JetBrains Mono', 'Consolas', monospace;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════ */
 
 @layer base {
@@ -195,7 +283,8 @@ html.theme-forest {
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
     font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -210,7 +299,7 @@ html.theme-forest {
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'EB Garamond', Georgia, serif;
+    font-family: var(--font-serif);
     letter-spacing: -0.01em;
   }
 
@@ -292,6 +381,28 @@ html.theme-forest {
       hsl(var(--muted-foreground) / 0.08),
       hsl(var(--muted))
     );
+  }
+
+  /* Themis tipografi yardımcıları — rakam ve koddaki kısaltmalar için */
+  .num-display {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.01em;
+  }
+
+  .ink-display {
+    font-family: var(--font-serif);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+
+  .section-label {
+    font-family: var(--font-sans);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: hsl(var(--muted-foreground));
   }
 }
 

@@ -75,8 +75,9 @@ const config: Config = {
         sm: 'calc(var(--radius) - 4px)',
       },
       fontFamily: {
-        sans: ['Lato', 'system-ui', 'sans-serif'],
-        serif: ['"EB Garamond"', 'Georgia', 'serif'],
+        sans: ['var(--font-sans)', 'Lato', 'system-ui', 'sans-serif'],
+        serif: ['var(--font-serif)', '"EB Garamond"', 'Georgia', 'serif'],
+        mono: ['var(--font-mono)', '"JetBrains Mono"', 'Consolas', 'monospace'],
       },
       keyframes: {
         'accordion-down': {
