@@ -267,7 +267,11 @@ function addMinutes(value: Date, amount: number) {
   return new Date(value.getTime() + amount * 60 * 1000)
 }
 
-function buildTaskEventPayload(input: TaskCalendarSyncInput, reminderMinutes: number): CalendarEventPayload {
+function buildTaskEventPayload(
+  input: TaskCalendarSyncInput,
+  reminderMinutes: number,
+  timeZone: string
+): CalendarEventPayload {
   const dueDate = toDate(input.dueDate)
   if (!dueDate) {
     throw new Error('Task due date is required for Google Calendar sync')
@@ -280,11 +284,24 @@ function buildTaskEventPayload(input: TaskCalendarSyncInput, reminderMinutes: nu
     'Bu gorev Isbu Ofis tarafindan otomatik senkronlandi.',
   ].filter(Boolean)
 
+  // Timed event olarak oluştur — all-day event'te reminder 00:00 UTC'ye göre
+  // hesaplanıyor (Türkiye'de gece 03:00) ve past reminder'lar tetiklenmiyor.
+  // Default 09:00 kullanıyoruz; user saat girdiyse (saat 00:00 değilse) onu koru.
+  const eventStart = new Date(dueDate)
+  const hasUserTime =
+    eventStart.getHours() !== 0 ||
+    eventStart.getMinutes() !== 0 ||
+    eventStart.getSeconds() !== 0
+  if (!hasUserTime) {
+    eventStart.setHours(9, 0, 0, 0)
+  }
+  const eventEnd = new Date(eventStart.getTime() + 30 * 60 * 1000) // 30 dakika
+
   return {
     summary: `Gorev: ${input.title}`,
     description: descriptionLines.join('\n'),
-    start: { date: toDateOnlyString(dueDate) },
-    end: { date: toDateOnlyString(addDays(dueDate, 1)) },
+    start: { dateTime: eventStart.toISOString(), timeZone },
+    end: { dateTime: eventEnd.toISOString(), timeZone },
     reminders: buildReminderOverrides(reminderMinutes),
     extendedProperties: {
       private: {
@@ -428,7 +445,11 @@ export async function syncTaskToGoogleCalendar(input: TaskCalendarSyncInput) {
     return { synced: false, reason: 'deleted' as const }
   }
 
-  await upsertCalendarEvent('task', input.taskId, buildTaskEventPayload(input, config.reminderMinutes))
+  await upsertCalendarEvent(
+    'task',
+    input.taskId,
+    buildTaskEventPayload(input, config.reminderMinutes, config.timeZone)
+  )
   return { synced: true, reason: 'synced' as const }
 }
 
