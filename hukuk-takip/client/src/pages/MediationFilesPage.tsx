@@ -395,7 +395,7 @@ export default function MediationFilesPage() {
             className={`flex-shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition sm:px-3.5 sm:py-2 sm:text-sm ${
               statusFilter === opt.value
                 ? 'bg-law-primary text-white shadow-sm'
-                : 'bg-white text-muted-foreground hover:bg-slate-100 hover:text-foreground border'
+                : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground border'
             }`}
           >
             {opt.label}
@@ -460,7 +460,7 @@ export default function MediationFilesPage() {
                       <button
                         type="button"
                         onClick={() => setExpandedId(isExpanded ? null : file.id)}
-                        className="flex w-full items-start gap-3 p-3 text-left transition hover:bg-slate-50 sm:items-center sm:p-4"
+                        className="flex w-full items-start gap-3 p-3 text-left transition hover:bg-muted/50 sm:items-center sm:p-4"
                       >
                         <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-law-accent/10">
                           <FileText className="h-5 w-5 text-law-accent" />
@@ -497,7 +497,7 @@ export default function MediationFilesPage() {
 
                       {/* Detay */}
                       {isExpanded && (
-                        <div className="border-t bg-slate-50/50 p-3 sm:p-4">
+                        <div className="border-t bg-muted/30 p-3 sm:p-4">
                           {/* Taraflar */}
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                             {/* Basvurucular */}
@@ -597,7 +597,7 @@ export default function MediationFilesPage() {
 
 function PartyCard({ party }: { party: any }) {
   return (
-    <div className="rounded-lg border bg-white p-2.5 text-sm">
+    <div className="rounded-lg border bg-card p-2.5 text-sm">
       <p className="font-medium">{party.fullName}</p>
       <div className="mt-1 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-muted-foreground">
         {party.tcNo && <span>TC: {party.tcNo}</span>}
@@ -695,7 +695,7 @@ function MediationFinancePanel({
       </div>
 
       {editingFee ? (
-        <div className="mb-3 rounded-lg border bg-white p-3">
+        <div className="mb-3 rounded-lg border bg-card p-3">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
             <input
               value={feeInput}
@@ -726,26 +726,26 @@ function MediationFinancePanel({
       ) : agreedFee ? (
         <>
           <div className="grid grid-cols-3 gap-2 text-center">
-            <div className="rounded-lg border bg-white p-2">
+            <div className="rounded-lg border bg-card p-2">
               <p className="text-[10px] uppercase text-muted-foreground">Anlasilan</p>
               <p className="text-sm font-semibold text-foreground">
                 {formatTRY(agreedFeeNum, currency)}
               </p>
             </div>
-            <div className="rounded-lg border bg-white p-2">
+            <div className="rounded-lg border bg-card p-2">
               <p className="text-[10px] uppercase text-muted-foreground">Tahsil</p>
               <p className="text-sm font-semibold text-law-success">
                 {formatTRY(collected, currency)}
               </p>
             </div>
-            <div className="rounded-lg border bg-white p-2">
+            <div className="rounded-lg border bg-card p-2">
               <p className="text-[10px] uppercase text-muted-foreground">Kalan</p>
               <p className={`text-sm font-semibold ${remaining > 0 ? 'text-law-warning' : 'text-law-success'}`}>
                 {formatTRY(remaining, currency)}
               </p>
             </div>
           </div>
-          <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-law-accent transition-all"
               style={{ width: `${progress}%` }}
@@ -753,7 +753,7 @@ function MediationFinancePanel({
           </div>
         </>
       ) : (
-        <p className="rounded-lg border bg-white p-3 text-center text-xs text-muted-foreground">
+        <p className="rounded-lg border bg-card p-3 text-center text-xs text-muted-foreground">
           Henuz anlasilan ucret girilmedi.
         </p>
       )}
@@ -777,7 +777,7 @@ function MediationFinancePanel({
         {showForm && (
           <form
             onSubmit={handleAdd}
-            className="mb-2 rounded-lg border bg-white p-2.5 space-y-2"
+            className="mb-2 rounded-lg border bg-card p-2.5 space-y-2"
           >
             <div className="grid grid-cols-2 gap-2">
               <input
@@ -798,7 +798,7 @@ function MediationFinancePanel({
               <select
                 value={method}
                 onChange={(e) => setMethod(e.target.value)}
-                className="rounded-lg border bg-white px-3 py-2 text-sm outline-none focus:border-law-accent"
+                className="rounded-lg border bg-card px-3 py-2 text-sm outline-none focus:border-law-accent"
               >
                 <option value="cash">Nakit</option>
                 <option value="bank_transfer">Havale/EFT</option>
@@ -825,7 +825,7 @@ function MediationFinancePanel({
         {isLoading ? (
           <p className="text-center text-xs text-muted-foreground">Yukleniyor...</p>
         ) : !collections?.length ? (
-          <p className="rounded-lg border bg-white p-2 text-center text-xs text-muted-foreground">
+          <p className="rounded-lg border bg-card p-2 text-center text-xs text-muted-foreground">
             Henuz tahsilat yok.
           </p>
         ) : (
@@ -833,7 +833,7 @@ function MediationFinancePanel({
             {collections.map((c) => (
               <li
                 key={c.id}
-                className="flex items-center justify-between rounded-lg border bg-white px-2.5 py-1.5 text-xs"
+                className="flex items-center justify-between rounded-lg border bg-card px-2.5 py-1.5 text-xs"
               >
                 <div>
                   <span className="font-semibold">{formatTRY(c.amount, c.currency)}</span>
@@ -876,7 +876,7 @@ function StatusChanger({ fileId, currentStatus }: { fileId: string; currentStatu
         value={newStatus}
         onChange={(e) => handleChange(e.target.value)}
         disabled={updateFile.isPending}
-        className="rounded-lg border bg-white px-2 py-1 text-xs font-medium outline-none focus:border-law-accent disabled:opacity-50"
+        className="rounded-lg border bg-card px-2 py-1 text-xs font-medium outline-none focus:border-law-accent disabled:opacity-50"
       >
         {mediationStatusValues.map((s) => (
           <option key={s} value={s}>{mediationStatusLabels[s]}</option>

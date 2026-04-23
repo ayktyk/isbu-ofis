@@ -111,7 +111,7 @@ export default function CasesPage() {
         </button>
       </div>
 
-      <Card className="border-0 bg-gradient-to-br from-white via-slate-50 to-slate-100 shadow-sm">
+      <Card className="bg-card shadow-sm">
         <CardContent className="space-y-4 p-4 sm:p-5">
           <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:gap-2">
             {statusGroupOptions.map((option) => (
@@ -125,7 +125,7 @@ export default function CasesPage() {
                 className={`flex-shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition sm:px-3.5 sm:py-2 sm:text-sm ${
                   statusGroup === option.value
                     ? 'bg-law-primary text-white shadow-sm'
-                    : 'bg-white text-muted-foreground hover:bg-slate-100 hover:text-foreground'
+                    : 'bg-card text-muted-foreground hover:bg-muted hover:text-foreground'
                 }`}
               >
                 {option.label}
@@ -141,7 +141,7 @@ export default function CasesPage() {
                 value={search}
                 onChange={(event) => handleSearch(event.target.value)}
                 placeholder="Dava adi, muvekkil, mahkeme veya esas no ile ara"
-                className="w-full rounded-xl border bg-white py-2.5 pl-10 pr-10 text-sm outline-none transition focus:border-law-accent focus:ring-2 focus:ring-law-accent/20"
+                className="w-full rounded-xl border bg-background py-2.5 pl-10 pr-10 text-sm outline-none transition focus:border-law-accent focus:ring-2 focus:ring-law-accent/20"
               />
               {search && (
                 <button
@@ -160,7 +160,7 @@ export default function CasesPage() {
                 setStatus(event.target.value)
                 setPage(1)
               }}
-              className="rounded-xl border bg-white px-3 py-2.5 text-sm outline-none transition focus:border-law-accent"
+              className="rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent"
             >
               {statusOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -175,7 +175,7 @@ export default function CasesPage() {
                 setCaseType(event.target.value)
                 setPage(1)
               }}
-              className="rounded-xl border bg-white px-3 py-2.5 text-sm outline-none transition focus:border-law-accent"
+              className="rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent"
             >
               {typeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -247,7 +247,7 @@ export default function CasesPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b bg-slate-50 text-left text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-[0.18em] text-muted-foreground">
                         <th className="px-4 py-3">Dava</th>
                         <th className="hidden px-4 py-3 sm:table-cell">Müvekkil</th>
                         <th className="hidden px-4 py-3 md:table-cell">Tur</th>
@@ -262,7 +262,7 @@ export default function CasesPage() {
                         <tr
                           key={item.id}
                           onClick={() => navigate(`/cases/${item.id}`)}
-                          className="cursor-pointer transition hover:bg-slate-50"
+                          className="cursor-pointer transition hover:bg-muted/50"
                         >
                           <td className="px-4 py-3">
                             <p className="font-medium">{item.title}</p>

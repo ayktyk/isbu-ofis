@@ -105,7 +105,19 @@ router.post('/resync', async (req: Request, res: Response) => {
     }
   }
 
-  for (const task of taskRows) {
+  // Chunk'lı paralel senkron — Google Calendar quota güvenli (kullanıcı başına
+  // ~10 req/sn limiti var); 5'er grup halinde Promise.allSettled kullanıyoruz,
+  // böylece 50 kayıt 50 saniye yerine ~5-10 sn'de biter.
+  const CONCURRENCY = 5
+
+  async function runChunked<T>(items: T[], worker: (item: T) => Promise<void>): Promise<void> {
+    for (let i = 0; i < items.length; i += CONCURRENCY) {
+      const chunk = items.slice(i, i + CONCURRENCY)
+      await Promise.allSettled(chunk.map(worker))
+    }
+  }
+
+  await runChunked(taskRows, async (task) => {
     try {
       await syncTaskToGoogleCalendar({
         taskId: task.id,
@@ -127,9 +139,9 @@ router.post('/resync', async (req: Request, res: Response) => {
       })
       console.error('[GoogleCalendar] Task resync failed', task.id, error)
     }
-  }
+  })
 
-  for (const hearing of hearingRows) {
+  await runChunked(hearingRows, async (hearing) => {
     try {
       await syncHearingToGoogleCalendar({
         hearingId: hearing.id,
@@ -154,7 +166,7 @@ router.post('/resync', async (req: Request, res: Response) => {
       })
       console.error('[GoogleCalendar] Hearing resync failed', hearing.id, error)
     }
-  }
+  })
 
   // İlk failure'dan özet hata mesajı üret — UI'da gösterilecek.
   // Tekrar eden 403/401 hataları büyük ihtimalle paylaşım/yetki sorunudur.

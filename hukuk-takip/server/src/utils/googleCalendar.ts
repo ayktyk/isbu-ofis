@@ -230,12 +230,36 @@ async function googleCalendarRequest<T>(path: string, init?: RequestInit) {
   return (await response.json()) as T
 }
 
+/**
+ * Google Calendar reminder'i geçmişte kalıyorsa (yakın tarihe event eklenirse)
+ * bildirim tetiklenmiyor. Event başlangıcı ile şu an arasındaki farkı hesaplar,
+ * kullanıcı tercihi (defaultMinutes) bunu aşarsa otomatik olarak güvenli bir
+ * değere düşürür. Böylece 3 saat sonraya eklenen duruşma için 3 gün önceye
+ * reminder konmaz, mevcut zamana en yakın makul değer (örn. 5 dk önce) konur.
+ *
+ * Google Calendar üst sınır: 40320 dakika (28 gün). Alt sınır: 0.
+ */
+function resolveReminderMinutes(eventStart: Date, defaultMinutes: number): number {
+  const now = Date.now()
+  const minutesUntilEvent = Math.floor((eventStart.getTime() - now) / 60000)
+  // Event zaten geçmişte → reminder işlevsiz, 0 dönelim (Google yine de kaydeder).
+  if (minutesUntilEvent <= 0) return 0
+  // Event çok yakın (defaultMinutes içinde) → olabildiğince erken reminder.
+  // 1 dakika pay bırak (tam anında bazen kaçabilir).
+  if (minutesUntilEvent <= defaultMinutes) {
+    return Math.max(0, minutesUntilEvent - 1)
+  }
+  // Google üst sınırı 40320 dakika (28 gün); aşarsa clamp.
+  return Math.min(defaultMinutes, 40320)
+}
+
 function buildReminderOverrides(minutes: number) {
+  const safeMinutes = Math.max(0, Math.min(40320, Math.round(minutes)))
   return {
     useDefault: false as const,
     overrides: [
-      { method: 'popup' as const, minutes },
-      { method: 'email' as const, minutes },
+      { method: 'popup' as const, minutes: safeMinutes },
+      { method: 'email' as const, minutes: safeMinutes },
     ],
   }
 }
@@ -330,7 +354,7 @@ function buildTaskEventPayload(
     description: descriptionLines.join('\n'),
     start: { dateTime: startIso, timeZone },
     end: { dateTime: endIso, timeZone },
-    reminders: buildReminderOverrides(reminderMinutes),
+    reminders: buildReminderOverrides(resolveReminderMinutes(eventStart, reminderMinutes)),
     extendedProperties: {
       private: {
         appSource: 'isbu-ofis',
@@ -379,7 +403,7 @@ function buildHearingEventPayload(
     location: location || undefined,
     start: { dateTime: startIso, timeZone },
     end: { dateTime: endIso, timeZone },
-    reminders: buildReminderOverrides(reminderMinutes),
+    reminders: buildReminderOverrides(resolveReminderMinutes(hearingDate, reminderMinutes)),
     extendedProperties: {
       private: {
         appSource: 'isbu-ofis',

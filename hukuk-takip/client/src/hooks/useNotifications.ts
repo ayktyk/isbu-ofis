@@ -45,7 +45,22 @@ export function useDeleteNotification() {
 
   return useMutation({
     mutationFn: (id: string) => api.delete(`/notifications/${id}`),
-    onSuccess: () => {
+    // Optimistic update — silme anında listeden kaldır, hata olursa geri al
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ['notifications'] })
+      const snapshots = queryClient.getQueriesData({ queryKey: ['notifications'] })
+      queryClient.setQueriesData({ queryKey: ['notifications'] }, (old: any) => {
+        if (!old) return old
+        if (Array.isArray(old)) return old.filter((n: any) => n.id !== id)
+        if (Array.isArray(old?.data)) return { ...old, data: old.data.filter((n: any) => n.id !== id) }
+        return old
+      })
+      return { snapshots }
+    },
+    onError: (_err, _id, ctx) => {
+      ctx?.snapshots?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
   })

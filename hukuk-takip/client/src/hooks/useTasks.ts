@@ -75,14 +75,39 @@ export function useDeleteTask() {
 
   return useMutation({
     mutationFn: (id: string) => api.delete(`/tasks/${id}`),
-    onSuccess: () => {
+    // Optimistic update — silme anında UI'dan kaldır, hata olursa geri al
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ['tasks'] })
+      await queryClient.cancelQueries({ queryKey: ['cases'] })
+
+      const snapshots = queryClient.getQueriesData({ queryKey: ['tasks'] })
+      const caseDetailSnaps = queryClient.getQueriesData({ queryKey: ['cases'] })
+
+      queryClient.setQueriesData({ queryKey: ['tasks'] }, (old: any) => {
+        if (!old) return old
+        if (Array.isArray(old)) return old.filter((t: any) => t.id !== id)
+        if (Array.isArray(old?.data)) return { ...old, data: old.data.filter((t: any) => t.id !== id) }
+        return old
+      })
+      queryClient.setQueriesData({ queryKey: ['cases'] }, (old: any) => {
+        if (!old || !old.tasks) return old
+        return { ...old, tasks: old.tasks.filter((t: any) => t.id !== id) }
+      })
+
+      return { snapshots, caseDetailSnaps }
+    },
+    onError: (_err, _id, ctx) => {
+      ctx?.snapshots?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      ctx?.caseDetailSnaps?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      toast.error('Görev silinemedi.')
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
       queryClient.invalidateQueries({ queryKey: ['cases'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-      toast.success('Görev silindi.')
     },
-    onError: () => {
-      toast.error('Görev silinemedi.')
+    onSuccess: () => {
+      toast.success('Görev silindi.')
     },
   })
 }

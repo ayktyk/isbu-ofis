@@ -52,14 +52,39 @@ export function useDeleteHearing() {
 
   return useMutation({
     mutationFn: (id: string) => api.delete(`/hearings/${id}`),
-    onSuccess: () => {
+    // Optimistic update — silme anında UI'dan kaldır, hata olursa geri al
+    onMutate: async (id: string) => {
+      await queryClient.cancelQueries({ queryKey: ['hearings'] })
+      await queryClient.cancelQueries({ queryKey: ['cases'] })
+
+      const snapshots = queryClient.getQueriesData({ queryKey: ['hearings'] })
+      const caseSnaps = queryClient.getQueriesData({ queryKey: ['cases'] })
+
+      queryClient.setQueriesData({ queryKey: ['hearings'] }, (old: any) => {
+        if (!old) return old
+        if (Array.isArray(old)) return old.filter((h: any) => h.id !== id)
+        if (Array.isArray(old?.data)) return { ...old, data: old.data.filter((h: any) => h.id !== id) }
+        return old
+      })
+      queryClient.setQueriesData({ queryKey: ['cases'] }, (old: any) => {
+        if (!old || !old.hearings) return old
+        return { ...old, hearings: old.hearings.filter((h: any) => h.id !== id) }
+      })
+
+      return { snapshots, caseSnaps }
+    },
+    onError: (_err, _id, ctx) => {
+      ctx?.snapshots?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      ctx?.caseSnaps?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      toast.error('Duruşma silinemedi.')
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['hearings'] })
       queryClient.invalidateQueries({ queryKey: ['cases'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-      toast.success('Duruşma silindi.')
     },
-    onError: () => {
-      toast.error('Duruşma silinemedi.')
+    onSuccess: () => {
+      toast.success('Duruşma silindi.')
     },
   })
 }

@@ -115,6 +115,21 @@ WHEN check_violation THEN
 END $$;
 `
 
+// rev3 (2026-04): unaccent extension — arama Turkce karakter duyarli olsun
+// (İ/ı, ş, ç, ğ, ö, ü normalize). CREATE EXTENSION SALT EKLER, hicbir veri
+// silmez. Superuser yetkisi gerekebilir; managed Postgres'lerde (Neon, Supabase,
+// Render) genelde izin verilir. Hata alirsa log'lanir, arama lower()+ilike
+// fallback'e otomatik duser (route tarafinda try/catch ile).
+const SEARCH_EXTENSIONS_SQL = `
+DO $$ BEGIN
+  CREATE EXTENSION IF NOT EXISTS unaccent;
+EXCEPTION WHEN insufficient_privilege THEN
+  RAISE NOTICE 'unaccent extension yuklenemedi (insufficient_privilege); arama lower()+ilike fallback kullanacak.';
+WHEN undefined_file THEN
+  RAISE NOTICE 'unaccent extension paketi sunucuda yok; arama lower()+ilike fallback kullanacak.';
+END $$;
+`
+
 export async function ensureSchema() {
   if (!process.env.DATABASE_URL) {
     console.warn('ensureSchema: DATABASE_URL yok, atlaniyor.')
@@ -126,6 +141,8 @@ export async function ensureSchema() {
     console.log('Schema guard: consultations hazir.')
     await sql.unsafe(REV2_COLLECTIONS_POLY_SQL)
     console.log('Schema guard: polimorfik collections + mediation agreed_fee hazir.')
+    await sql.unsafe(SEARCH_EXTENSIONS_SQL)
+    console.log('Schema guard: unaccent extension hazir (veya bilgilendirici notice).')
   } catch (err) {
     console.error('Schema guard hatasi:', err)
   } finally {

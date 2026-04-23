@@ -279,7 +279,6 @@ html.theme-chamber {
 
   html {
     overflow-x: hidden;
-    overscroll-behavior-x: none;
   }
 
   body {
@@ -289,13 +288,14 @@ html.theme-chamber {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     overflow-x: hidden;
-    overscroll-behavior-x: none;
+    /* iOS Safari smooth scroll için sadece momentum touch; touch-action ve
+       overscroll-behavior-x tanimlari sayfanin dikey kaydirmasini takiyordu,
+       kaldirildi. Yatay overflow html/body'deki overflow-x:hidden ile zaten bloklu. */
     -webkit-overflow-scrolling: touch;
   }
 
   #root {
     overflow-x: hidden;
-    touch-action: pan-y pinch-zoom;
   }
 
   h1, h2, h3, h4, h5, h6 {

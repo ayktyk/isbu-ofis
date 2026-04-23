@@ -47,7 +47,7 @@ function StatCard({
   icon: React.ElementType
 }) {
   return (
-    <Card className="overflow-hidden border-0 bg-gradient-to-br from-white via-slate-50 to-slate-100 shadow-sm">
+    <Card className="overflow-hidden bg-card shadow-sm">
       <CardContent className="p-3 sm:p-5">
         <div className="flex items-start justify-between gap-2 sm:gap-4">
           <div className="min-w-0 space-y-1 sm:space-y-2">
@@ -77,22 +77,22 @@ function OutstandingStatCard({
   const caseNum = parseFloat(cases || '0')
   const medNum = parseFloat(mediations || '0')
   return (
-    <Card className="overflow-hidden border-0 bg-gradient-to-br from-amber-50 via-white to-white shadow-sm ring-1 ring-amber-200/60">
+    <Card className="overflow-hidden bg-card shadow-sm ring-1 ring-[hsl(var(--gold))]/30">
       <CardContent className="p-3 sm:p-5">
         <div className="flex items-start justify-between gap-2 sm:gap-4">
           <div className="min-w-0 space-y-1 sm:space-y-2">
-            <p className="truncate text-[11px] font-medium text-amber-700 sm:text-[13px]">
+            <p className="truncate text-[11px] font-medium text-[hsl(var(--gold))] sm:text-[13px]">
               Bekleyen Tahsilat
             </p>
-            <p className="text-xl font-semibold tracking-tight text-amber-800 sm:text-3xl">
+            <p className="text-xl font-semibold tracking-tight text-foreground sm:text-3xl">
               {formatCurrency(totalNum)}
             </p>
             <p className="hidden text-[11px] text-muted-foreground sm:block">
               Dava {formatCurrency(caseNum)} · Arabuluculuk {formatCurrency(medNum)}
             </p>
           </div>
-          <div className="flex-shrink-0 rounded-xl bg-amber-200/60 p-2 sm:rounded-2xl sm:p-3">
-            <TrendingUp className="h-4 w-4 text-amber-700 sm:h-5 sm:w-5" />
+          <div className="flex-shrink-0 rounded-xl bg-[hsl(var(--gold))]/15 p-2 sm:rounded-2xl sm:p-3">
+            <TrendingUp className="h-4 w-4 text-[hsl(var(--gold))] sm:h-5 sm:w-5" />
           </div>
         </div>
       </CardContent>
@@ -179,10 +179,10 @@ export default function DashboardPage() {
           <h1 className="page-title">Gösterge Paneli</h1>
           <p className="mt-1 text-sm text-muted-foreground">Veri cekilemedi</p>
         </div>
-        <Card className="border-red-200 bg-red-50">
+        <Card className="border-destructive/30 bg-destructive/10">
           <CardContent className="flex items-center gap-3 p-6">
-            <AlertTriangle className="h-5 w-5 text-red-600" />
-            <p className="text-sm text-red-700">
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+            <p className="text-sm text-destructive">
               Veriler yuklenirken hata olustu. Lutfen sayfayi yenileyin.
             </p>
           </CardContent>
@@ -427,7 +427,7 @@ export default function DashboardPage() {
                         <tr
                           key={hearing.id}
                           onClick={() => navigate(`/cases/${hearing.caseId}`)}
-                          className="cursor-pointer transition hover:bg-slate-50"
+                          className="cursor-pointer transition hover:bg-muted/50"
                         >
                           <td className="py-3 pr-4">
                             <div>
@@ -489,7 +489,7 @@ export default function DashboardPage() {
                     key={task.id}
                     type="button"
                     onClick={() => navigate('/tasks')}
-                    className="flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition hover:bg-slate-50"
+                    className="flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition hover:bg-muted/50"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -546,7 +546,7 @@ export default function DashboardPage() {
                     key={item.id}
                     type="button"
                     onClick={() => navigate(`/cases/${item.id}`)}
-                    className="flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition hover:bg-slate-50"
+                    className="flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition hover:bg-muted/50"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">{item.title}</p>
@@ -603,7 +603,7 @@ export default function DashboardPage() {
                       onClick={() =>
                         navigate(isMediation ? `/tools/mediation-files` : `/cases/${fee.id}`)
                       }
-                      className="flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition hover:bg-slate-50"
+                      className="flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition hover:bg-muted/50"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">

@@ -37,6 +37,7 @@ import {
   formatDateTime,
   formatFileSize,
   hearingResultLabels,
+  localInputToISO,
   taskPriorityLabels,
   taskStatusLabels,
 } from '@/lib/utils'
@@ -244,7 +245,12 @@ export default function CaseDetailPage() {
               onSubmit={(event) => {
                 event.preventDefault()
                 if (!id || !hearingDate) return
-                createHearing.mutate({ caseId: id, hearingDate }, { onSuccess: () => setHearingDate('') })
+                // datetime-local değeri saat dilimi içermez; sunucu UTC'de ise
+                // +3 saat kayma olmaması için local → ISO çevirisi yapılır.
+                createHearing.mutate(
+                  { caseId: id, hearingDate: localInputToISO(hearingDate) },
+                  { onSuccess: () => setHearingDate('') }
+                )
               }}
               className="flex gap-2"
             >
@@ -273,12 +279,17 @@ export default function CaseDetailPage() {
               onSubmit={(event) => {
                 event.preventDefault()
                 if (!id || !taskTitle.trim()) return
+                // Sadece tarih girilen görevler için default saat 09:00 (local) olarak
+                // gönderilir, TZ offset korunur; sunucu UTC'de ise +3 kayması olmaz.
+                const dueDateIso = taskDueDate
+                  ? localInputToISO(`${taskDueDate}T09:00`)
+                  : undefined
                 createTask.mutate(
                   {
                     caseId: id,
                     title: taskTitle.trim(),
                     priority: 'medium',
-                    dueDate: taskDueDate || undefined,
+                    dueDate: dueDateIso,
                   },
                   {
                     onSuccess: () => {

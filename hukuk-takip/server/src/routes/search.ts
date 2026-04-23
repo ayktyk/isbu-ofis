@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { and, ilike, or, eq, desc } from 'drizzle-orm'
+import { and, eq, desc, sql, type SQL } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import {
   clients,
@@ -11,10 +11,44 @@ import {
   consultations,
 } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
+import type { AnyColumn } from 'drizzle-orm'
 
 const router = Router()
 
 router.use(authenticate)
+
+// unaccent extension kurulu mu? Startup'ta ensureSchema dener; kurulamazsa
+// buradaki tespit bunu yakalayıp lower()+ilike fallback'ine düşer.
+let unaccentAvailable: boolean | null = null
+
+async function detectUnaccent(): Promise<boolean> {
+  if (unaccentAvailable !== null) return unaccentAvailable
+  try {
+    const rows = await db.execute(sql`SELECT unaccent('test') as x`)
+    unaccentAvailable = Array.isArray(rows) ? rows.length >= 0 : true
+  } catch {
+    unaccentAvailable = false
+  }
+  return unaccentAvailable
+}
+
+// Tek noktadan case-insensitive + diacritic-insensitive LIKE üretir.
+// unaccent varsa: unaccent(lower(col)) LIKE unaccent(lower(pattern))
+// yoksa:         lower(col) LIKE lower(pattern) (Turkce I/i yine tolerablidir)
+function buildMatch(col: AnyColumn, pattern: string, useUnaccent: boolean): SQL {
+  if (useUnaccent) {
+    return sql`unaccent(lower(${col}::text)) LIKE unaccent(lower(${pattern}))`
+  }
+  return sql`lower(${col}::text) LIKE lower(${pattern})`
+}
+
+function anyOf(parts: SQL[]): SQL {
+  // drizzle or() yerine sql raw ile birleştirme — heterojen SQL listelerinde
+  // tip uyumu sorunu olmaz.
+  if (parts.length === 0) return sql`FALSE`
+  if (parts.length === 1) return parts[0]
+  return sql.join(parts, sql` OR `)
+}
 
 // GET /api/search?q=term
 router.get('/', async (req, res) => {
@@ -33,6 +67,9 @@ router.get('/', async (req, res) => {
 
   const userId = req.user!.userId
   const pattern = `%${q}%`
+  const useUnaccent = await detectUnaccent()
+
+  const m = (col: AnyColumn) => buildMatch(col, pattern, useUnaccent)
 
   const [
     foundClients,
@@ -55,17 +92,17 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(clients.userId, userId),
-          or(
-            ilike(clients.fullName, pattern),
-            ilike(clients.phone, pattern),
-            ilike(clients.email, pattern),
-            ilike(clients.tcNo, pattern),
-            ilike(clients.address, pattern),
-            ilike(clients.notes, pattern)
-          )
+          anyOf([
+            m(clients.fullName),
+            m(clients.phone),
+            m(clients.email),
+            m(clients.tcNo),
+            m(clients.address),
+            m(clients.notes),
+          ])
         )
       )
-      .limit(10),
+      .limit(15),
 
     // Cases
     db
@@ -82,16 +119,16 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(cases.userId, userId),
-          or(
-            ilike(cases.title, pattern),
-            ilike(cases.caseNumber, pattern),
-            ilike(cases.courtName, pattern),
-            ilike(cases.description, pattern),
-            ilike(clients.fullName, pattern)
-          )
+          anyOf([
+            m(cases.title),
+            m(cases.caseNumber),
+            m(cases.courtName),
+            m(cases.description),
+            m(clients.fullName),
+          ])
         )
       )
-      .limit(10),
+      .limit(15),
 
     // Tasks
     db
@@ -106,10 +143,10 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(tasks.userId, userId),
-          or(ilike(tasks.title, pattern), ilike(tasks.description, pattern))
+          anyOf([m(tasks.title), m(tasks.description), m(tasks.label)])
         )
       )
-      .limit(10),
+      .limit(15),
 
     // Hearings (filter via case.userId)
     db
@@ -125,16 +162,16 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(cases.userId, userId),
-          or(
-            ilike(caseHearings.courtRoom, pattern),
-            ilike(caseHearings.notes, pattern),
-            ilike(cases.title, pattern),
-            ilike(cases.caseNumber, pattern)
-          )
+          anyOf([
+            m(caseHearings.courtRoom),
+            m(caseHearings.notes),
+            m(cases.title),
+            m(cases.caseNumber),
+          ])
         )
       )
       .orderBy(desc(caseHearings.hearingDate))
-      .limit(10),
+      .limit(15),
 
     // Mediation files (direct fields)
     db
@@ -149,15 +186,15 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(mediationFiles.userId, userId),
-          or(
-            ilike(mediationFiles.fileNo, pattern),
-            ilike(mediationFiles.disputeType, pattern),
-            ilike(mediationFiles.disputeSubject, pattern),
-            ilike(mediationFiles.notes, pattern)
-          )
+          anyOf([
+            m(mediationFiles.fileNo),
+            m(mediationFiles.disputeType),
+            m(mediationFiles.disputeSubject),
+            m(mediationFiles.notes),
+          ])
         )
       )
-      .limit(10),
+      .limit(15),
 
     // Mediation files via party search
     db
@@ -173,18 +210,18 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(mediationFiles.userId, userId),
-          or(
-            ilike(mediationParties.fullName, pattern),
-            ilike(mediationParties.tcNo, pattern),
-            ilike(mediationParties.phone, pattern),
-            ilike(mediationParties.email, pattern),
-            ilike(mediationParties.lawyerName, pattern),
-            ilike(mediationParties.lawyerBarNo, pattern),
-            ilike(mediationParties.lawyerPhone, pattern)
-          )
+          anyOf([
+            m(mediationParties.fullName),
+            m(mediationParties.tcNo),
+            m(mediationParties.phone),
+            m(mediationParties.email),
+            m(mediationParties.lawyerName),
+            m(mediationParties.lawyerBarNo),
+            m(mediationParties.lawyerPhone),
+          ])
         )
       )
-      .limit(10),
+      .limit(15),
 
     // Consultations
     db
@@ -200,22 +237,22 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(consultations.userId, userId),
-          or(
-            ilike(consultations.fullName, pattern),
-            ilike(consultations.phone, pattern),
-            ilike(consultations.subject, pattern),
-            ilike(consultations.notes, pattern),
-            ilike(consultations.sourceDetail, pattern)
-          )
+          anyOf([
+            m(consultations.fullName),
+            m(consultations.phone),
+            m(consultations.subject),
+            m(consultations.notes),
+            m(consultations.sourceDetail),
+          ])
         )
       )
-      .limit(10),
+      .limit(15),
   ])
 
   // Merge mediations by id (deduplicate)
   const mediationMap = new Map<string, (typeof foundMediations)[number]>()
-  for (const m of [...foundMediations, ...foundMediationsByParty]) {
-    mediationMap.set(m.id, m)
+  for (const med of [...foundMediations, ...foundMediationsByParty]) {
+    mediationMap.set(med.id, med)
   }
 
   res.json({
@@ -223,7 +260,7 @@ router.get('/', async (req, res) => {
     cases: foundCases,
     tasks: foundTasks,
     hearings: foundHearings,
-    mediations: Array.from(mediationMap.values()).slice(0, 10),
+    mediations: Array.from(mediationMap.values()).slice(0, 15),
     consultations: foundConsultations,
   })
 })
