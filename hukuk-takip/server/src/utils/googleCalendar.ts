@@ -1,4 +1,4 @@
-import { createSign } from 'node:crypto'
+import { createPrivateKey, createSign } from 'node:crypto'
 
 const GOOGLE_OAUTH_TOKEN_URL = 'https://oauth2.googleapis.com/token'
 const GOOGLE_CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3'
@@ -51,10 +51,57 @@ export type HearingCalendarSyncInput = {
   notes?: string | null
 }
 
+// Private key temizleme — Render/Vercel env'lerinde yaygın formatlama sorunlarını
+// toleranslı çözer:
+// - Başta/sonda tek veya çift tırnak (kopya-yapıştır hatası)
+// - \\n literal'lerini gerçek newline'a çevir
+// - \r\n (CRLF) → \n (LF), tek başına \r'ları da kaldır
+// - Trim whitespace
+// - Sonuna trailing newline garantile (PEM standartı)
+// - Opsiyonel: GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_B64 varsa base64 olarak decode et
+function normalizePrivateKey(raw: string | undefined): string | null {
+  if (!raw) return null
+  let key = raw
+
+  // Başta/sonda tırnak varsa kaldır
+  key = key.trim()
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1)
+  }
+
+  // Escape edilmiş \n'leri gerçek newline yap
+  key = key.replace(/\\n/g, '\n')
+  // CRLF → LF
+  key = key.replace(/\r\n/g, '\n')
+  // Tek başına \r karakterlerini de kaldır
+  key = key.replace(/\r/g, '')
+
+  key = key.trim()
+  // PEM trailing newline zorunlu
+  if (!key.endsWith('\n')) key = key + '\n'
+
+  return key
+}
+
 function getCalendarConfig() {
   const calendarId = process.env.GOOGLE_CALENDAR_ID?.trim()
   const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.trim()
-  const privateKey = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY?.replace(/\\n/g, '\n')
+
+  // Önce base64 varyantını dene (en güvenli yol), yoksa düz PEM'i normalize et
+  const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_B64?.trim()
+  let privateKey: string | null = null
+  if (b64) {
+    try {
+      privateKey = Buffer.from(b64, 'base64').toString('utf8').trim()
+      if (!privateKey.endsWith('\n')) privateKey += '\n'
+    } catch {
+      privateKey = null
+    }
+  }
+  if (!privateKey) {
+    privateKey = normalizePrivateKey(process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY)
+  }
+
   const reminderMinutes = Number.parseInt(
     process.env.GOOGLE_CALENDAR_REMINDER_MINUTES || `${DEFAULT_REMINDER_MINUTES}`,
     10
@@ -99,12 +146,27 @@ async function getGoogleAccessToken() {
     })
   )
 
+  // Önce key'i parse etmeyi dene — daha anlaşılır hata mesajı için
+  let keyObject
+  try {
+    keyObject = createPrivateKey(config.privateKey)
+  } catch (parseErr) {
+    throw new Error(
+      `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY parse edilemedi. ` +
+        `Muhtemel sebepler: (1) Render env değerinde başta/sonda tırnak var, ` +
+        `(2) satır sonları bozuk, (3) key PKCS#8 formatında değil. ` +
+        `Çözüm: JSON key dosyasındaki "private_key" değerini tırnak dahil etmeden ` +
+        `Render'a yapıştır veya base64 kodlayıp GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_B64 ` +
+        `olarak ayrıca tanımla. Orijinal hata: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`
+    )
+  }
+
   const signer = createSign('RSA-SHA256')
   signer.update(`${header}.${claimSet}`)
   signer.end()
 
   const signature = signer
-    .sign(config.privateKey)
+    .sign(keyObject)
     .toString('base64')
     .replace(/\+/g, '-')
     .replace(/\//g, '_')
@@ -422,21 +484,57 @@ export async function runCalendarDiagnostic() {
   }
 
   const privateKeyRaw = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY || ''
+  const b64Raw = process.env.GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_B64 || ''
   const keyDiagnostic = {
-    hasBegin: /BEGIN PRIVATE KEY/.test(privateKeyRaw) || /BEGIN PRIVATE KEY/.test(config.privateKey),
-    hasEnd: /END PRIVATE KEY/.test(privateKeyRaw) || /END PRIVATE KEY/.test(config.privateKey),
+    sourceMode: b64Raw ? 'B64' : 'PEM',
+    hasBegin: /BEGIN PRIVATE KEY/.test(config.privateKey),
+    hasEnd: /END PRIVATE KEY/.test(config.privateKey),
     containsLiteralBackslashN: privateKeyRaw.includes('\\n'),
     containsRealNewline: config.privateKey.includes('\n'),
+    startsWithQuote: privateKeyRaw.trim().startsWith('"') || privateKeyRaw.trim().startsWith("'"),
+    endsWithQuote: privateKeyRaw.trim().endsWith('"') || privateKeyRaw.trim().endsWith("'"),
+    hasCRLF: /\r\n/.test(privateKeyRaw),
     rawLength: privateKeyRaw.length,
+    b64Length: b64Raw.length,
     normalizedLength: config.privateKey.length,
   }
   steps.push({
     name: 'config',
     ok: true,
-    detail: `calendarId=${config.calendarId}, sa=${config.clientEmail}, key: begin=${keyDiagnostic.hasBegin} end=${keyDiagnostic.hasEnd} newlines=${keyDiagnostic.containsRealNewline} (rawLen=${keyDiagnostic.rawLength}, normLen=${keyDiagnostic.normalizedLength})`,
+    detail:
+      `calendarId=${config.calendarId}\n` +
+      `sa=${config.clientEmail}\n` +
+      `keyMode=${keyDiagnostic.sourceMode}, ` +
+      `begin=${keyDiagnostic.hasBegin}, end=${keyDiagnostic.hasEnd}, ` +
+      `quotes=${keyDiagnostic.startsWithQuote || keyDiagnostic.endsWithQuote}, ` +
+      `crlf=${keyDiagnostic.hasCRLF}, ` +
+      `normLen=${keyDiagnostic.normalizedLength}` +
+      (b64Raw ? ` (b64Len=${keyDiagnostic.b64Length})` : ` (rawLen=${keyDiagnostic.rawLength})`),
   })
 
-  // 2) Access token
+  // 2) Key parse testi — createPrivateKey ile
+  try {
+    const keyObj = createPrivateKey(config.privateKey)
+    steps.push({
+      name: 'key_parse',
+      ok: true,
+      detail: `Private key OK — type=${keyObj.asymmetricKeyType}, format=${keyObj.type}`,
+    })
+  } catch (err) {
+    steps.push({
+      name: 'key_parse',
+      ok: false,
+      error:
+        (err instanceof Error ? err.message : String(err)) +
+        '\nÇözüm adımları:\n' +
+        '1. JSON key dosyasındaki "private_key" değerini kopyalarken BAŞTAKI/SONDAKI ÇİFT TIRNAK (") dahil etme.\n' +
+        '2. Render > Environment > GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY alanını sil ve tekrar yapıştır.\n' +
+        '3. Alternatif: Local\'de `node -e "console.log(Buffer.from(require(\'fs\').readFileSync(\'key.pem\')).toString(\'base64\'))"` ile base64\'e çevir, Render\'a GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY_B64 olarak yapıştır.',
+    })
+    return { startedAt, ok: false, steps }
+  }
+
+  // 3) Access token
   let accessToken: string | null = null
   try {
     accessToken = await getGoogleAccessToken()
@@ -454,7 +552,7 @@ export async function runCalendarDiagnostic() {
     return { startedAt, ok: false, steps }
   }
 
-  // 3) Calendar erişimi (GET metadata)
+  // 4) Calendar erişimi (GET metadata)
   try {
     const calResp = await fetch(
       `${GOOGLE_CALENDAR_API_BASE}/calendars/${encodeURIComponent(config.calendarId)}`,
@@ -484,7 +582,7 @@ export async function runCalendarDiagnostic() {
     return { startedAt, ok: false, steps }
   }
 
-  // 4) Test event oluştur
+  // 5) Test event oluştur
   const testPayload: CalendarEventPayload = {
     summary: 'Isbu Ofis - Bağlantı testi',
     description: 'Bu olay teşhis amaçlıdır ve hemen silinecektir.',
@@ -537,7 +635,7 @@ export async function runCalendarDiagnostic() {
     return { startedAt, ok: false, steps }
   }
 
-  // 5) Test event sil (temizlik)
+  // 6) Test event sil (temizlik)
   if (testEventId) {
     try {
       const delResp = await fetch(
