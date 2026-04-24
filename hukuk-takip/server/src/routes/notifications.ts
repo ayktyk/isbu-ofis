@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, isNull } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { notifications } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
@@ -29,7 +29,12 @@ router.get('/', async (req, res) => {
     // Loglandı, devam
   }
 
-  const conditions = [eq(notifications.userId, req.user!.userId)]
+  const conditions = [
+    eq(notifications.userId, req.user!.userId),
+    // Soft-delete: kullanicinin "sildigi" bildirimler listede gozukmez,
+    // ama DB'de saklidir — scanner tekrar uretmez (mevcut kayit var sayar).
+    isNull(notifications.dismissedAt),
+  ]
 
   if (unread === 'true') {
     conditions.push(eq(notifications.isRead, false))
@@ -75,7 +80,12 @@ router.patch('/read-all', async (req, res) => {
   await db
     .update(notifications)
     .set({ isRead: true })
-    .where(eq(notifications.userId, req.user!.userId))
+    .where(
+      and(
+        eq(notifications.userId, req.user!.userId),
+        isNull(notifications.dismissedAt)
+      )
+    )
 
   res.json({ message: 'Tüm bildirimler okundu olarak işaretlendi.' })
 })
@@ -110,6 +120,10 @@ router.patch('/:id/read', async (req, res) => {
 })
 
 // ─── DELETE /api/notifications/:id ──────────────────────────────────────────
+// Soft-delete: satir silinmez, dismissed_at set edilir. Boylece:
+//   1) Scanner duplicate kontrolunde bu kaydi gorur, yenisini UPRETMEZ
+//      (eski davranis silince bildirim geri geliyordu — duzeltildi)
+//   2) Veri kaybi olmaz, gecmise donuk denetim mumkun.
 
 router.delete('/:id', async (req, res) => {
   const notificationId = getSingleValue(req.params.id)
@@ -119,17 +133,19 @@ router.delete('/:id', async (req, res) => {
     return
   }
 
-  const [deleted] = await db
-    .delete(notifications)
+  const [updated] = await db
+    .update(notifications)
+    .set({ dismissedAt: new Date(), isRead: true })
     .where(
       and(
         eq(notifications.id, notificationId),
-        eq(notifications.userId, req.user!.userId)
+        eq(notifications.userId, req.user!.userId),
+        isNull(notifications.dismissedAt)
       )
     )
     .returning()
 
-  if (!deleted) {
+  if (!updated) {
     res.status(404).json({ error: 'Bildirim bulunamadı.' })
     return
   }

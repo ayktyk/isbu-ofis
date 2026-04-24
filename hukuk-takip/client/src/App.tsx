@@ -163,6 +163,7 @@ const InheritancePage = lazy(() => import('./pages/InheritancePage'))
 const MediationDocumentsPage = lazy(() => import('./pages/MediationDocumentsPage'))
 const SentenceCalcPage = lazy(() => import('./pages/SentenceCalcPage'))
 const ConsultationsPage = lazy(() => import('./pages/ConsultationsPage'))
+const CollectionsPage = lazy(() => import('./pages/CollectionsPage'))
 
 // ─── Sayfa yüklenirken gösterilecek skeleton ──────────────────────────────────
 
@@ -274,6 +275,7 @@ export default function App() {
           <Route path="hearings" element={<HearingsPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="consultations" element={<ConsultationsPage />} />
+          <Route path="collections" element={<CollectionsPage />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="settings" element={<SettingsPage />} />

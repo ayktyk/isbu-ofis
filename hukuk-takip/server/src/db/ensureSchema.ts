@@ -115,7 +115,16 @@ WHEN check_violation THEN
 END $$;
 `
 
-// rev3 (2026-04): unaccent extension — arama Turkce karakter duyarli olsun
+// rev3 (2026-04): notifications.dismissed_at kolonu — kullanici "sil" dedi diye
+// DB'den satir atmak yerine soft-delete isaretleyelim. Scanner yine ayni
+// related_id uzerinden onu gorur (dismissed da olsa) ve yeniden yaratmaz;
+// kullanici arayuzde listeden temizlenir. Hic veri kaybi yok.
+const REV3_NOTIFICATIONS_DISMISS_SQL = `
+ALTER TABLE "notifications" ADD COLUMN IF NOT EXISTS "dismissed_at" timestamp;
+CREATE INDEX IF NOT EXISTS "notifications_dismissed_idx" ON "notifications" ("dismissed_at");
+`
+
+// rev4 (2026-04): unaccent extension — arama Turkce karakter duyarli olsun
 // (İ/ı, ş, ç, ğ, ö, ü normalize). CREATE EXTENSION SALT EKLER, hicbir veri
 // silmez. Superuser yetkisi gerekebilir; managed Postgres'lerde (Neon, Supabase,
 // Render) genelde izin verilir. Hata alirsa log'lanir, arama lower()+ilike
@@ -141,6 +150,8 @@ export async function ensureSchema() {
     console.log('Schema guard: consultations hazir.')
     await sql.unsafe(REV2_COLLECTIONS_POLY_SQL)
     console.log('Schema guard: polimorfik collections + mediation agreed_fee hazir.')
+    await sql.unsafe(REV3_NOTIFICATIONS_DISMISS_SQL)
+    console.log('Schema guard: notifications.dismissed_at hazir.')
     await sql.unsafe(SEARCH_EXTENSIONS_SQL)
     console.log('Schema guard: unaccent extension hazir (veya bilgilendirici notice).')
   } catch (err) {

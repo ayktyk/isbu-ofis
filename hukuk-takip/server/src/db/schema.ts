@@ -278,6 +278,7 @@ export const notifications = pgTable(
     relatedType: varchar('related_type', { length: 50 }),
     isRead: boolean('is_read').default(false).notNull(),
     scheduledFor: timestamp('scheduled_for'),
+    dismissedAt: timestamp('dismissed_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => ({

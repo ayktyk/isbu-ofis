@@ -16,6 +16,7 @@ import {
   Settings,
   Shield,
   Users,
+  Wallet,
   X,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -36,6 +37,7 @@ const navItems: Array<{
   { to: '/hearings', label: 'Duruşmalar', icon: Gavel, prefetch: { queryKey: ['hearings', undefined], url: '/hearings' } },
   { to: '/tasks', label: 'Görevler', icon: CheckSquare, prefetch: { queryKey: ['tasks', undefined], url: '/tasks' } },
   { to: '/consultations', label: 'Görüşmeler', icon: PhoneCall, prefetch: { queryKey: ['consultations'], url: '/consultations' } },
+  { to: '/collections', label: 'Tahsilatlar', icon: Wallet, prefetch: { queryKey: ['collections', 'all', undefined], url: '/collections' } },
   { to: '/calendar', label: 'Takvim', icon: Calendar, prefetch: { queryKey: ['calendar', undefined], url: '/calendar' } },
   { to: '/notifications', label: 'Bildirimler', icon: Bell, prefetch: { queryKey: ['notifications', undefined], url: '/notifications' } },
   { to: '/statistics', label: 'İstatistikler', icon: BarChart3, prefetch: { queryKey: ['statistics'], url: '/statistics' } },
