@@ -87,7 +87,9 @@ function daysBetween(from: Date, to: Date) {
 }
 
 // Yaklasan (0-3 gun) ve gecikmis (son 14 gun) gorev/durusmalar icin bildirim ureticisi.
-// Upcoming ve overdue ayri relatedType kullanir: 'hearing' / 'hearing_overdue', 'task' / 'task_overdue'.
+// Gorev icin ek olarak tam saati gelen bildirim de uretilir ('task_due_now').
+// relatedType ayrimi: 'hearing' / 'hearing_overdue', 'task' (3 gun once uyari) /
+// 'task_due_now' (tam saatinde) / 'task_overdue' (gecikmis).
 export async function runReminderScan(): Promise<ScanResult> {
   const now = new Date()
   const todayStart = startOfDay(now)
@@ -254,6 +256,54 @@ export async function runReminderScan(): Promise<ScanResult> {
       message: `"${task.title}" görevi için ${whenText}.${dueDate ? ` Bitiş: ${formatDateTR(dueDate)}` : ''}`,
       relatedId: task.id,
       relatedType: 'task',
+      isRead: false,
+      scheduledFor: dueDate,
+    })
+    upcomingTasksCount++
+  }
+
+  // --- Tam Saati Gelen Gorevler (bugun icinde vakti gelmis, hala pending/in_progress) ---
+  // Scan en fazla 10 dk gecikme ile bu bildirimi uretir; her gorev icin tek sefer uretilir.
+  const dueNowTasks = await db
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        isNotNull(tasks.dueDate),
+        gte(tasks.dueDate, todayStart),
+        lte(tasks.dueDate, now),
+        inArray(tasks.status, ['pending', 'in_progress'])
+      )
+    )
+
+  for (const task of dueNowTasks) {
+    const existing = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.userId, task.userId),
+          eq(notifications.type, 'task'),
+          eq(notifications.relatedId, task.id),
+          eq(notifications.relatedType, 'task_due_now')
+        )
+      )
+      .limit(1)
+
+    if (existing.length > 0) {
+      skipped++
+      continue
+    }
+
+    const dueDate = task.dueDate ? new Date(task.dueDate) : null
+
+    await db.insert(notifications).values({
+      userId: task.userId,
+      type: 'task',
+      title: 'Görev Vakti Geldi',
+      message: `"${task.title}" görevinin vakti geldi${dueDate ? ` (${formatDateTimeTR(dueDate)})` : ''}.`,
+      relatedId: task.id,
+      relatedType: 'task_due_now',
       isRead: false,
       scheduledFor: dueDate,
     })
