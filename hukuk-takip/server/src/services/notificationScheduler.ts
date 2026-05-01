@@ -7,6 +7,7 @@ type ScanResult = {
   upcomingTasks: number
   overdueHearings: number
   overdueTasks: number
+  criticalDeadlines: number
   skipped: number
 }
 
@@ -212,7 +213,8 @@ export async function runReminderScan(): Promise<ScanResult> {
     overdueHearingsCount++
   }
 
-  // --- Yaklasan Gorevler (bugun dahil, sonraki 3 gun) ---
+  // --- Yaklasan Gorevler (bugun dahil, sonraki 3 gun) — sadece NORMAL gorevler.
+  // Sureli isler (is_deadline=true) asagidaki kritik blokta isleniyor.
   const upcomingTasks = await db
     .select()
     .from(tasks)
@@ -221,7 +223,8 @@ export async function runReminderScan(): Promise<ScanResult> {
         isNotNull(tasks.dueDate),
         gte(tasks.dueDate, todayStart),
         lte(tasks.dueDate, upcomingEnd),
-        inArray(tasks.status, ['pending', 'in_progress'])
+        inArray(tasks.status, ['pending', 'in_progress']),
+        eq(tasks.isDeadline, false)
       )
     )
 
@@ -264,6 +267,7 @@ export async function runReminderScan(): Promise<ScanResult> {
 
   // --- Tam Saati Gelen Gorevler (bugun icinde vakti gelmis, hala pending/in_progress) ---
   // Scan en fazla 10 dk gecikme ile bu bildirimi uretir; her gorev icin tek sefer uretilir.
+  // Sureli isler haricindeki gorevler — sureli isler kritik blokta isleniyor.
   const dueNowTasks = await db
     .select()
     .from(tasks)
@@ -272,7 +276,8 @@ export async function runReminderScan(): Promise<ScanResult> {
         isNotNull(tasks.dueDate),
         gte(tasks.dueDate, todayStart),
         lte(tasks.dueDate, now),
-        inArray(tasks.status, ['pending', 'in_progress'])
+        inArray(tasks.status, ['pending', 'in_progress']),
+        eq(tasks.isDeadline, false)
       )
     )
 
@@ -310,7 +315,7 @@ export async function runReminderScan(): Promise<ScanResult> {
     upcomingTasksCount++
   }
 
-  // --- Gecikmis Gorevler (son 14 gun, hala pending/in_progress) ---
+  // --- Gecikmis Gorevler (son 14 gun, hala pending/in_progress) — sadece NORMAL gorevler ---
   const overdueTasks = await db
     .select()
     .from(tasks)
@@ -319,7 +324,8 @@ export async function runReminderScan(): Promise<ScanResult> {
         isNotNull(tasks.dueDate),
         gte(tasks.dueDate, overdueStart),
         lte(tasks.dueDate, overdueEnd),
-        inArray(tasks.status, ['pending', 'in_progress'])
+        inArray(tasks.status, ['pending', 'in_progress']),
+        eq(tasks.isDeadline, false)
       )
     )
 
@@ -358,11 +364,94 @@ export async function runReminderScan(): Promise<ScanResult> {
     overdueTasksCount++
   }
 
+  // --- KRITIK SURELI ISLER ---
+  // is_deadline=true olan gorevler icin 30/14/7/3/1/0 gun kala yeni bildirim
+  // (legal_deadline_critical type) uretilir. relatedType='legal_deadline_<offset>'
+  // alt etiketi sayesinde her offset icin tek sefer uretim olur.
+  const CRITICAL_OFFSETS = [30, 14, 7, 3, 1, 0]
+  let criticalDeadlinesCount = 0
+
+  for (const offset of CRITICAL_OFFSETS) {
+    const target = startOfDay(new Date(todayStart.getTime() + offset * 24 * 60 * 60 * 1000))
+    const targetEnd = endOfDay(target)
+    const relatedType = `legal_deadline_${offset}`
+
+    const criticalRows = await db
+      .select()
+      .from(tasks)
+      .where(
+        and(
+          eq(tasks.isDeadline, true),
+          isNotNull(tasks.dueDate),
+          gte(tasks.dueDate, target),
+          lte(tasks.dueDate, targetEnd),
+          inArray(tasks.status, ['pending', 'in_progress'])
+        )
+      )
+
+    for (const task of criticalRows) {
+      const existing = await db
+        .select({ id: notifications.id })
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, task.userId),
+            eq(notifications.type, 'legal_deadline_critical'),
+            eq(notifications.relatedId, task.id),
+            eq(notifications.relatedType, relatedType)
+          )
+        )
+        .limit(1)
+
+      if (existing.length > 0) {
+        skipped++
+        continue
+      }
+
+      const dueDate = task.dueDate ? new Date(task.dueDate) : null
+      const severityText =
+        task.deadlineSeverity === 'hak_dusurucu'
+          ? 'HAK DÜŞÜRÜCÜ'
+          : task.deadlineSeverity === 'zamanasimi'
+            ? 'ZAMANAŞIMI'
+            : 'SÜRELİ İŞ'
+
+      const whenText =
+        offset === 0
+          ? 'BUGÜN SON GÜN'
+          : offset === 1
+            ? 'YARIN SON GÜN'
+            : `${offset} gün kaldı`
+
+      const titleText =
+        offset <= 1 ? `🔴 ${severityText} — ${whenText}` : `⚠ ${severityText} — ${whenText}`
+
+      const messageText =
+        `"${task.title}" süreli işi için ${whenText.toLowerCase()}` +
+        (dueDate ? ` (${formatDateTR(dueDate)})` : '') +
+        (task.legalBasis ? ` — Dayanak: ${task.legalBasis}` : '') +
+        '. Bu süre KAÇIRILMAMALIDIR.'
+
+      await db.insert(notifications).values({
+        userId: task.userId,
+        type: 'legal_deadline_critical',
+        title: titleText,
+        message: messageText,
+        relatedId: task.id,
+        relatedType,
+        isRead: false,
+        scheduledFor: dueDate,
+      })
+      criticalDeadlinesCount++
+    }
+  }
+
   return {
     upcomingHearings: upcomingHearingsCount,
     upcomingTasks: upcomingTasksCount,
     overdueHearings: overdueHearingsCount,
     overdueTasks: overdueTasksCount,
+    criticalDeadlines: criticalDeadlinesCount,
     skipped,
   }
 }

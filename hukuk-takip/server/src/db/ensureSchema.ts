@@ -139,6 +139,36 @@ WHEN undefined_file THEN
 END $$;
 `
 
+// rev5 (2026-05): Süreli işler — tasks tablosuna additive 10 kolon + 2 indeks.
+// Mevcut tasks satırları is_deadline=false default ile çalışmaya devam eder.
+// Hiçbir kolon silinmez/yeniden adlandırılmaz. Hiçbir satır silinmez.
+// Bu blok idempotenttir — her boot'ta güvenle çalışır.
+const REV5_LEGAL_DEADLINES_SQL = `
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "is_deadline" boolean NOT NULL DEFAULT false;
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "deadline_template_key" varchar(80);
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "deadline_category" varchar(40);
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "deadline_severity" varchar(20);
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "trigger_event_date" date;
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "trigger_event_label" varchar(200);
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "calculated_due_date" date;
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "adjusted_for_holiday" boolean NOT NULL DEFAULT false;
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "legal_basis" varchar(200);
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "completion_evidence" text;
+
+CREATE INDEX IF NOT EXISTS "tasks_deadline_idx" ON "tasks" ("is_deadline","due_date");
+CREATE INDEX IF NOT EXISTS "tasks_user_deadline_idx" ON "tasks" ("user_id","is_deadline");
+`
+
+// rev6 (2026-05): notification_type enum'a 'legal_deadline_critical' değeri.
+// ALTER TYPE ... ADD VALUE IF NOT EXISTS Postgres 12+ ile idempotent ve güvenli.
+// Mevcut bildirimler etkilenmez. Yeni süreli iş bildirimleri bu type ile yazılır.
+const REV6_NOTIFICATION_LEGAL_DEADLINE_SQL = `
+DO $$ BEGIN
+  ALTER TYPE "notification_type" ADD VALUE IF NOT EXISTS 'legal_deadline_critical';
+EXCEPTION WHEN others THEN null;
+END $$;
+`
+
 export async function ensureSchema() {
   if (!process.env.DATABASE_URL) {
     console.warn('ensureSchema: DATABASE_URL yok, atlaniyor.')
@@ -154,6 +184,10 @@ export async function ensureSchema() {
     console.log('Schema guard: notifications.dismissed_at hazir.')
     await sql.unsafe(SEARCH_EXTENSIONS_SQL)
     console.log('Schema guard: unaccent extension hazir (veya bilgilendirici notice).')
+    await sql.unsafe(REV5_LEGAL_DEADLINES_SQL)
+    console.log('Schema guard: tasks süreli iş kolonları hazir.')
+    await sql.unsafe(REV6_NOTIFICATION_LEGAL_DEADLINE_SQL)
+    console.log('Schema guard: notification_type legal_deadline_critical hazir.')
   } catch (err) {
     console.error('Schema guard hatasi:', err)
   } finally {

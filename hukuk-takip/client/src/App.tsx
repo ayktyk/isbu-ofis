@@ -149,6 +149,7 @@ const CasesPage = lazy(() => import('./pages/CasesPage'))
 const CaseDetailPage = lazy(() => import('./pages/CaseDetailPage'))
 const HearingsPage = lazy(() => import('./pages/HearingsPage'))
 const TasksPage = lazy(() => import('./pages/TasksPage'))
+const LegalDeadlinesPage = lazy(() => import('./pages/LegalDeadlinesPage'))
 const CalendarPage = lazy(() => import('./pages/CalendarPage'))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const StatisticsPage = lazy(() => import('./pages/StatisticsPage'))
@@ -274,6 +275,7 @@ export default function App() {
           <Route path="cases/:id/edit" element={<CaseFormPage />} />
           <Route path="hearings" element={<HearingsPage />} />
           <Route path="tasks" element={<TasksPage />} />
+          <Route path="sureli-isler" element={<LegalDeadlinesPage />} />
           <Route path="consultations" element={<ConsultationsPage />} />
           <Route path="collections" element={<CollectionsPage />} />
           <Route path="calendar" element={<CalendarPage />} />

@@ -8,6 +8,7 @@ import { formatRelativeDate } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
+  AlertOctagon,
   Bell,
   BellOff,
   CheckCheck,
@@ -21,16 +22,22 @@ import {
 
 const typeIcon: Record<string, React.ElementType> = {
   hearing_reminder: CalendarClock,
+  hearing: CalendarClock,
   task_due: ListChecks,
+  task: ListChecks,
   case_update: Scale,
   system: Info,
+  legal_deadline_critical: AlertOctagon,
 }
 
 const typeBg: Record<string, string> = {
   hearing_reminder: 'bg-purple-500/10 text-purple-500',
+  hearing: 'bg-purple-500/10 text-purple-500',
   task_due: 'bg-amber-500/10 text-amber-500',
+  task: 'bg-amber-500/10 text-amber-500',
   case_update: 'bg-blue-500/10 text-blue-500',
   system: 'bg-muted text-muted-foreground',
+  legal_deadline_critical: 'bg-red-600/10 text-red-600',
 }
 
 export default function NotificationsPage() {
@@ -107,12 +114,19 @@ export default function NotificationsPage() {
               {notifications.map((notification: any) => {
                 const Icon = typeIcon[notification.type] || Bell
                 const iconClass = typeBg[notification.type] || 'bg-gray-100 text-gray-600'
+                const isCriticalDeadline = notification.type === 'legal_deadline_critical'
 
                 return (
                   <Card
                     key={notification.id}
                     className={`transition-colors ${
-                      !notification.isRead ? 'border-law-accent/30 bg-law-accent/5' : ''
+                      isCriticalDeadline
+                        ? !notification.isRead
+                          ? 'border-l-4 border-l-red-600 bg-red-50/40'
+                          : 'border-l-4 border-l-red-400'
+                        : !notification.isRead
+                          ? 'border-law-accent/30 bg-law-accent/5'
+                          : ''
                     }`}
                   >
                     <CardContent className="flex items-start gap-3 p-4">

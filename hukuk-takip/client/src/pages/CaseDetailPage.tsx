@@ -308,18 +308,95 @@ export default function CaseDetailPage() {
               </button>
             </form>
             <p className="text-xs text-muted-foreground">Son tarih girilen gorevler Google Calendar baglantisi aktif oldugunda 3 gun once hatirlatilir.</p>
-            {tasks.length === 0 ? <p className="text-sm text-muted-foreground">Görev bulunmuyor.</p> : tasks.map((item: any) => (
-              <div key={item.id} className="flex items-start justify-between rounded-xl border p-3">
-                <div>
-                  <p className="text-sm font-medium">{item.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {taskPriorityLabels[item.priority] || item.priority} • {taskStatusLabels[item.status] || item.status}
-                  </p>
-                  {item.dueDate && <p className="text-xs text-muted-foreground">Son tarih: {formatDate(item.dueDate)}</p>}
+            {(() => {
+              const normalTasks = tasks.filter((t: any) => !t.isDeadline)
+              if (normalTasks.length === 0)
+                return <p className="text-sm text-muted-foreground">Görev bulunmuyor.</p>
+              return normalTasks.map((item: any) => (
+                <div key={item.id} className="flex items-start justify-between rounded-xl border p-3">
+                  <div>
+                    <p className="text-sm font-medium">{item.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {taskPriorityLabels[item.priority] || item.priority} • {taskStatusLabels[item.status] || item.status}
+                    </p>
+                    {item.dueDate && <p className="text-xs text-muted-foreground">Son tarih: {formatDate(item.dueDate)}</p>}
+                  </div>
+                  <button type="button" onClick={() => deleteTask.mutate(item.id)} className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </div>
-                <button type="button" onClick={() => deleteTask.mutate(item.id)} className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
-              </div>
-            ))}
+              ))
+            })()}
+          </CardContent>
+        </Card>
+
+        {/* Bu davayla ilişkili SÜRELİ İŞLER (is_deadline=true) — kritik tarihler */}
+        <Card className="border-0 shadow-sm">
+          <CardContent className="space-y-3 p-4">
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-base font-semibold">
+                <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-red-700">
+                  !
+                </span>
+                Süreli İşler
+              </h2>
+              <button
+                type="button"
+                onClick={() => navigate('/sureli-isler')}
+                className="text-xs font-medium text-red-700 hover:underline"
+              >
+                Yeni süreli iş ekle →
+              </button>
+            </div>
+            {(() => {
+              const deadlineTasks = tasks.filter((t: any) => t.isDeadline)
+              if (deadlineTasks.length === 0)
+                return (
+                  <p className="text-sm text-muted-foreground">
+                    Bu dava için süreli iş eklenmedi. İtiraz, istinaf, temyiz vb. süreleri Süreli İşler sayfasından ekleyebilirsiniz.
+                  </p>
+                )
+              return deadlineTasks.map((item: any) => {
+                const due = item.dueDate ? new Date(item.dueDate) : null
+                const today = new Date()
+                const dleft = due
+                  ? Math.round(
+                      (new Date(due.getFullYear(), due.getMonth(), due.getDate()).getTime() -
+                        new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()) /
+                        (24 * 60 * 60 * 1000)
+                    )
+                  : null
+                const critical = dleft !== null && dleft <= 3 && item.status !== 'completed'
+                return (
+                  <div
+                    key={item.id}
+                    className={`flex items-start justify-between gap-3 rounded-xl border p-3 ${
+                      critical ? 'border-red-500 bg-red-50/40' : ''
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className={`text-sm font-medium ${item.status === 'completed' ? 'line-through' : ''}`}>
+                        {item.title}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {item.legalBasis ? `${item.legalBasis} · ` : ''}
+                        {taskStatusLabels[item.status] || item.status}
+                      </p>
+                      {due && (
+                        <p className={`mt-0.5 text-xs ${critical ? 'font-semibold text-red-700' : 'text-muted-foreground'}`}>
+                          Son gün: {formatDate(due)}
+                          {dleft !== null
+                            ? dleft < 0
+                              ? ` (${Math.abs(dleft)} gün geçti)`
+                              : dleft === 0
+                                ? ' (BUGÜN)'
+                                : ` (${dleft} gün kaldı)`
+                            : ''}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })
+            })()}
           </CardContent>
         </Card>
 

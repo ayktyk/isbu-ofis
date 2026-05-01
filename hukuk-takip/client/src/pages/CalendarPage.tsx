@@ -23,15 +23,23 @@ import {
   ChevronRight,
   CalendarClock,
   ListChecks,
+  AlertOctagon,
 } from 'lucide-react'
+import { daysUntil, deadlineSeverityLabels } from '@/lib/utils'
 
 interface CalendarEvent {
   id: string
   title: string
   date: Date
-  type: 'hearing' | 'task'
+  type: 'hearing' | 'task' | 'deadline'
   caseId?: string
   meta?: string
+  /** Süreli iş için kalan gün (negatif = geçti) */
+  daysLeft?: number
+  /** Süreli iş şiddet seviyesi */
+  severity?: string
+  /** Süreli iş yasal dayanak */
+  legalBasis?: string
 }
 
 export default function CalendarPage() {
@@ -62,16 +70,33 @@ export default function CalendarPage() {
     })
 
     tasks.forEach((t: any) => {
-      if (t.dueDate) {
+      if (!t.dueDate) return
+      // Süreli işler ayrı tip — kırmızı duvar render'ı için
+      if (t.isDeadline && t.status !== 'completed' && t.status !== 'cancelled') {
+        const eventDate = new Date(t.dueDate)
+        const left = daysUntil(t.dueDate)
         items.push({
           id: t.id,
           title: t.title,
-          date: new Date(t.dueDate),
-          type: 'task',
+          date: eventDate,
+          type: 'deadline',
           caseId: t.caseId || undefined,
           meta: t.caseTitle || undefined,
+          daysLeft: left ?? undefined,
+          severity: t.deadlineSeverity || undefined,
+          legalBasis: t.legalBasis || undefined,
         })
+        return
       }
+      // Normal görev
+      items.push({
+        id: t.id,
+        title: t.title,
+        date: new Date(t.dueDate),
+        type: 'task',
+        caseId: t.caseId || undefined,
+        meta: t.caseTitle || undefined,
+      })
     })
 
     return items
@@ -145,6 +170,26 @@ export default function CalendarPage() {
                 const selected = selectedDay && isSameDay(day, selectedDay)
                 const hasHearing = dayEvents.some((e) => e.type === 'hearing')
                 const hasTask = dayEvents.some((e) => e.type === 'task')
+                const hasDeadline = dayEvents.some((e) => e.type === 'deadline')
+
+                // KIRMIZI DUVAR: bu hücredeki en kritik süreli işin durumu
+                const deadlineEvts = dayEvents.filter((e) => e.type === 'deadline')
+                const minDays = deadlineEvts.length
+                  ? Math.min(
+                      ...deadlineEvts.map((e) =>
+                        e.daysLeft === undefined ? Number.POSITIVE_INFINITY : e.daysLeft
+                      )
+                    )
+                  : Number.POSITIVE_INFINITY
+
+                const isCriticalCell = inMonth && minDays <= 3
+                const isUpcomingCell = inMonth && minDays > 3 && minDays <= 14
+
+                const wallClass = isCriticalCell
+                  ? 'border-2 border-red-500 bg-red-50/60 dark:bg-red-900/20'
+                  : isUpcomingCell
+                    ? 'border-b-4 border-orange-400'
+                    : ''
 
                 return (
                   <button
@@ -154,6 +199,7 @@ export default function CalendarPage() {
                       ${!inMonth ? 'text-muted-foreground/30' : ''}
                       ${selected ? 'bg-law-accent/10' : 'hover:bg-muted/50'}
                       ${today ? 'font-bold' : ''}
+                      ${wallClass}
                     `}
                   >
                     <span
@@ -165,9 +211,24 @@ export default function CalendarPage() {
                       {format(day, 'd')}
                     </span>
 
+                    {/* Kırmızı duvar ünlem ikonu (sağ üst) */}
+                    {isCriticalCell && (
+                      <AlertOctagon
+                        className="absolute right-1 top-1 h-3.5 w-3.5 fill-red-600 text-white"
+                        aria-label="Kritik süreli iş"
+                      />
+                    )}
+
                     {/* Etkinlik noktaları */}
                     {dayEvents.length > 0 && (
                       <div className="mt-1 flex gap-0.5">
+                        {hasDeadline && (
+                          <span
+                            className={`h-2 w-2 rounded-full ${
+                              minDays <= 3 ? 'bg-red-600' : 'bg-red-400'
+                            }`}
+                          />
+                        )}
                         {hasHearing && <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />}
                         {hasTask && <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />}
                       </div>
@@ -179,9 +240,13 @@ export default function CalendarPage() {
                         <div
                           key={evt.id}
                           className={`truncate rounded px-1 text-[10px] leading-tight ${
-                            evt.type === 'hearing'
-                              ? 'bg-purple-500/10 text-purple-500'
-                              : 'bg-amber-500/10 text-amber-500'
+                            evt.type === 'deadline'
+                              ? minDays <= 3
+                                ? 'bg-red-600 font-semibold text-white'
+                                : 'bg-red-100 font-medium text-red-700'
+                              : evt.type === 'hearing'
+                                ? 'bg-purple-500/10 text-purple-500'
+                                : 'bg-amber-500/10 text-amber-500'
                           }`}
                         >
                           {evt.title}
@@ -199,7 +264,7 @@ export default function CalendarPage() {
             </div>
 
             {/* Renk açıklaması */}
-            <div className="mt-3 flex items-center gap-4 border-t pt-3">
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t pt-3">
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="h-2 w-2 rounded-full bg-purple-500" />
                 Duruşma
@@ -207,6 +272,18 @@ export default function CalendarPage() {
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                 <span className="h-2 w-2 rounded-full bg-amber-500" />
                 Görev
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-red-600" />
+                Süreli iş (3 gün ve altı)
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-red-400" />
+                Süreli iş (yaklaşan)
+              </span>
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="inline-block h-2 w-4 border-b-2 border-orange-400" />
+                4-14 gün uyarı
               </span>
             </div>
           </CardContent>
@@ -233,33 +310,79 @@ export default function CalendarPage() {
 
             {selectedDay && selectedEvents.length > 0 && (
               <div className="space-y-3">
-                {selectedEvents.map((evt) => (
-                  <div
-                    key={evt.id}
-                    onClick={() => evt.caseId && navigate(`/cases/${evt.caseId}`)}
-                    className={`cursor-pointer rounded-lg border p-3 transition-colors hover:bg-muted/50 ${
-                      evt.type === 'hearing' ? 'border-l-4 border-l-purple-500' : 'border-l-4 border-l-amber-500'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      {evt.type === 'hearing' ? (
-                        <CalendarClock className="h-4 w-4 text-purple-500" />
-                      ) : (
-                        <ListChecks className="h-4 w-4 text-amber-500" />
+                {selectedEvents.map((evt) => {
+                  const borderClass =
+                    evt.type === 'deadline'
+                      ? evt.daysLeft !== undefined && evt.daysLeft <= 3
+                        ? 'border-l-4 border-l-red-600 bg-red-50/50'
+                        : 'border-l-4 border-l-red-400'
+                      : evt.type === 'hearing'
+                        ? 'border-l-4 border-l-purple-500'
+                        : 'border-l-4 border-l-amber-500'
+
+                  return (
+                    <div
+                      key={evt.id}
+                      onClick={() => {
+                        if (evt.type === 'deadline') {
+                          navigate('/sureli-isler')
+                        } else if (evt.caseId) {
+                          navigate(`/cases/${evt.caseId}`)
+                        }
+                      }}
+                      className={`cursor-pointer rounded-lg border p-3 transition-colors hover:bg-muted/50 ${borderClass}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        {evt.type === 'deadline' ? (
+                          <AlertOctagon className="h-4 w-4 text-red-600" />
+                        ) : evt.type === 'hearing' ? (
+                          <CalendarClock className="h-4 w-4 text-purple-500" />
+                        ) : (
+                          <ListChecks className="h-4 w-4 text-amber-500" />
+                        )}
+                        <Badge
+                          variant={
+                            evt.type === 'deadline'
+                              ? 'danger'
+                              : evt.type === 'hearing'
+                                ? 'default'
+                                : 'warning'
+                          }
+                          className="text-[10px]"
+                        >
+                          {evt.type === 'deadline'
+                            ? 'SÜRELİ İŞ'
+                            : evt.type === 'hearing'
+                              ? 'Duruşma'
+                              : 'Görev'}
+                        </Badge>
+                        {evt.type === 'deadline' && evt.severity && (
+                          <span className="text-[10px] uppercase tracking-wide text-red-700">
+                            {deadlineSeverityLabels[evt.severity] || evt.severity}
+                          </span>
+                        )}
+                      </div>
+                      <p className="mt-1.5 text-sm font-medium">{evt.title}</p>
+                      {evt.meta && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">{evt.meta}</p>
                       )}
-                      <Badge variant={evt.type === 'hearing' ? 'default' : 'warning'} className="text-[10px]">
-                        {evt.type === 'hearing' ? 'Duruşma' : 'Görev'}
-                      </Badge>
+                      {evt.type === 'deadline' && evt.legalBasis && (
+                        <p className="mt-0.5 text-xs font-medium text-slate-600">
+                          {evt.legalBasis}
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {evt.type === 'deadline'
+                          ? evt.daysLeft !== undefined
+                            ? evt.daysLeft <= 0
+                              ? 'BUGÜN SON GÜN'
+                              : `${evt.daysLeft} gün kaldı`
+                            : ''
+                          : format(evt.date, 'HH:mm', { locale: tr })}
+                      </p>
                     </div>
-                    <p className="mt-1.5 text-sm font-medium">{evt.title}</p>
-                    {evt.meta && (
-                      <p className="mt-0.5 text-xs text-muted-foreground">{evt.meta}</p>
-                    )}
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {format(evt.date, 'HH:mm', { locale: tr })}
-                    </p>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </CardContent>

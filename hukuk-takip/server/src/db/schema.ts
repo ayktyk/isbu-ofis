@@ -75,7 +75,15 @@ export const notificationTypeEnum = pgEnum('notification_type', [
   'task',
   'payment',
   'system',
+  'legal_deadline_critical',
 ])
+
+// Süreli iş kategorileri ve şiddet seviyeleri (varchar olarak tutuluyor; ileride
+// pgEnum'a yükseltilebilir, şimdilik esnek değer kabul ediyoruz).
+export const deadlineCategoryValues = ['hukuk', 'icra', 'is', 'ceza', 'idari', 'tbk'] as const
+export const deadlineSeverityValues = ['hak_dusurucu', 'zamanasimi', 'usul'] as const
+export type DeadlineCategoryValue = (typeof deadlineCategoryValues)[number]
+export type DeadlineSeverityValue = (typeof deadlineSeverityValues)[number]
 
 export const consultationTypeEnum = pgEnum('consultation_type', ['phone', 'in_person'])
 
@@ -206,11 +214,24 @@ export const tasks = pgTable(
     completedAt: timestamp('completed_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    // Süreli işler — additive alanlar (mevcut görevler is_deadline=false default ile çalışmaya devam eder)
+    isDeadline: boolean('is_deadline').default(false).notNull(),
+    deadlineTemplateKey: varchar('deadline_template_key', { length: 80 }),
+    deadlineCategory: varchar('deadline_category', { length: 40 }),
+    deadlineSeverity: varchar('deadline_severity', { length: 20 }),
+    triggerEventDate: date('trigger_event_date'),
+    triggerEventLabel: varchar('trigger_event_label', { length: 200 }),
+    calculatedDueDate: date('calculated_due_date'),
+    adjustedForHoliday: boolean('adjusted_for_holiday').default(false).notNull(),
+    legalBasis: varchar('legal_basis', { length: 200 }),
+    completionEvidence: text('completion_evidence'),
   },
   (table) => ({
     userIdx: index('tasks_user_idx').on(table.userId),
     statusIdx: index('tasks_status_idx').on(table.status),
     dueDateIdx: index('tasks_due_date_idx').on(table.dueDate),
+    deadlineIdx: index('tasks_deadline_idx').on(table.isDeadline, table.dueDate),
+    deadlineUserIdx: index('tasks_user_deadline_idx').on(table.userId, table.isDeadline),
   })
 )
 

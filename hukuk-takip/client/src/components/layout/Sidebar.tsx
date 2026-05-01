@@ -2,6 +2,7 @@ import { useCallback, type ElementType } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import {
+  AlertOctagon,
   BarChart3,
   Bell,
   Briefcase,
@@ -36,6 +37,7 @@ const navItems: Array<{
   { to: '/tools/mediation-files', label: 'Arabuluculuk Dosyaları', icon: FolderOpen },
   { to: '/hearings', label: 'Duruşmalar', icon: Gavel, prefetch: { queryKey: ['hearings', undefined], url: '/hearings' } },
   { to: '/tasks', label: 'Görevler', icon: CheckSquare, prefetch: { queryKey: ['tasks', undefined], url: '/tasks' } },
+  { to: '/sureli-isler', label: 'Süreli İşler', icon: AlertOctagon, prefetch: { queryKey: ['tasks', { isDeadline: true }], url: '/tasks?isDeadline=true' } },
   { to: '/consultations', label: 'Görüşmeler', icon: PhoneCall, prefetch: { queryKey: ['consultations'], url: '/consultations' } },
   { to: '/collections', label: 'Tahsilatlar', icon: Wallet, prefetch: { queryKey: ['collections', 'all', undefined], url: '/collections' } },
   { to: '/calendar', label: 'Takvim', icon: Calendar, prefetch: { queryKey: ['calendar', undefined], url: '/calendar' } },

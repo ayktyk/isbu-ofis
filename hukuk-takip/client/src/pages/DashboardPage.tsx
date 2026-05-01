@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import {
+  AlertOctagon,
   AlertTriangle,
   Banknote,
   CalendarClock,
@@ -12,6 +13,7 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react'
+import { daysUntil, deadlineDaysClass, deadlineDaysLabel, deadlineSeverityLabels } from '@/lib/utils'
 import { useDashboard } from '@/hooks/useDashboard'
 import { useStatistics } from '@/hooks/useStatistics'
 import { useConsultationStats } from '@/hooks/useConsultations'
@@ -191,7 +193,8 @@ export default function DashboardPage() {
     )
   }
 
-  const { cases, upcomingHearings, pendingTasks, recentCases, financials, outstandingFees } = data
+  const { cases, upcomingHearings, pendingTasks, recentCases, financials, outstandingFees, criticalDeadlines } = data
+  const criticalDeadlinesList: any[] = Array.isArray(criticalDeadlines) ? criticalDeadlines : []
 
   return (
     <div className="space-y-6">
@@ -229,6 +232,64 @@ export default function DashboardPage() {
           </button>
         </div>
       </div>
+
+      {/* KRITIK SURELI ISLER BANDI — bu hafta (7 gün) içinde sonu olan açık süreli işler */}
+      {criticalDeadlinesList.length > 0 && (
+        <Card className="border-l-4 border-l-red-600 bg-red-50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertOctagon className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600" />
+              <div className="flex-1">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-sm font-semibold text-red-700 sm:text-base">
+                    Bu hafta kaçıramayacağınız {criticalDeadlinesList.length} süreli iş
+                  </h2>
+                  <button
+                    onClick={() => navigate('/sureli-isler')}
+                    className="inline-flex items-center gap-1 text-xs font-medium text-red-700 hover:underline"
+                  >
+                    Tümünü gör <ChevronRight className="h-3 w-3" />
+                  </button>
+                </div>
+                <ul className="mt-2 space-y-1.5">
+                  {criticalDeadlinesList.slice(0, 4).map((d: any) => {
+                    const dl = d.dueDate ? daysUntil(d.dueDate) : null
+                    return (
+                      <li
+                        key={d.id}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded bg-white/60 p-2 text-sm"
+                      >
+                        <button
+                          onClick={() => navigate('/sureli-isler')}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span className="font-medium text-red-900">{d.title}</span>
+                          {d.legalBasis && (
+                            <span className="ml-2 text-xs text-red-700/70">— {d.legalBasis}</span>
+                          )}
+                          {d.deadlineSeverity && (
+                            <span className="ml-2 text-[10px] uppercase tracking-wide text-red-700/70">
+                              {deadlineSeverityLabels[d.deadlineSeverity] || d.deadlineSeverity}
+                            </span>
+                          )}
+                          {d.caseTitle && (
+                            <span className="ml-2 text-xs text-red-700/60">· {d.caseTitle}</span>
+                          )}
+                        </button>
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${deadlineDaysClass(dl)}`}
+                        >
+                          {deadlineDaysLabel(dl)}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-5">
         <StatCard

@@ -9,6 +9,13 @@ build/
 .env
 .env.local
 .env.*.local
+.env.backup*
+.env.bak*
+
+# Local DB backups (test sırasında alınanlar)
+.local-backups/
+hukuk-takip/.local-backups/
+*.dump.sql
 
 # IDE
 .vscode/

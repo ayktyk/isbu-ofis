@@ -149,3 +149,51 @@ export function formatFileSize(bytes: number | null | undefined): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
+// ─── Süreli iş yardımcıları ────────────────────────────────────────────────────
+
+export const deadlineCategoryLabels: Record<string, string> = {
+  hukuk: 'Hukuk',
+  icra: 'İcra',
+  is: 'İş Hukuku',
+  ceza: 'Ceza',
+  idari: 'İdari',
+  tbk: 'TBK Genel',
+}
+
+export const deadlineSeverityLabels: Record<string, string> = {
+  hak_dusurucu: 'Hak Düşürücü',
+  zamanasimi: 'Zamanaşımı',
+  usul: 'Usul',
+}
+
+/** Bir süreli iş için kalan gün hesaplar (gün bazında, saat dikkate alınmaz). */
+export function daysUntil(date: string | Date | null | undefined): number | null {
+  if (!date) return null
+  const due = new Date(date)
+  if (Number.isNaN(due.getTime())) return null
+  const now = new Date()
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const startOfDue = new Date(due.getFullYear(), due.getMonth(), due.getDate())
+  return Math.round((startOfDue.getTime() - startOfToday.getTime()) / (24 * 60 * 60 * 1000))
+}
+
+/** Süreli iş "kalan gün" rozeti için renk sınıfı. */
+export function deadlineDaysClass(daysLeft: number | null): string {
+  if (daysLeft === null) return 'bg-slate-200 text-slate-700'
+  if (daysLeft < 0) return 'bg-red-700 text-white'
+  if (daysLeft <= 1) return 'bg-red-600 text-white'
+  if (daysLeft <= 3) return 'bg-red-500 text-white'
+  if (daysLeft <= 7) return 'bg-orange-500 text-white'
+  if (daysLeft <= 14) return 'bg-amber-500 text-white'
+  if (daysLeft <= 30) return 'bg-yellow-200 text-yellow-900'
+  return 'bg-slate-200 text-slate-700'
+}
+
+export function deadlineDaysLabel(daysLeft: number | null): string {
+  if (daysLeft === null) return 'Süre yok'
+  if (daysLeft < 0) return `${Math.abs(daysLeft)} gün geçti`
+  if (daysLeft === 0) return 'BUGÜN SON'
+  if (daysLeft === 1) return 'YARIN SON'
+  return `${daysLeft} gün kaldı`
+}

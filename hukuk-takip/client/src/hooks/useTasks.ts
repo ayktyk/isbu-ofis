@@ -8,6 +8,10 @@ export function useTasks(params?: {
   priority?: string
   page?: number
   pageSize?: number
+  isDeadline?: boolean
+  category?: string
+  severity?: string
+  dueWithinDays?: number
 }) {
   return useQuery({
     queryKey: ['tasks', params],
@@ -16,6 +20,38 @@ export function useTasks(params?: {
       return res.data
     },
   })
+}
+
+export function useDeadlineTemplates() {
+  return useQuery({
+    queryKey: ['deadline-templates'],
+    queryFn: async () => {
+      const res = await api.get('/tasks/deadlines/templates')
+      return res.data
+    },
+    staleTime: 1000 * 60 * 60 * 24, // 1 gün
+  })
+}
+
+export function useCriticalDeadlines(withinDays = 7) {
+  return useQuery({
+    queryKey: ['deadlines', 'critical', withinDays],
+    queryFn: async () => {
+      const res = await api.get('/tasks/deadlines/critical', { params: { withinDays } })
+      return res.data as any[]
+    },
+    staleTime: 1000 * 60 * 5,
+  })
+}
+
+export async function previewDeadline(templateKey: string, triggerEventDate: string) {
+  const res = await api.post('/tasks/deadlines/preview', { templateKey, triggerEventDate })
+  return res.data as {
+    template: { key: string; label: string; durationDays: number; durationYears?: number; legalBasis: string; triggerLabel: string; severity: string; category: string; applyHolidayShift: boolean }
+    rawDueDate: string
+    adjustedDueDate: string
+    wasShifted: boolean
+  }
 }
 
 export function useCreateTask() {

@@ -197,6 +197,7 @@ export default function TasksPage() {
   const { data, isLoading, isError } = useTasks({
     status: status || undefined,
     priority: priority || undefined,
+    isDeadline: false,
   })
   const { data: casesData } = useCases({ pageSize: 100 })
 

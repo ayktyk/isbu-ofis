@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { and, desc, eq, gte, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import {
   caseHearings,
@@ -34,6 +34,41 @@ const userOwnedCollectionsClause = (userId: string) =>
     OR EXISTS (SELECT 1 FROM ${mediationFiles} WHERE ${mediationFiles.id} = ${collections.mediationFileId} AND ${mediationFiles.userId} = ${userId})
   )`
 
+// Kritik süreli işler — önümüzdeki N gün içinde son bulan, hala açık olanlar.
+// Dashboard'un "kaçıramayacağınız süreler" bandı için.
+async function loadCriticalDeadlines(userId: string, withinDays = 7) {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const end = new Date(start)
+  end.setDate(end.getDate() + withinDays)
+
+  return db
+    .select({
+      id: tasks.id,
+      title: tasks.title,
+      dueDate: tasks.dueDate,
+      caseId: tasks.caseId,
+      caseTitle: cases.title,
+      deadlineCategory: tasks.deadlineCategory,
+      deadlineSeverity: tasks.deadlineSeverity,
+      legalBasis: tasks.legalBasis,
+    })
+    .from(tasks)
+    .leftJoin(cases, eq(tasks.caseId, cases.id))
+    .where(
+      and(
+        eq(tasks.userId, userId),
+        eq(tasks.isDeadline, true),
+        isNotNull(tasks.dueDate),
+        gte(tasks.dueDate, start),
+        lte(tasks.dueDate, end),
+        inArray(tasks.status, ['pending', 'in_progress'])
+      )
+    )
+    .orderBy(asc(tasks.dueDate))
+    .limit(20)
+}
+
 router.get('/', async (req, res) => {
   triggerReminderScanInBackground()
   const userId = req.user!.userId
@@ -49,6 +84,7 @@ router.get('/', async (req, res) => {
     outstandingCases,
     outstandingMediations,
     potentialConsultations,
+    criticalDeadlines,
   ] = await Promise.all([
     db
       .select({
@@ -94,7 +130,9 @@ router.get('/', async (req, res) => {
       })
       .from(tasks)
       .leftJoin(cases, eq(tasks.caseId, cases.id))
-      .where(and(eq(tasks.userId, userId), eq(tasks.status, 'pending')))
+      .where(
+        and(eq(tasks.userId, userId), eq(tasks.status, 'pending'), eq(tasks.isDeadline, false))
+      )
       .orderBy(tasks.dueDate)
       .limit(10),
 
@@ -180,6 +218,8 @@ router.get('/', async (req, res) => {
       .select({ count: sql<number>`count(*)::int` })
       .from(consultations)
       .where(and(eq(consultations.userId, userId), eq(consultations.status, 'potential'))),
+
+    loadCriticalDeadlines(userId, 7),
   ])
 
   const caseCount = {
@@ -245,6 +285,7 @@ router.get('/', async (req, res) => {
     },
     outstandingFees,
     potentialConsultationsCount: potentialConsultationCount,
+    criticalDeadlines,
   })
 })
 
@@ -270,6 +311,7 @@ router.get('/summary', async (req, res) => {
     potentialConsultations,
     thisMonthIncome,
     consultationStats,
+    criticalDeadlines,
   ] = await Promise.all([
     db
       .select({ status: cases.status, count: sql<number>`count(*)::int` })
@@ -312,7 +354,9 @@ router.get('/summary', async (req, res) => {
       })
       .from(tasks)
       .leftJoin(cases, eq(tasks.caseId, cases.id))
-      .where(and(eq(tasks.userId, userId), eq(tasks.status, 'pending')))
+      .where(
+        and(eq(tasks.userId, userId), eq(tasks.status, 'pending'), eq(tasks.isDeadline, false))
+      )
       .orderBy(tasks.dueDate)
       .limit(10),
 
@@ -416,6 +460,9 @@ router.get('/summary', async (req, res) => {
       .from(consultations)
       .where(eq(consultations.userId, userId))
       .groupBy(consultations.status),
+
+    // Kritik süreli işler — önümüzdeki 7 gün
+    loadCriticalDeadlines(userId, 7),
   ])
 
   const caseCount = {
@@ -472,6 +519,7 @@ router.get('/summary', async (req, res) => {
       potential: potentialConsultationCount,
       byStatus: consultationStats,
     },
+    criticalDeadlines,
   })
 })
 
