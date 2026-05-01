@@ -3,8 +3,8 @@ import { useDeadlineTemplates, previewDeadline, useCreateTask } from '@/hooks/us
 import { useCases } from '@/hooks/useCases'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { deadlineCategoryLabels, deadlineSeverityLabels, formatDate } from '@/lib/utils'
-import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, Save, Search, X } from 'lucide-react'
+import { deadlineCategoryLabels, deadlineSeverityLabels, formatDate, trNormalize } from '@/lib/utils'
+import { AlertTriangle, ArrowLeft, ArrowRight, Loader2, Pencil, Save, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 
 interface Template {
@@ -42,10 +42,20 @@ export function NewLegalDeadlineForm({
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<string>('')
 
+  // Manuel mod (şablonsuz) — kullanıcı kendi süre/başlığını girer
+  const [isManual, setIsManual] = useState(false)
+
   const [triggerDate, setTriggerDate] = useState('')
   const [caseId, setCaseId] = useState(defaultCaseId || '')
   const [triggerEventLabel, setTriggerEventLabel] = useState('')
   const [customTitle, setCustomTitle] = useState('')
+
+  // Manuel mod için ek alanlar
+  const [manualDueDate, setManualDueDate] = useState('')
+  const [manualSeverity, setManualSeverity] = useState<'hak_dusurucu' | 'zamanasimi' | 'usul'>('hak_dusurucu')
+  const [manualCategory, setManualCategory] = useState<string>('hukuk')
+  const [manualLegalBasis, setManualLegalBasis] = useState('')
+  const [manualDescription, setManualDescription] = useState('')
 
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
@@ -60,11 +70,13 @@ export function NewLegalDeadlineForm({
     .filter((t: Template) => {
       if (activeCategory && t.category !== activeCategory) return false
       if (search) {
-        const q = search.toLowerCase()
+        const q = trNormalize(search)
+        if (!q) return true
         return (
-          t.label.toLowerCase().includes(q) ||
-          t.legalBasis.toLowerCase().includes(q) ||
-          (t.description && t.description.toLowerCase().includes(q))
+          trNormalize(t.label).includes(q) ||
+          trNormalize(t.legalBasis).includes(q) ||
+          (t.description ? trNormalize(t.description).includes(q) : false) ||
+          trNormalize(t.triggerLabel).includes(q)
         )
       }
       return true
@@ -102,6 +114,44 @@ export function NewLegalDeadlineForm({
   }
 
   function handleSubmit() {
+    if (isManual) {
+      const title = customTitle.trim()
+      if (!title) {
+        toast.error('Başlık zorunlu.')
+        return
+      }
+      if (!manualDueDate) {
+        toast.error('Son gün zorunlu.')
+        return
+      }
+      const dueDate = new Date(`${manualDueDate}T09:00:00`)
+      createTask.mutate(
+        {
+          title,
+          description: manualDescription || '',
+          priority: 'urgent',
+          caseId: caseId || '',
+          dueDate: dueDate.toISOString(),
+          isDeadline: true,
+          deadlineTemplateKey: '',
+          deadlineCategory: manualCategory as any,
+          deadlineSeverity: manualSeverity as any,
+          triggerEventDate: triggerDate || '',
+          triggerEventLabel: triggerEventLabel || '',
+          calculatedDueDate: manualDueDate,
+          adjustedForHoliday: false,
+          legalBasis: manualLegalBasis || '',
+        } as any,
+        {
+          onSuccess: () => {
+            toast.success('Süreli iş eklendi.')
+            onClose()
+          },
+        }
+      )
+      return
+    }
+
     if (!preview || !selectedTemplate) return
     const finalDue = acceptShift ? preview.adjustedDueDate : preview.rawDueDate
     const dueDate = new Date(`${finalDue}T09:00:00`)
@@ -140,12 +190,13 @@ export function NewLegalDeadlineForm({
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-law-primary">
-                Yeni Süreli İş — Adım {step}/3
+                Yeni Süreli İş {isManual ? '— Manuel' : `— Adım ${step}/${isManual ? 2 : 3}`}
               </h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                {step === 1 && 'Süreli iş türünü seçin'}
-                {step === 2 && 'Tetikleyici tarihi girin'}
-                {step === 3 && 'Hesaplanan son günü onaylayın'}
+                {isManual && step === 2 && 'Bilgileri elle girin'}
+                {!isManual && step === 1 && 'Süreli iş türünü seçin'}
+                {!isManual && step === 2 && 'Tetikleyici tarihi girin'}
+                {!isManual && step === 3 && 'Hesaplanan son günü onaylayın'}
               </p>
             </div>
             <button
@@ -159,7 +210,7 @@ export function NewLegalDeadlineForm({
 
           {/* Stepper indicator */}
           <div className="mb-5 flex items-center gap-2">
-            {[1, 2, 3].map((n) => (
+            {(isManual ? [1, 2] : [1, 2, 3]).map((n) => (
               <div
                 key={n}
                 className={`h-1.5 flex-1 rounded-full ${
@@ -170,8 +221,26 @@ export function NewLegalDeadlineForm({
           </div>
 
           {/* Step 1 — Template selection */}
-          {step === 1 && (
+          {step === 1 && !isManual && (
             <div className="space-y-3">
+              {/* Manuel ekleme kısayolu */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsManual(true)
+                  setStep(2)
+                }}
+                className="flex w-full items-center justify-between rounded-lg border-2 border-dashed border-law-accent/50 bg-law-accent/5 p-3 text-left transition-colors hover:bg-law-accent/10"
+              >
+                <div>
+                  <p className="text-sm font-medium text-law-accent">+ Manuel olarak ekle</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Şablon yoksa veya kendi süre/başlığınızı girmek istiyorsanız
+                  </p>
+                </div>
+                <Pencil className="h-4 w-4 text-law-accent" />
+              </button>
+
               <div className="flex flex-col gap-2 sm:flex-row">
                 <div className="relative flex-1">
                   <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -213,9 +282,23 @@ export function NewLegalDeadlineForm({
                   <p className="py-8 text-center text-sm text-muted-foreground">Yükleniyor…</p>
                 )}
                 {!templatesLoading && filteredTemplates.length === 0 && (
-                  <p className="py-8 text-center text-sm text-muted-foreground">
-                    Eşleşen şablon yok.
-                  </p>
+                  <div className="py-6 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      "{search || '...'}" için eşleşen hazır şablon yok.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsManual(true)
+                        setCustomTitle(search)
+                        setStep(2)
+                      }}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-law-accent px-3 py-2 text-sm font-medium text-white hover:opacity-90"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Manuel olarak ekle
+                    </button>
+                  </div>
                 )}
                 {filteredTemplates.map((t) => (
                   <button
@@ -250,8 +333,118 @@ export function NewLegalDeadlineForm({
             </div>
           )}
 
+          {/* Step 2 — Manuel mod */}
+          {step === 2 && isManual && (
+            <div className="space-y-4">
+              <Card className="border-law-accent/30 bg-law-accent/5">
+                <CardContent className="p-3">
+                  <p className="text-xs text-muted-foreground">
+                    Manuel mod — sistem hesap yapmaz, son günü siz girersiniz.
+                    Tatil ötelemesi/önizleme yoktur. Şablon listesine dönmek için "Geri".
+                  </p>
+                </CardContent>
+              </Card>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">
+                  Başlık <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={customTitle}
+                  onChange={(e) => setCustomTitle(e.target.value)}
+                  placeholder="Örn: Bilirkişi raporuna itiraz"
+                  className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-law-accent"
+                  autoFocus
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
+                    Son Gün <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={manualDueDate}
+                    onChange={(e) => setManualDueDate(e.target.value)}
+                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-law-accent"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">Şiddet</label>
+                  <select
+                    value={manualSeverity}
+                    onChange={(e) => setManualSeverity(e.target.value as any)}
+                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-law-accent"
+                  >
+                    <option value="hak_dusurucu">Hak Düşürücü</option>
+                    <option value="zamanasimi">Zamanaşımı</option>
+                    <option value="usul">Usul</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">Kategori</label>
+                  <select
+                    value={manualCategory}
+                    onChange={(e) => setManualCategory(e.target.value)}
+                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-law-accent"
+                  >
+                    {CATEGORY_ORDER.map((c) => (
+                      <option key={c} value={c}>
+                        {deadlineCategoryLabels[c] || c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium">
+                    Yasal Dayanak (opsiyonel)
+                  </label>
+                  <input
+                    type="text"
+                    value={manualLegalBasis}
+                    onChange={(e) => setManualLegalBasis(e.target.value)}
+                    placeholder="Örn: HMK m.281"
+                    className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-law-accent"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">İlgili Dava (opsiyonel)</label>
+                <select
+                  value={caseId}
+                  onChange={(e) => setCaseId(e.target.value)}
+                  className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-law-accent"
+                >
+                  <option value="">Dava seçilmedi</option>
+                  {casesList.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-medium">Açıklama (opsiyonel)</label>
+                <textarea
+                  value={manualDescription}
+                  onChange={(e) => setManualDescription(e.target.value)}
+                  rows={2}
+                  placeholder="Notlar, hatırlatma için detay..."
+                  className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+                />
+              </div>
+            </div>
+          )}
+
           {/* Step 2 — Trigger date */}
-          {step === 2 && selectedTemplate && (
+          {step === 2 && !isManual && selectedTemplate && (
             <div className="space-y-4">
               <Card className="border-law-accent/30 bg-law-accent/5">
                 <CardContent className="p-3">
@@ -314,8 +507,8 @@ export function NewLegalDeadlineForm({
             </div>
           )}
 
-          {/* Step 3 — Preview & confirm */}
-          {step === 3 && preview && selectedTemplate && (
+          {/* Step 3 — Preview & confirm (sadece şablon modunda) */}
+          {step === 3 && !isManual && preview && selectedTemplate && (
             <div className="space-y-4">
               <Card className="border-red-300 bg-red-50">
                 <CardContent className="p-4">
@@ -381,8 +574,15 @@ export function NewLegalDeadlineForm({
           <div className="mt-5 flex items-center justify-between">
             <button
               onClick={() => {
-                if (step === 1) onClose()
-                else setStep((step - 1) as 1 | 2 | 3)
+                if (step === 1) {
+                  onClose()
+                } else if (isManual && step === 2) {
+                  // Manuel'den şablon listesine dön
+                  setIsManual(false)
+                  setStep(1)
+                } else {
+                  setStep((step - 1) as 1 | 2 | 3)
+                }
               }}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/50"
             >
@@ -390,7 +590,24 @@ export function NewLegalDeadlineForm({
               {step === 1 ? 'İptal' : 'Geri'}
             </button>
 
-            {step === 2 && (
+            {/* Manuel modda Step 2 = direkt kaydet */}
+            {step === 2 && isManual && (
+              <button
+                onClick={handleSubmit}
+                disabled={createTask.isPending || !customTitle.trim() || !manualDueDate}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {createTask.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                Kaydet
+              </button>
+            )}
+
+            {/* Şablon modunda Step 2 = hesapla, sonra Step 3'te kaydet */}
+            {step === 2 && !isManual && (
               <button
                 onClick={handleNextFromStep2}
                 disabled={!triggerDate || previewLoading}

@@ -197,3 +197,24 @@ export function deadlineDaysLabel(daysLeft: number | null): string {
   if (daysLeft === 1) return 'YARIN SON'
   return `${daysLeft} gün kaldı`
 }
+
+/**
+ * Türkçe-aware metin normalizasyonu — arama için.
+ * "İtiraz", "ITIRAZ", "itiraz" hepsi aynı sonucu döndürür.
+ * Combining diacritics ve Türkçe-İngilizce karakterleri ASCII'ye eşler.
+ */
+export function trNormalize(s: string | null | undefined): string {
+  if (!s) return ''
+  return s
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // combining diacritics
+    .replace(/ı/g, 'i')
+    .replace(/i̇/g, 'i')
+    .replace(/ş/g, 's')
+    .replace(/ç/g, 'c')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ö/g, 'o')
+    .trim()
+}
