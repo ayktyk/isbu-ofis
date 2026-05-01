@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
-import { useUpdateTaskStatus } from '@/hooks/useTasks'
 import { CheckCircle2, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
+import { Card, CardContent } from '@/components/ui/card'
+import { useUpdateTaskStatus } from '@/hooks/useTasks'
 
 export function CompleteDeadlineModal({
   task,
@@ -14,7 +14,6 @@ export function CompleteDeadlineModal({
   const [evidence, setEvidence] = useState('')
   const updateStatus = useUpdateTaskStatus()
 
-  // Body scroll lock
   useEffect(() => {
     const prevOverflow = document.body.style.overflow
     const prevPosition = document.body.style.position
@@ -40,29 +39,18 @@ export function CompleteDeadlineModal({
       toast.error('En az 5 karakterlik kanıt notu zorunludur.')
       return
     }
+
     updateStatus.mutate(
-      { id: task.id, status: 'completed', completionEvidence: trimmed } as any,
-      {
-        onSuccess: () => {
-          toast.success('Süreli iş tamamlandı.')
-          onClose()
-        },
-      }
+      { id: task.id, status: 'completed', completionEvidence: trimmed },
+      { onSuccess: onClose }
     )
   }
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40">
-      <div
-        className="absolute inset-0 sm:hidden"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <Card
-        className="absolute inset-0 flex flex-col overflow-hidden rounded-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90vh] sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:shadow-xl"
-      >
+      <div className="absolute inset-0 sm:hidden" onClick={onClose} aria-hidden="true" />
+      <Card className="absolute inset-0 flex flex-col overflow-hidden rounded-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90vh] sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:shadow-xl">
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
-          {/* Header — sabit */}
           <div className="flex flex-shrink-0 items-center justify-between border-b bg-card px-4 pb-3 pt-4 sm:px-5">
             <div>
               <h2 className="text-lg font-semibold text-law-primary">Süreli İşi Tamamla</h2>
@@ -77,25 +65,23 @@ export function CompleteDeadlineModal({
             </button>
           </div>
 
-          {/* BODY — kaydırılabilir */}
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
-          <label className="mb-1.5 block text-sm font-medium">
-            Ne yapıldı? <span className="text-red-500">*</span>
-          </label>
-          <textarea
-            value={evidence}
-            onChange={(e) => setEvidence(e.target.value)}
-            rows={4}
-            placeholder="Örn: İcra dosyasına itiraz dilekçesi 02.05.2026 tarihinde UYAP üzerinden sunuldu. Tevzii No: ...&#10;veya: Anlaşma sağlandığı için süre takibi gerekli değil — dosya kapatıldı."
-            className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
-            autoFocus
-          />
-          <p className="mt-1 text-xs text-muted-foreground">
-            En az 5 karakter. Bu not ileride hangi işlemin yapıldığını hatırlamak için arşivlenir.
-          </p>
+            <label className="mb-1.5 block text-sm font-medium">
+              Ne yapıldı? <span className="text-red-500">*</span>
+            </label>
+            <textarea
+              value={evidence}
+              onChange={(e) => setEvidence(e.target.value)}
+              rows={4}
+              placeholder="Örn: İtiraz dilekçesi 02.05.2026 tarihinde UYAP üzerinden sunuldu. Tevzi no: ..."
+              className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+              autoFocus
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              En az 5 karakter. Bu not ileride ne yapıldığını hatırlatmak için saklanır.
+            </p>
           </div>
 
-          {/* Footer — sabit (bottom) */}
           <div className="flex flex-shrink-0 justify-end gap-2 border-t bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:px-5">
             <button
               onClick={onClose}

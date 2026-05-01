@@ -1,5 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/axios'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   LEGAL_DEADLINE_TEMPLATES,
@@ -8,6 +7,7 @@ import {
   type LegalDeadlineTemplate,
   type UpdateTaskInput,
 } from '@hukuk-takip/shared'
+import { api } from '@/lib/axios'
 
 export function useTasks(params?: {
   status?: string
@@ -28,8 +28,7 @@ export function useTasks(params?: {
   })
 }
 
-// Şablonlar STATIC — shared paketten direkt okunur, network çağrısı yok.
-// Render Free cold start (30+sn) ve PWA cache fail sorunlarından kurtulur.
+// Static templates are read directly from shared to avoid a network roundtrip in PWA usage.
 export function useDeadlineTemplates() {
   return {
     data: LEGAL_DEADLINE_TEMPLATES as LegalDeadlineTemplate[],
@@ -49,17 +48,23 @@ export function useCriticalDeadlines(withinDays = 7) {
   })
 }
 
-// Preview hesabı da artık frontend'de — shared paketteki computeLegalDeadline.
-// Backend'e roundtrip yok, anlık yanıt verir.
+function parseDateInput(value: string) {
+  const [year, month, day] = value.split('-').map((part) => Number.parseInt(part, 10))
+  return new Date(year, (month || 1) - 1, day || 1)
+}
+
+// Preview is calculated on the client for instant feedback in PWA mode.
 export async function previewDeadline(templateKey: string, triggerEventDate: string) {
-  const tpl = LEGAL_DEADLINE_TEMPLATES.find((t) => t.key === templateKey)
+  const tpl = LEGAL_DEADLINE_TEMPLATES.find((template) => template.key === templateKey)
   if (!tpl) {
     throw new Error('Süre şablonu bulunamadı.')
   }
-  const trigger = new Date(triggerEventDate)
+
+  const trigger = parseDateInput(triggerEventDate)
   if (Number.isNaN(trigger.getTime())) {
     throw new Error('Geçersiz tetikleyici tarih.')
   }
+
   const result = computeLegalDeadline(tpl, trigger)
   return {
     template: tpl,
@@ -80,8 +85,9 @@ export function useCreateTask() {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       toast.success('Görev oluşturuldu.')
     },
-    onError: () => {
-      toast.error('Görev oluşturulamadı.')
+    onError: (error: any) => {
+      const message = error?.response?.data?.error || 'Görev oluşturulamadı.'
+      toast.error(message)
     },
   })
 }
@@ -97,8 +103,9 @@ export function useUpdateTask(id: string) {
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       toast.success('Görev güncellendi.')
     },
-    onError: () => {
-      toast.error('Görev güncellenemedi.')
+    onError: (error: any) => {
+      const message = error?.response?.data?.error || 'Görev güncellenemedi.'
+      toast.error(message)
     },
   })
 }
@@ -107,16 +114,24 @@ export function useUpdateTaskStatus() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) =>
-      api.patch(`/tasks/${id}/status`, { status }),
+    mutationFn: ({
+      id,
+      status,
+      completionEvidence,
+    }: {
+      id: string
+      status: string
+      completionEvidence?: string
+    }) => api.patch(`/tasks/${id}/status`, { status, completionEvidence }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
       queryClient.invalidateQueries({ queryKey: ['cases'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       toast.success('Görev durumu güncellendi.')
     },
-    onError: () => {
-      toast.error('Görev durumu güncellenemedi.')
+    onError: (error: any) => {
+      const message = error?.response?.data?.error || 'Görev durumu güncellenemedi.'
+      toast.error(message)
     },
   })
 }
@@ -126,7 +141,6 @@ export function useDeleteTask() {
 
   return useMutation({
     mutationFn: (id: string) => api.delete(`/tasks/${id}`),
-    // Optimistic update — silme anında UI'dan kaldır, hata olursa geri al
     onMutate: async (id: string) => {
       await queryClient.cancelQueries({ queryKey: ['tasks'] })
       await queryClient.cancelQueries({ queryKey: ['cases'] })
@@ -136,18 +150,21 @@ export function useDeleteTask() {
 
       queryClient.setQueriesData({ queryKey: ['tasks'] }, (old: any) => {
         if (!old) return old
-        if (Array.isArray(old)) return old.filter((t: any) => t.id !== id)
-        if (Array.isArray(old?.data)) return { ...old, data: old.data.filter((t: any) => t.id !== id) }
+        if (Array.isArray(old)) return old.filter((task: any) => task.id !== id)
+        if (Array.isArray(old?.data)) {
+          return { ...old, data: old.data.filter((task: any) => task.id !== id) }
+        }
         return old
       })
+
       queryClient.setQueriesData({ queryKey: ['cases'] }, (old: any) => {
         if (!old || !old.tasks) return old
-        return { ...old, tasks: old.tasks.filter((t: any) => t.id !== id) }
+        return { ...old, tasks: old.tasks.filter((task: any) => task.id !== id) }
       })
 
       return { snapshots, caseDetailSnaps }
     },
-    onError: (_err, _id, ctx) => {
+    onError: (_error, _id, ctx) => {
       ctx?.snapshots?.forEach(([key, data]) => queryClient.setQueryData(key, data))
       ctx?.caseDetailSnaps?.forEach(([key, data]) => queryClient.setQueryData(key, data))
       toast.error('Görev silinemedi.')
