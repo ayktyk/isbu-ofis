@@ -203,16 +203,14 @@ export function NewLegalDeadlineForm({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4"
-      style={{ touchAction: 'none' }}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-    >
+    <div className="fixed inset-0 z-50 bg-black/40">
+      <div
+        className="absolute inset-0 sm:hidden"
+        onClick={onClose}
+        aria-hidden="true"
+      />
       <Card
-        className="flex h-[100dvh] max-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden rounded-none sm:h-auto sm:max-h-[92vh] sm:rounded-xl"
-        onClick={(e) => e.stopPropagation()}
+        className="absolute inset-0 flex flex-col overflow-hidden rounded-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90vh] sm:w-full sm:max-w-3xl sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:shadow-xl"
       >
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
           {/* Header — sabit (top) */}
