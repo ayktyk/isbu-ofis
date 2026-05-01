@@ -32,9 +32,10 @@ export function CompleteDeadlineModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <Card className="w-full max-w-lg">
-        <CardContent className="p-5">
+    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/40">
+      <div className="flex min-h-full items-start justify-center p-3 sm:items-center sm:p-4">
+        <Card className="my-4 w-full max-w-lg">
+          <CardContent className="p-4 sm:p-5">
           <div className="mb-4 flex items-center justify-between">
             <div>
               <h2 className="text-lg font-semibold text-law-primary">Süreli İşi Tamamla</h2>
@@ -85,7 +86,8 @@ export function CompleteDeadlineModal({
             </button>
           </div>
         </CardContent>
-      </Card>
+        </Card>
+      </div>
     </div>
   )
 }

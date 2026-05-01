@@ -21,7 +21,31 @@ const persister = createSyncStoragePersister({
 
 // Bundle versiyonu degistiginde persisted cache'i invalide et.
 // Yeni build'te (yeni hash'li asset'ler) eski cache anlamsizdir.
-const CACHE_BUSTER = import.meta.env.VITE_BUILD_ID || '2026-04-16-pwa-v1'
+const CACHE_BUSTER = import.meta.env.VITE_BUILD_ID || '2026-05-02-deadlines-v1'
+
+// PWA Service Worker update detection: yeni versiyon hazir oldugunda
+// kullaniciya soylesin, kabul ederse hemen yeniden yukle. Mobilde "manuel ekle"
+// gibi yeni ozelliklerin gozukmesi icin sayfayi kapatip acmaya gerek kalmaz.
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+  // virtual:pwa-register dynamic import — vite-plugin-pwa runtime'da saglar
+  import('virtual:pwa-register')
+    .then(({ registerSW }) => {
+      const updateSW = registerSW({
+        onNeedRefresh() {
+          // Sessiz auto-reload: kullanicinin nerede oldugunu kaydet, sonra yenile.
+          // confirm() istersen burada gosterebilirsin; mobilde rahatsiz edici olabilir.
+          try {
+            sessionStorage.setItem('hz-pwa-reloading', '1')
+          } catch {}
+          updateSW(true)
+        },
+        onOfflineReady() {},
+      })
+    })
+    .catch(() => {
+      // virtual:pwa-register dev modda yok; ignore.
+    })
+}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
