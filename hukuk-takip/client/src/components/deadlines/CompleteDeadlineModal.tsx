@@ -32,11 +32,11 @@ export function CompleteDeadlineModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/40">
-      <div className="flex min-h-full items-start justify-center p-3 sm:items-center sm:p-4">
-        <Card className="my-4 w-full max-w-lg">
-          <CardContent className="p-4 sm:p-5">
-          <div className="mb-4 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
+      <Card className="flex w-full max-w-lg flex-col overflow-hidden rounded-none sm:max-h-[92vh] sm:rounded-xl">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          {/* Header — sabit */}
+          <div className="flex flex-shrink-0 items-center justify-between border-b bg-card px-4 pb-3 pt-4 sm:px-5">
             <div>
               <h2 className="text-lg font-semibold text-law-primary">Süreli İşi Tamamla</h2>
               <p className="mt-0.5 text-xs text-muted-foreground">{task.title}</p>
@@ -50,6 +50,8 @@ export function CompleteDeadlineModal({
             </button>
           </div>
 
+          {/* BODY — kaydırılabilir */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
           <label className="mb-1.5 block text-sm font-medium">
             Ne yapıldı? <span className="text-red-500">*</span>
           </label>
@@ -64,8 +66,10 @@ export function CompleteDeadlineModal({
           <p className="mt-1 text-xs text-muted-foreground">
             En az 5 karakter. Bu not ileride hangi işlemin yapıldığını hatırlamak için arşivlenir.
           </p>
+          </div>
 
-          <div className="mt-5 flex justify-end gap-2">
+          {/* Footer — sabit (bottom) */}
+          <div className="flex flex-shrink-0 justify-end gap-2 border-t bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:px-5">
             <button
               onClick={onClose}
               className="rounded-lg border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/50"
@@ -86,8 +90,7 @@ export function CompleteDeadlineModal({
             </button>
           </div>
         </CardContent>
-        </Card>
-      </div>
+      </Card>
     </div>
   )
 }

@@ -183,12 +183,11 @@ export function NewLegalDeadlineForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-black/40">
-      <div className="flex min-h-full items-start justify-center p-3 sm:items-center sm:p-4">
-        <Card className="my-4 w-full max-w-3xl">
-          <CardContent className="p-4 sm:p-5">
-          {/* Header */}
-          <div className="mb-4 flex items-center justify-between">
+    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
+      <Card className="flex w-full max-w-3xl flex-col overflow-hidden rounded-none sm:max-h-[92vh] sm:rounded-xl">
+        <CardContent className="flex min-h-0 flex-1 flex-col p-0">
+          {/* Header — sabit (top) */}
+          <div className="flex flex-shrink-0 items-center justify-between border-b bg-card px-4 pb-3 pt-4 sm:px-5">
             <div>
               <h2 className="text-lg font-semibold text-law-primary">
                 Yeni Süreli İş {isManual ? '— Manuel' : `— Adım ${step}/${isManual ? 2 : 3}`}
@@ -209,8 +208,8 @@ export function NewLegalDeadlineForm({
             </button>
           </div>
 
-          {/* Stepper indicator */}
-          <div className="mb-5 flex items-center gap-2">
+          {/* Stepper indicator — sabit (top) */}
+          <div className="flex flex-shrink-0 items-center gap-2 border-b bg-card px-4 py-3 sm:px-5">
             {(isManual ? [1, 2] : [1, 2, 3]).map((n) => (
               <div
                 key={n}
@@ -220,6 +219,9 @@ export function NewLegalDeadlineForm({
               />
             ))}
           </div>
+
+          {/* BODY — kaydırılabilir alan */}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
 
           {/* Step 1 — Template selection */}
           {step === 1 && !isManual && (
@@ -571,8 +573,11 @@ export function NewLegalDeadlineForm({
             </div>
           )}
 
-          {/* Footer */}
-          <div className="mt-5 flex items-center justify-between">
+          {/* BODY closing — footer body'den çıkmalı (sticky bottom için) */}
+          </div>
+
+          {/* Footer — sabit (bottom), modal her zaman görünür */}
+          <div className="flex flex-shrink-0 items-center justify-between border-t bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:px-5">
             <button
               onClick={() => {
                 if (step === 1) {
@@ -639,8 +644,7 @@ export function NewLegalDeadlineForm({
             )}
           </div>
         </CardContent>
-        </Card>
-      </div>
+      </Card>
     </div>
   )
 }

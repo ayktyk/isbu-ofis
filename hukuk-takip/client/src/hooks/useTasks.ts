@@ -1,7 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/axios'
 import { toast } from 'sonner'
-import type { CreateTaskInput, UpdateTaskInput } from '@hukuk-takip/shared'
+import {
+  LEGAL_DEADLINE_TEMPLATES,
+  computeLegalDeadline,
+  type CreateTaskInput,
+  type LegalDeadlineTemplate,
+  type UpdateTaskInput,
+} from '@hukuk-takip/shared'
 
 export function useTasks(params?: {
   status?: string
@@ -22,15 +28,14 @@ export function useTasks(params?: {
   })
 }
 
+// Şablonlar STATIC — shared paketten direkt okunur, network çağrısı yok.
+// Render Free cold start (30+sn) ve PWA cache fail sorunlarından kurtulur.
 export function useDeadlineTemplates() {
-  return useQuery({
-    queryKey: ['deadline-templates'],
-    queryFn: async () => {
-      const res = await api.get('/tasks/deadlines/templates')
-      return res.data
-    },
-    staleTime: 1000 * 60 * 60 * 24, // 1 gün
-  })
+  return {
+    data: LEGAL_DEADLINE_TEMPLATES as LegalDeadlineTemplate[],
+    isLoading: false,
+    isError: false,
+  }
 }
 
 export function useCriticalDeadlines(withinDays = 7) {
@@ -44,13 +49,23 @@ export function useCriticalDeadlines(withinDays = 7) {
   })
 }
 
+// Preview hesabı da artık frontend'de — shared paketteki computeLegalDeadline.
+// Backend'e roundtrip yok, anlık yanıt verir.
 export async function previewDeadline(templateKey: string, triggerEventDate: string) {
-  const res = await api.post('/tasks/deadlines/preview', { templateKey, triggerEventDate })
-  return res.data as {
-    template: { key: string; label: string; durationDays: number; durationYears?: number; legalBasis: string; triggerLabel: string; severity: string; category: string; applyHolidayShift: boolean }
-    rawDueDate: string
-    adjustedDueDate: string
-    wasShifted: boolean
+  const tpl = LEGAL_DEADLINE_TEMPLATES.find((t) => t.key === templateKey)
+  if (!tpl) {
+    throw new Error('Süre şablonu bulunamadı.')
+  }
+  const trigger = new Date(triggerEventDate)
+  if (Number.isNaN(trigger.getTime())) {
+    throw new Error('Geçersiz tetikleyici tarih.')
+  }
+  const result = computeLegalDeadline(tpl, trigger)
+  return {
+    template: tpl,
+    rawDueDate: result.rawDueDate.toISOString().slice(0, 10),
+    adjustedDueDate: result.adjustedDueDate.toISOString().slice(0, 10),
+    wasShifted: result.wasShifted,
   }
 }
 
