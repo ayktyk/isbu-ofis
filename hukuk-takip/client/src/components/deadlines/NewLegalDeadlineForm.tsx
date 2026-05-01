@@ -43,7 +43,7 @@ export function NewLegalDeadlineForm({
   onClose: () => void
   defaultCaseId?: string
 }) {
-  const [step, setStep] = useState<1 | 2 | 3>(1)
+  const [step, setStep] = useState<1 | 2>(1)
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
   const [search, setSearch] = useState('')
   const [activeCategory, setActiveCategory] = useState<string>('')
@@ -150,7 +150,6 @@ export function NewLegalDeadlineForm({
       const result = await previewDeadline(selectedTemplate.key, triggerDate)
       setPreview(result)
       setAcceptShift(result.wasShifted)
-      setStep(3)
     } catch (error) {
       console.error(error)
       toast.error('Süre hesaplanamadı.')
@@ -224,16 +223,14 @@ export function NewLegalDeadlineForm({
           <div className="flex flex-shrink-0 items-center justify-between border-b bg-card px-4 pb-3 pt-4 sm:px-5">
             <div>
               <h2 className="text-lg font-semibold text-law-primary">
-                Yeni Süreli İş {isManual ? '- Manuel' : `- Adım ${step}/3`}
+                Yeni Süreli İş {isManual ? '- Manuel' : `- Adım ${step}/2`}
               </h2>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 {isManual
                   ? 'Manuel süreli iş kaydı oluşturun'
                   : step === 1
                     ? 'Şablon seçin veya arayın'
-                    : step === 2
-                      ? 'Tetikleyici tarihi girin'
-                      : 'Hesaplanan son günü kontrol edin'}
+                    : 'Tetikleyici tarihi girin ve önizlemeyi kontrol edin'}
               </p>
             </div>
             <button
@@ -246,7 +243,7 @@ export function NewLegalDeadlineForm({
           </div>
 
           <div className="flex flex-shrink-0 items-center gap-2 border-b bg-card px-4 py-3 sm:px-5">
-            {(isManual ? [1, 2] : [1, 2, 3]).map((item) => (
+            {[1, 2].map((item) => (
               <div
                 key={item}
                 className={`h-1.5 flex-1 rounded-full ${item <= step ? 'bg-law-accent' : 'bg-muted'}`}
@@ -552,7 +549,10 @@ export function NewLegalDeadlineForm({
                   <input
                     type="date"
                     value={triggerDate}
-                    onChange={(e) => setTriggerDate(e.target.value)}
+                    onChange={(e) => {
+                      setTriggerDate(e.target.value)
+                      setPreview(null)
+                    }}
                     className="w-full rounded-lg border bg-background px-3 py-2.5 text-sm outline-none focus:border-law-accent"
                   />
                   <p className="mt-1 text-xs text-muted-foreground">
@@ -589,66 +589,66 @@ export function NewLegalDeadlineForm({
                     Boş bırakılırsa şablon adı kullanılır.
                   </p>
                 </div>
-              </div>
-            )}
 
-            {step === 3 && !isManual && preview && selectedTemplate && (
-              <div className="space-y-4">
-                <Card className="border-red-300 bg-red-50">
-                  <CardContent className="p-4">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="h-5 w-5 flex-shrink-0 text-red-600" />
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-red-700">
-                          {selectedTemplate.label} - Hesaplanan Son Gün
-                        </p>
-                        <div className="mt-2 space-y-1 text-sm text-red-900">
-                          <p>
-                            <span className="text-xs text-red-700/70">
-                              {selectedTemplate.triggerLabel}:
-                            </span>{' '}
-                            <strong>{formatDate(triggerDate)}</strong>
-                          </p>
-                          <p>
-                            <span className="text-xs text-red-700/70">Ham son gün:</span>{' '}
-                            <strong>{formatDate(preview.rawDueDate)}</strong>
-                          </p>
-                          {preview.wasShifted && (
-                            <p>
-                              <span className="text-xs text-red-700/70">
-                                Tatil sonrası ilk iş günü:
-                              </span>{' '}
-                              <strong>{formatDate(preview.adjustedDueDate)}</strong>
+                {preview && (
+                  <div className="space-y-4">
+                    <Card className="border-red-300 bg-red-50">
+                      <CardContent className="p-4">
+                        <div className="flex items-start gap-3">
+                          <AlertTriangle className="h-5 w-5 flex-shrink-0 text-red-600" />
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-red-700">
+                              {selectedTemplate.label} - Hesaplanan Son Gün
                             </p>
-                          )}
+                            <div className="mt-2 space-y-1 text-sm text-red-900">
+                              <p>
+                                <span className="text-xs text-red-700/70">
+                                  {selectedTemplate.triggerLabel}:
+                                </span>{' '}
+                                <strong>{formatDate(triggerDate)}</strong>
+                              </p>
+                              <p>
+                                <span className="text-xs text-red-700/70">Ham son gün:</span>{' '}
+                                <strong>{formatDate(preview.rawDueDate)}</strong>
+                              </p>
+                              {preview.wasShifted && (
+                                <p>
+                                  <span className="text-xs text-red-700/70">
+                                    Tatil sonrası ilk iş günü:
+                                  </span>{' '}
+                                  <strong>{formatDate(preview.adjustedDueDate)}</strong>
+                                </p>
+                              )}
+                            </div>
+
+                            {preview.wasShifted && (
+                              <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-lg border border-red-300 bg-white p-2.5 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={acceptShift}
+                                  onChange={(e) => setAcceptShift(e.target.checked)}
+                                  className="mt-0.5"
+                                />
+                                <span>
+                                  <strong>Tatil ötelemeyi uygula</strong>{' '}
+                                  <span className="text-xs text-muted-foreground">
+                                    Son gün tatil/hafta sonuna geldiği için kayıt{' '}
+                                    <strong>{formatDate(preview.adjustedDueDate)}</strong> olarak tutulur.
+                                  </span>
+                                </span>
+                              </label>
+                            )}
+                          </div>
                         </div>
+                      </CardContent>
+                    </Card>
 
-                        {preview.wasShifted && (
-                          <label className="mt-3 flex cursor-pointer items-start gap-2 rounded-lg border border-red-300 bg-white p-2.5 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={acceptShift}
-                              onChange={(e) => setAcceptShift(e.target.checked)}
-                              className="mt-0.5"
-                            />
-                            <span>
-                              <strong>Tatil ötelemeyi uygula</strong>{' '}
-                              <span className="text-xs text-muted-foreground">
-                                Son gün tatil/hafta sonuna geldiği için kayıt{' '}
-                                <strong>{formatDate(preview.adjustedDueDate)}</strong> olarak tutulur.
-                              </span>
-                            </span>
-                          </label>
-                        )}
-                      </div>
+                    <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+                      Süreler avukatın sorumluluğundadır. Sistem yalnızca hesap yardımı sunar; özel
+                      usul ve tatil durumlarını son kez kontrol edin.
                     </div>
-                  </CardContent>
-                </Card>
-
-                <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  Süreler avukatın sorumluluğundadır. Sistem yalnızca hesap yardımı sunar; özel
-                  usul ve tatil durumlarını son kez kontrol edin.
-                </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -668,7 +668,7 @@ export function NewLegalDeadlineForm({
                   return
                 }
 
-                setStep((step - 1) as 1 | 2 | 3)
+                setStep((step - 1) as 1 | 2)
               }}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/50"
             >
@@ -691,7 +691,7 @@ export function NewLegalDeadlineForm({
               </button>
             )}
 
-            {step === 2 && !isManual && (
+            {step === 2 && !isManual && !preview && (
               <button
                 onClick={handleNextFromStep2}
                 disabled={!triggerDate || previewLoading}
@@ -706,7 +706,7 @@ export function NewLegalDeadlineForm({
               </button>
             )}
 
-            {step === 3 && (
+            {step === 2 && !isManual && preview && (
               <button
                 onClick={handleSubmit}
                 disabled={createTask.isPending}
@@ -714,9 +714,9 @@ export function NewLegalDeadlineForm({
               >
                 {createTask.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
                 Süreli İş Olarak Kaydet
               </button>
             )}
