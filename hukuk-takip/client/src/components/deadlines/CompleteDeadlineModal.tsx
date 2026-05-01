@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { useUpdateTaskStatus } from '@/hooks/useTasks'
 import { CheckCircle2, Loader2, X } from 'lucide-react'
@@ -13,6 +13,26 @@ export function CompleteDeadlineModal({
 }) {
   const [evidence, setEvidence] = useState('')
   const updateStatus = useUpdateTaskStatus()
+
+  // Body scroll lock
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow
+    const prevPosition = document.body.style.position
+    const prevTop = document.body.style.top
+    const prevWidth = document.body.style.width
+    const scrollY = window.scrollY
+    document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.width = '100%'
+    return () => {
+      document.body.style.overflow = prevOverflow
+      document.body.style.position = prevPosition
+      document.body.style.top = prevTop
+      document.body.style.width = prevWidth
+      window.scrollTo(0, scrollY)
+    }
+  }, [])
 
   function handleSubmit() {
     const trimmed = evidence.trim()
@@ -32,8 +52,17 @@ export function CompleteDeadlineModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
-      <Card className="flex w-full max-w-lg flex-col overflow-hidden rounded-none sm:max-h-[92vh] sm:rounded-xl">
+    <div
+      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4"
+      style={{ touchAction: 'none' }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <Card
+        className="flex h-[100dvh] max-h-[100dvh] w-full max-w-lg flex-col overflow-hidden rounded-none sm:h-auto sm:max-h-[92vh] sm:rounded-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
           {/* Header — sabit */}
           <div className="flex flex-shrink-0 items-center justify-between border-b bg-card px-4 pb-3 pt-4 sm:px-5">

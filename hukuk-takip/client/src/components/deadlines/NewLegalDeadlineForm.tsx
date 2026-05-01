@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useDeadlineTemplates, previewDeadline, useCreateTask } from '@/hooks/useTasks'
 import { useCases } from '@/hooks/useCases'
 import { Card, CardContent } from '@/components/ui/card'
@@ -60,6 +60,26 @@ export function NewLegalDeadlineForm({
   const [preview, setPreview] = useState<Preview | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
   const [acceptShift, setAcceptShift] = useState(true)
+
+  // Body scroll lock — modal açıkken arkadaki sayfa kaymasın
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow
+    const prevPosition = document.body.style.position
+    const prevTop = document.body.style.top
+    const prevWidth = document.body.style.width
+    const scrollY = window.scrollY
+    document.body.style.overflow = 'hidden'
+    document.body.style.position = 'fixed'
+    document.body.style.top = `-${scrollY}px`
+    document.body.style.width = '100%'
+    return () => {
+      document.body.style.overflow = prevOverflow
+      document.body.style.position = prevPosition
+      document.body.style.top = prevTop
+      document.body.style.width = prevWidth
+      window.scrollTo(0, scrollY)
+    }
+  }, [])
 
   const { data: templates, isLoading: templatesLoading } = useDeadlineTemplates()
   const { data: casesData } = useCases({ pageSize: 200 })
@@ -183,8 +203,17 @@ export function NewLegalDeadlineForm({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4">
-      <Card className="flex w-full max-w-3xl flex-col overflow-hidden rounded-none sm:max-h-[92vh] sm:rounded-xl">
+    <div
+      className="fixed inset-0 z-50 flex items-stretch justify-center bg-black/40 sm:items-center sm:p-4"
+      style={{ touchAction: 'none' }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <Card
+        className="flex h-[100dvh] max-h-[100dvh] w-full max-w-3xl flex-col overflow-hidden rounded-none sm:h-auto sm:max-h-[92vh] sm:rounded-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
           {/* Header — sabit (top) */}
           <div className="flex flex-shrink-0 items-center justify-between border-b bg-card px-4 pb-3 pt-4 sm:px-5">
