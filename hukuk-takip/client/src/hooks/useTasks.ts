@@ -53,6 +53,13 @@ function parseDateInput(value: string) {
   return new Date(year, (month || 1) - 1, day || 1)
 }
 
+function formatDateOnly(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 // Preview is calculated on the client for instant feedback in PWA mode.
 export async function previewDeadline(templateKey: string, triggerEventDate: string) {
   const tpl = LEGAL_DEADLINE_TEMPLATES.find((template) => template.key === templateKey)
@@ -68,8 +75,8 @@ export async function previewDeadline(templateKey: string, triggerEventDate: str
   const result = computeLegalDeadline(tpl, trigger)
   return {
     template: tpl,
-    rawDueDate: result.rawDueDate.toISOString().slice(0, 10),
-    adjustedDueDate: result.adjustedDueDate.toISOString().slice(0, 10),
+    rawDueDate: formatDateOnly(result.rawDueDate),
+    adjustedDueDate: formatDateOnly(result.adjustedDueDate),
     wasShifted: result.wasShifted,
   }
 }

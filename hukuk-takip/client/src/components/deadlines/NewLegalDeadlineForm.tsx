@@ -19,6 +19,7 @@ interface Template {
   category: string
   severity: string
   durationDays: number
+  durationWeeks?: number
   durationYears?: number
   triggerLabel: string
   legalBasis: string
@@ -35,6 +36,12 @@ interface Preview {
 }
 
 const CATEGORY_ORDER = ['icra', 'hukuk', 'is', 'ceza', 'idari', 'tbk'] as const
+
+function formatTemplateDuration(template: Template) {
+  if (template.durationYears) return `${template.durationYears} yıl`
+  if (template.durationWeeks) return `${template.durationWeeks} hafta`
+  return `${template.durationDays} gün`
+}
 
 export function NewLegalDeadlineForm({
   onClose,
@@ -87,6 +94,7 @@ export function NewLegalDeadlineForm({
   const { data: casesData } = useCases({ pageSize: 200 })
   const casesList = casesData?.data || []
   const createTask = useCreateTask()
+
   const selectedCase = useMemo(
     () => casesList.find((item: any) => item.id === caseId),
     [caseId, casesList]
@@ -129,16 +137,16 @@ export function NewLegalDeadlineForm({
     setStep(2)
   }
 
-  function goTemplate(tpl: Template) {
+  function goTemplate(template: Template) {
     setIsManual(false)
-    setSelectedTemplate(tpl)
-    setTriggerEventLabel(tpl.triggerLabel)
+    setSelectedTemplate(template)
+    setTriggerEventLabel(template.triggerLabel)
     setPreview(null)
     setAcceptShift(true)
     setStep(2)
   }
 
-  async function handleNextFromStep2() {
+  async function handlePreview() {
     if (!selectedTemplate) return
     if (!triggerDate) {
       toast.error('Tetikleyici tarih zorunlu.')
@@ -251,7 +259,7 @@ export function NewLegalDeadlineForm({
             ))}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 pb-28 sm:px-5 sm:pb-6">
             {step === 1 && !isManual && (
               <div className="space-y-3">
                 <button
@@ -290,7 +298,7 @@ export function NewLegalDeadlineForm({
                     type="text"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Şablon ara: itiraz, istinaf, zamanaşımı..."
+                    placeholder="Şablon ara: itiraz, istinaf..."
                     className="w-full rounded-lg border bg-background py-2 pl-9 pr-3 text-sm outline-none focus:border-law-accent"
                   />
                 </div>
@@ -324,7 +332,7 @@ export function NewLegalDeadlineForm({
                       !activeCategory ? 'bg-law-accent text-white' : 'bg-muted text-muted-foreground'
                     }`}
                   >
-                    Tumu
+                    Tümü
                   </button>
                   {CATEGORY_ORDER.map((category) => (
                     <button
@@ -381,12 +389,8 @@ export function NewLegalDeadlineForm({
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        <strong>
-                          {template.durationYears
-                            ? `${template.durationYears} yil`
-                            : `${template.durationDays} gun`}
-                        </strong>{' '}
-                        · {template.triggerLabel} · {template.legalBasis}
+                        <strong>{formatTemplateDuration(template)}</strong> · {template.triggerLabel} ·{' '}
+                        {template.legalBasis}
                       </p>
                       {template.description && (
                         <p className="mt-1 text-xs text-muted-foreground/80">{template.description}</p>
@@ -401,9 +405,9 @@ export function NewLegalDeadlineForm({
               <div className="space-y-4">
                 <Card className="border-law-accent/30 bg-law-accent/5">
                   <CardContent className="p-3">
-                  <p className="text-xs text-muted-foreground">
-                      Manuel modda son günü siz belirlersiniz. Sistem hesap yapmaz; kayıt yine
-                      süreli iş olarak tutulur.
+                    <p className="text-xs text-muted-foreground">
+                      Manuel modda son günü siz belirlersiniz. Sistem hesap yapmaz; kayıt yine süreli
+                      iş olarak tutulur.
                     </p>
                   </CardContent>
                 </Card>
@@ -534,10 +538,7 @@ export function NewLegalDeadlineForm({
                   <CardContent className="p-3">
                     <p className="text-sm font-medium text-law-primary">{selectedTemplate.label}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">
-                      {selectedTemplate.durationYears
-                        ? `${selectedTemplate.durationYears} yıl`
-                        : `${selectedTemplate.durationDays} gün`}{' '}
-                      · {selectedTemplate.legalBasis}
+                      {formatTemplateDuration(selectedTemplate)} · {selectedTemplate.legalBasis}
                     </p>
                   </CardContent>
                 </Card>
@@ -651,9 +652,56 @@ export function NewLegalDeadlineForm({
                 )}
               </div>
             )}
+
+            <div className="sticky bottom-0 z-20 -mx-4 border-t bg-card/95 px-4 py-3 backdrop-blur sm:hidden">
+              {step === 2 && isManual && (
+                <button
+                  onClick={handleSubmit}
+                  disabled={createTask.isPending || !customTitle.trim() || !manualDueDate}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-red-600 px-4 py-3 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {createTask.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Kaydet
+                </button>
+              )}
+
+              {step === 2 && !isManual && !preview && (
+                <button
+                  onClick={handlePreview}
+                  disabled={!triggerDate || previewLoading}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-law-accent px-4 py-3 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
+                >
+                  {previewLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ArrowRight className="h-4 w-4" />
+                  )}
+                  Hesapla
+                </button>
+              )}
+
+              {step === 2 && !isManual && preview && (
+                <button
+                  onClick={handleSubmit}
+                  disabled={createTask.isPending}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-lg bg-red-600 px-4 py-3 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                >
+                  {createTask.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  Süreli İş Olarak Kaydet
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="flex flex-shrink-0 items-center justify-between border-t bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:px-5">
+          <div className="hidden flex-shrink-0 items-center justify-between border-t bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:flex sm:px-5">
             <button
               onClick={() => {
                 if (step === 1) {
@@ -668,7 +716,7 @@ export function NewLegalDeadlineForm({
                   return
                 }
 
-                setStep((step - 1) as 1 | 2)
+                setStep(1)
               }}
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/50"
             >
@@ -693,7 +741,7 @@ export function NewLegalDeadlineForm({
 
             {step === 2 && !isManual && !preview && (
               <button
-                onClick={handleNextFromStep2}
+                onClick={handlePreview}
                 disabled={!triggerDate || previewLoading}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-law-accent px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:opacity-50"
               >

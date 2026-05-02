@@ -66,6 +66,18 @@ function parseBoolFlag(value: unknown): boolean | null {
   return null
 }
 
+function parseDateInput(value: string) {
+  const [year, month, day] = value.split('-').map((part) => Number.parseInt(part, 10))
+  return new Date(year, (month || 1) - 1, day || 1)
+}
+
+function formatDateOnly(date: Date) {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 // ---------- Süreli iş yardımcı endpoint'leri (önce gelir, /:id ile çakışmaması için) ----------
 
 router.get('/deadlines/templates', (_req: Request, res: Response) => {
@@ -86,7 +98,7 @@ router.post(
       res.status(400).json({ error: 'Süre şablonu bulunamadı.' })
       return
     }
-    const trigger = new Date(triggerEventDate)
+    const trigger = parseDateInput(triggerEventDate)
     if (Number.isNaN(trigger.getTime())) {
       res.status(400).json({ error: 'Geçersiz tetikleyici tarih.' })
       return
@@ -94,8 +106,8 @@ router.post(
     const result = computeLegalDeadline(tpl, trigger)
     res.json({
       template: tpl,
-      rawDueDate: result.rawDueDate.toISOString().slice(0, 10),
-      adjustedDueDate: result.adjustedDueDate.toISOString().slice(0, 10),
+      rawDueDate: formatDateOnly(result.rawDueDate),
+      adjustedDueDate: formatDateOnly(result.adjustedDueDate),
       wasShifted: result.wasShifted,
     })
   }
@@ -139,7 +151,7 @@ router.get('/', async (req: Request, res: Response) => {
   const isDeadlineFilter = parseBoolFlag(req.query.isDeadline)
   const dueWithinRaw = getSingleValue(req.query.dueWithinDays)
   const dueWithinDays =
-    dueWithinRaw !== undefined && dueWithinRaw !== ''
+    dueWithinRaw !== undefined && dueWithinRaw !== null && dueWithinRaw !== ''
       ? Number.parseInt(dueWithinRaw, 10)
       : null
 
