@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express'
-import { and, eq, gte } from 'drizzle-orm'
+import { and, eq, gte, isNull } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { caseHearings, cases, clients } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
@@ -7,7 +7,7 @@ import { validate } from '../middleware/validate.js'
 import { createHearingSchema, updateHearingSchema } from '../../../shared/dist/index.js'
 import { getOwnedCase, getOwnedHearing } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
-import { deleteHearingFromGoogleCalendar, syncHearingToGoogleCalendar } from '../utils/googleCalendar.js'
+import { syncHearingToGoogleCalendar } from '../utils/googleCalendar.js'
 
 const router = Router()
 router.use(authenticate)
@@ -29,7 +29,14 @@ async function getHearingCalendarContext(userId: string, hearingId: string) {
     .from(caseHearings)
     .innerJoin(cases, eq(caseHearings.caseId, cases.id))
     .leftJoin(clients, eq(cases.clientId, clients.id))
-    .where(and(eq(caseHearings.id, hearingId), eq(cases.userId, userId)))
+    .where(
+      and(
+        eq(caseHearings.id, hearingId),
+        eq(cases.userId, userId),
+        isNull(caseHearings.archivedAt),
+        isNull(cases.archivedAt)
+      )
+    )
     .limit(1)
 
   return hearingRow ?? null
@@ -38,7 +45,11 @@ async function getHearingCalendarContext(userId: string, hearingId: string) {
 router.get('/', async (req: Request, res: Response) => {
   const upcoming = getSingleValue(req.query.upcoming)
 
-  const conditions = [eq(cases.userId, req.user!.userId)]
+  const conditions = [
+    eq(cases.userId, req.user!.userId),
+    isNull(cases.archivedAt),
+    isNull(caseHearings.archivedAt),
+  ]
 
   if (upcoming === 'true') {
     conditions.push(gte(caseHearings.hearingDate, new Date()))
@@ -143,7 +154,7 @@ router.put('/:id', validate(updateHearingSchema), async (req: Request, res: Resp
   const [updated] = await db
     .update(caseHearings)
     .set(updateData)
-    .where(eq(caseHearings.id, hearingId))
+    .where(and(eq(caseHearings.id, hearingId), isNull(caseHearings.archivedAt)))
     .returning()
 
   if (!updated) {
@@ -189,8 +200,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 
   const [deleted] = await db
-    .delete(caseHearings)
-    .where(eq(caseHearings.id, hearingId))
+    .update(caseHearings)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(caseHearings.id, hearingId), isNull(caseHearings.archivedAt)))
     .returning()
 
   if (!deleted) {
@@ -198,13 +210,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     return
   }
 
-  try {
-    await deleteHearingFromGoogleCalendar(deleted.id)
-  } catch (error) {
-    console.error('[GoogleCalendar] Hearing delete sync failed', deleted.id, error)
-  }
-
-  res.json({ message: 'Duruşma silindi.' })
+  res.json({ message: 'Duruşma arşivlendi.' })
 })
 
 export default router

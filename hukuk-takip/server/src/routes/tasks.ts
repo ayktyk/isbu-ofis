@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express'
-import { and, asc, desc, eq, gte, inArray, isNotNull, lte } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { cases, tasks } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
@@ -14,7 +14,7 @@ import {
 } from '../../../shared/dist/index.js'
 import { getOwnedCase } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
-import { deleteTaskFromGoogleCalendar, syncTaskToGoogleCalendar } from '../utils/googleCalendar.js'
+import { syncTaskToGoogleCalendar } from '../utils/googleCalendar.js'
 
 const router = Router()
 router.use(authenticate)
@@ -27,7 +27,7 @@ async function getTaskCaseTitle(userId: string, caseId?: string | null) {
   const [caseRow] = await db
     .select({ title: cases.title })
     .from(cases)
-    .where(and(eq(cases.id, caseId), eq(cases.userId, userId)))
+    .where(and(eq(cases.id, caseId), eq(cases.userId, userId), isNull(cases.archivedAt)))
     .limit(1)
 
   return caseRow?.title || null
@@ -130,6 +130,7 @@ router.get('/deadlines/critical', async (req: Request, res: Response) => {
       and(
         eq(tasks.userId, req.user!.userId),
         eq(tasks.isDeadline, true),
+        isNull(tasks.archivedAt),
         isNotNull(tasks.dueDate),
         gte(tasks.dueDate, start),
         lte(tasks.dueDate, end),
@@ -155,7 +156,7 @@ router.get('/', async (req: Request, res: Response) => {
       ? Number.parseInt(dueWithinRaw, 10)
       : null
 
-  const conditions = [eq(tasks.userId, req.user!.userId)]
+  const conditions = [eq(tasks.userId, req.user!.userId), isNull(tasks.archivedAt)]
 
   if (status) {
     conditions.push(eq(tasks.status, status as any))
@@ -293,7 +294,7 @@ router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Respons
   const [updated] = await db
     .update(tasks)
     .set(updateData)
-    .where(and(eq(tasks.id, taskId), eq(tasks.userId, req.user!.userId)))
+    .where(and(eq(tasks.id, taskId), eq(tasks.userId, req.user!.userId), isNull(tasks.archivedAt)))
     .returning()
 
   if (!updated) {
@@ -336,7 +337,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     const [existing] = await db
       .select({ isDeadline: tasks.isDeadline })
       .from(tasks)
-      .where(and(eq(tasks.id, taskId), eq(tasks.userId, req.user!.userId)))
+      .where(and(eq(tasks.id, taskId), eq(tasks.userId, req.user!.userId), isNull(tasks.archivedAt)))
       .limit(1)
     if (existing?.isDeadline) {
       const trimmed = (completionEvidence || '').trim()
@@ -350,6 +351,11 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     }
   }
 
+  if (!status || !['pending', 'in_progress', 'completed', 'cancelled'].includes(status)) {
+    res.status(400).json({ error: 'Geçersiz görev durumu.' })
+    return
+  }
+
   const updateData: Record<string, unknown> = { status, updatedAt: new Date() }
   if (status === 'completed') updateData.completedAt = new Date()
   if (status && status !== 'completed') updateData.completedAt = null
@@ -358,7 +364,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
   const [updated] = await db
     .update(tasks)
     .set(updateData)
-    .where(and(eq(tasks.id, taskId), eq(tasks.userId, req.user!.userId)))
+    .where(and(eq(tasks.id, taskId), eq(tasks.userId, req.user!.userId), isNull(tasks.archivedAt)))
     .returning()
 
   if (!updated) {
@@ -392,22 +398,16 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 
   const [deleted] = await db
-    .delete(tasks)
-    .where(and(eq(tasks.id, taskId), eq(tasks.userId, req.user!.userId)))
+    .update(tasks)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(tasks.id, taskId), eq(tasks.userId, req.user!.userId), isNull(tasks.archivedAt)))
     .returning()
 
   if (!deleted) {
     res.status(404).json({ error: 'Görev bulunamadı.' })
     return
   }
-
-  try {
-    await deleteTaskFromGoogleCalendar(deleted.id)
-  } catch (error) {
-    console.error('[GoogleCalendar] Task delete sync failed', deleted.id, error)
-  }
-
-  res.json({ message: 'Görev silindi.' })
+  res.json({ message: 'Görev arşivlendi.' })
 })
 
 export default router

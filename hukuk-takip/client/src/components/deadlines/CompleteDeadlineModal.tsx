@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { CheckCircle2, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,28 +12,33 @@ export function CompleteDeadlineModal({
   onClose: () => void
 }) {
   const [evidence, setEvidence] = useState('')
+  const [viewportHeight, setViewportHeight] = useState<number | null>(null)
   const updateStatus = useUpdateTaskStatus()
 
   useEffect(() => {
     const prevOverflow = document.body.style.overflow
-    const prevPosition = document.body.style.position
-    const prevTop = document.body.style.top
-    const prevWidth = document.body.style.width
-    const scrollY = window.scrollY
     document.body.style.overflow = 'hidden'
-    document.body.style.position = 'fixed'
-    document.body.style.top = `-${scrollY}px`
-    document.body.style.width = '100%'
     return () => {
       document.body.style.overflow = prevOverflow
-      document.body.style.position = prevPosition
-      document.body.style.top = prevTop
-      document.body.style.width = prevWidth
-      window.scrollTo(0, scrollY)
     }
   }, [])
 
-  function handleSubmit() {
+  useEffect(() => {
+    const visualViewport = window.visualViewport
+    if (!visualViewport) return
+
+    const syncViewportHeight = () => setViewportHeight(visualViewport.height)
+    syncViewportHeight()
+    visualViewport.addEventListener('resize', syncViewportHeight)
+    visualViewport.addEventListener('scroll', syncViewportHeight)
+    return () => {
+      visualViewport.removeEventListener('resize', syncViewportHeight)
+      visualViewport.removeEventListener('scroll', syncViewportHeight)
+    }
+  }, [])
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault()
     const trimmed = evidence.trim()
     if (trimmed.length < 5) {
       toast.error('En az 5 karakterlik kanıt notu zorunludur.')
@@ -47,9 +52,12 @@ export function CompleteDeadlineModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/40">
-      <div className="absolute inset-0 sm:hidden" onClick={onClose} aria-hidden="true" />
-      <Card className="absolute inset-0 flex flex-col overflow-hidden rounded-none sm:inset-auto sm:left-1/2 sm:top-1/2 sm:max-h-[90vh] sm:w-full sm:max-w-lg sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:shadow-xl">
+    <div
+      className="fixed inset-x-0 top-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+      style={{ height: viewportHeight ? `${viewportHeight}px` : '100dvh' }}
+    >
+      <button className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Kapat" />
+      <Card className="relative flex max-h-full w-full flex-col overflow-hidden rounded-none shadow-xl sm:max-h-[min(90dvh,640px)] sm:max-w-lg sm:rounded-xl">
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
           <div className="flex flex-shrink-0 items-center justify-between border-b bg-card px-4 pb-3 pt-4 sm:px-5">
             <div>
@@ -65,43 +73,47 @@ export function CompleteDeadlineModal({
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
-            <label className="mb-1.5 block text-sm font-medium">
-              Ne yapıldı? <span className="text-red-500">*</span>
-            </label>
-            <textarea
-              value={evidence}
-              onChange={(e) => setEvidence(e.target.value)}
-              rows={4}
-              placeholder="Örn: İtiraz dilekçesi 02.05.2026 tarihinde UYAP üzerinden sunuldu. Tevzi no: ..."
-              className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
-              autoFocus
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              En az 5 karakter. Bu not ileride ne yapıldığını hatırlatmak için saklanır.
-            </p>
-          </div>
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+              <label className="mb-1.5 block text-sm font-medium">
+                Ne yapıldı? <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                value={evidence}
+                onChange={(event) => setEvidence(event.target.value)}
+                rows={5}
+                placeholder="Örn: İtiraz dilekçesi 02.05.2026 tarihinde UYAP üzerinden sunuldu. Tevzi no: ..."
+                className="min-h-[132px] w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+                autoFocus
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                En az 5 karakter. Bu not ileride ne yapıldığını hatırlatmak için saklanır.
+              </p>
+            </div>
 
-          <div className="flex flex-shrink-0 justify-end gap-2 border-t bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:px-5">
-            <button
-              onClick={onClose}
-              className="rounded-lg border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/50"
-            >
-              İptal
-            </button>
-            <button
-              onClick={handleSubmit}
-              disabled={updateStatus.isPending || evidence.trim().length < 5}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {updateStatus.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <CheckCircle2 className="h-4 w-4" />
-              )}
-              Tamamlandı Olarak İşaretle
-            </button>
-          </div>
+            <div className="flex flex-shrink-0 justify-end gap-2 border-t bg-card px-4 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] sm:px-5">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={updateStatus.isPending}
+                className="rounded-lg border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted/50 disabled:opacity-50"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="submit"
+                disabled={updateStatus.isPending || evidence.trim().length < 5}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+              >
+                {updateStatus.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-4 w-4" />
+                )}
+                Kaydet ve Yapıldı İşaretle
+              </button>
+            </div>
+          </form>
         </CardContent>
       </Card>
     </div>

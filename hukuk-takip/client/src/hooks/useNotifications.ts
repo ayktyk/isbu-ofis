@@ -8,7 +8,9 @@ export function useNotifications(params?: { unread?: boolean }) {
       const res = await api.get('/notifications', { params })
       return res.data
     },
+    staleTime: 15000,
     refetchInterval: 60000, // 60 saniyede bir yenile
+    refetchIntervalInBackground: false,
   })
 }
 

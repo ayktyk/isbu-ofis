@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import {
   LEGAL_DEADLINE_TEMPLATES,
@@ -25,6 +25,7 @@ export function useTasks(params?: {
       const res = await api.get('/tasks', { params })
       return res.data
     },
+    placeholderData: keepPreviousData,
   })
 }
 

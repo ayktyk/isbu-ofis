@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { and, eq, or, sql } from 'drizzle-orm'
+import { and, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { cases, collections, clients, mediationFiles } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
@@ -90,7 +90,7 @@ router.get('/', async (req, res) => {
       })
       .from(cases)
       .where(
-        sql`${cases.userId} = ${userId} AND ${cases.createdAt} >= NOW() - INTERVAL '12 months'`
+        sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.createdAt} >= NOW() - INTERVAL '12 months'`
       )
       .groupBy(sql`TO_CHAR(${cases.createdAt}, 'YYYY-MM')`)
       .orderBy(sql`TO_CHAR(${cases.createdAt}, 'YYYY-MM')`),
@@ -104,7 +104,7 @@ router.get('/', async (req, res) => {
       .from(collections)
       .innerJoin(cases, eq(collections.caseId, cases.id))
       .where(
-        sql`${cases.userId} = ${userId} AND ${collections.collectionDate}::date >= NOW() - INTERVAL '12 months' AND ${collections.caseId} IS NOT NULL`
+        sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${collections.archivedAt} IS NULL AND ${collections.collectionDate}::date >= NOW() - INTERVAL '12 months' AND ${collections.caseId} IS NOT NULL`
       )
       .groupBy(sql`TO_CHAR(${collections.collectionDate}, 'YYYY-MM')`)
       .orderBy(sql`TO_CHAR(${collections.collectionDate}, 'YYYY-MM')`),
@@ -118,7 +118,7 @@ router.get('/', async (req, res) => {
       .from(collections)
       .innerJoin(mediationFiles, eq(collections.mediationFileId, mediationFiles.id))
       .where(
-        sql`${mediationFiles.userId} = ${userId} AND ${collections.collectionDate}::date >= NOW() - INTERVAL '12 months' AND ${collections.mediationFileId} IS NOT NULL`
+        sql`${mediationFiles.userId} = ${userId} AND ${mediationFiles.archivedAt} IS NULL AND ${collections.archivedAt} IS NULL AND ${collections.collectionDate}::date >= NOW() - INTERVAL '12 months' AND ${collections.mediationFileId} IS NOT NULL`
       )
       .groupBy(sql`TO_CHAR(${collections.collectionDate}, 'YYYY-MM')`)
       .orderBy(sql`TO_CHAR(${collections.collectionDate}, 'YYYY-MM')`),
@@ -131,7 +131,7 @@ router.get('/', async (req, res) => {
       })
       .from(mediationFiles)
       .where(
-        sql`${mediationFiles.userId} = ${userId} AND ${mediationFiles.createdAt} >= NOW() - INTERVAL '12 months'`
+        sql`${mediationFiles.userId} = ${userId} AND ${mediationFiles.archivedAt} IS NULL AND ${mediationFiles.createdAt} >= NOW() - INTERVAL '12 months'`
       )
       .groupBy(sql`TO_CHAR(${mediationFiles.createdAt}, 'YYYY-MM')`)
       .orderBy(sql`TO_CHAR(${mediationFiles.createdAt}, 'YYYY-MM')`),
@@ -143,7 +143,7 @@ router.get('/', async (req, res) => {
         count: sql<number>`COUNT(*)::int`,
       })
       .from(cases)
-      .where(eq(cases.userId, userId))
+      .where(and(eq(cases.userId, userId), isNull(cases.archivedAt)))
       .groupBy(cases.caseType)
       .orderBy(sql`COUNT(*) DESC`),
 
@@ -154,7 +154,7 @@ router.get('/', async (req, res) => {
         count: sql<number>`COUNT(*)::int`,
       })
       .from(cases)
-      .where(eq(cases.userId, userId))
+      .where(and(eq(cases.userId, userId), isNull(cases.archivedAt)))
       .groupBy(cases.status)
       .orderBy(sql`COUNT(*) DESC`),
 
@@ -171,9 +171,9 @@ router.get('/', async (req, res) => {
       })
       .from(cases)
       .leftJoin(clients, eq(cases.clientId, clients.id))
-      .leftJoin(collections, eq(collections.caseId, cases.id))
+      .leftJoin(collections, and(eq(collections.caseId, cases.id), isNull(collections.archivedAt)))
       .where(
-        sql`${cases.userId} = ${userId} AND ${cases.contractedFee} IS NOT NULL AND ${cases.contractedFee}::numeric > 0`
+        sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.contractedFee} IS NOT NULL AND ${cases.contractedFee}::numeric > 0`
       )
       .groupBy(cases.id, cases.title, clients.fullName, cases.contractedFee)
       .having(
@@ -196,9 +196,9 @@ router.get('/', async (req, res) => {
         source: sql<string>`'mediation'`,
       })
       .from(mediationFiles)
-      .leftJoin(collections, eq(collections.mediationFileId, mediationFiles.id))
+      .leftJoin(collections, and(eq(collections.mediationFileId, mediationFiles.id), isNull(collections.archivedAt)))
       .where(
-        sql`${mediationFiles.userId} = ${userId} AND ${mediationFiles.agreedFee} IS NOT NULL AND ${mediationFiles.agreedFee}::numeric > 0 AND ${mediationFiles.status} = 'active'`
+        sql`${mediationFiles.userId} = ${userId} AND ${mediationFiles.archivedAt} IS NULL AND ${mediationFiles.agreedFee} IS NOT NULL AND ${mediationFiles.agreedFee}::numeric > 0 AND ${mediationFiles.status} = 'active'`
       )
       .groupBy(mediationFiles.id, mediationFiles.fileNo, mediationFiles.disputeType, mediationFiles.agreedFee)
       .having(

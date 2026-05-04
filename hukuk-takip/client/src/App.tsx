@@ -225,15 +225,26 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   // Cache varsa dashboard'u ve kritik sayfalari arka planda prefetch et
   useEffect(() => {
     if (!cachedUser) return
-    queryClient.prefetchQuery({
-      queryKey: ['dashboard'],
-      queryFn: async () => (await api.get('/dashboard')).data,
-    })
-    // Notification sayisini da pesinen cek
-    queryClient.prefetchQuery({
-      queryKey: ['notifications', { unread: true }],
-      queryFn: async () => (await api.get('/notifications', { params: { unread: true } })).data,
-    })
+    const runPrefetch = () => {
+      queryClient.prefetchQuery({
+        queryKey: ['dashboard'],
+        queryFn: async () => (await api.get('/dashboard')).data,
+      })
+      queryClient.prefetchQuery({
+        queryKey: ['notifications', { unread: true }],
+        queryFn: async () => (await api.get('/notifications', { params: { unread: true } })).data,
+      })
+    }
+    const requestIdle = (window as any).requestIdleCallback as
+      | ((callback: () => void, options?: { timeout: number }) => number)
+      | undefined
+    const cancelIdle = (window as any).cancelIdleCallback as ((handle: number) => void) | undefined
+    const idleCallback = requestIdle?.(runPrefetch, { timeout: 1500 })
+    const timeout = requestIdle ? undefined : window.setTimeout(runPrefetch, 750)
+    return () => {
+      if (idleCallback !== undefined) cancelIdle?.(idleCallback)
+      if (timeout !== undefined) window.clearTimeout(timeout)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 

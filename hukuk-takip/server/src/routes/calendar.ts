@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express'
-import { and, eq, isNotNull, ne } from 'drizzle-orm'
+import { and, eq, isNotNull, isNull, ne } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { caseHearings, cases, clients, tasks } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
@@ -48,6 +48,7 @@ router.post('/resync', async (req: Request, res: Response) => {
     .where(
       and(
         eq(tasks.userId, req.user!.userId),
+        isNull(tasks.archivedAt),
         isNotNull(tasks.dueDate),
         ne(tasks.status, 'completed'),
         ne(tasks.status, 'cancelled')
@@ -73,6 +74,8 @@ router.post('/resync', async (req: Request, res: Response) => {
     .where(
       and(
         eq(cases.userId, req.user!.userId),
+        isNull(cases.archivedAt),
+        isNull(caseHearings.archivedAt),
         ne(caseHearings.result, 'completed'),
         ne(caseHearings.result, 'cancelled')
       )

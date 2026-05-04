@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { and, desc, eq, ilike, or, sql } from 'drizzle-orm'
+import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm'
 import { createCaseSchema, updateCaseSchema } from '../../../shared/dist/index.js'
 import { db } from '../db/index.js'
 import {
@@ -51,7 +51,7 @@ router.get('/', async (req, res) => {
   const pageSize = getPositiveInt(req.query.pageSize, 20)
   const offset = (page - 1) * pageSize
 
-  const conditions = [eq(cases.userId, req.user!.userId)]
+  const conditions = [eq(cases.userId, req.user!.userId), isNull(cases.archivedAt)]
 
   if (search?.trim()) {
     const trimmedSearch = search.trim()
@@ -170,7 +170,7 @@ router.get('/:id', async (req, res) => {
     })
     .from(cases)
     .leftJoin(clients, eq(cases.clientId, clients.id))
-    .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId)))
+    .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId), isNull(cases.archivedAt)))
     .limit(1)
 
   if (!caseData) {
@@ -218,17 +218,41 @@ router.get('/:id/detail', async (req, res) => {
     })
     .from(cases)
     .leftJoin(clients, eq(cases.clientId, clients.id))
-    .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId)))
+    .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId), isNull(cases.archivedAt)))
     .limit(1)
 
   const [hearings, caseTasks, caseExpenses, caseCollections, caseNotes, caseDocuments] =
     await Promise.all([
-      db.select().from(caseHearings).where(eq(caseHearings.caseId, caseId)).orderBy(desc(caseHearings.hearingDate)),
-      db.select().from(tasks).where(eq(tasks.caseId, caseId)).orderBy(desc(tasks.createdAt)),
-      db.select().from(expenses).where(eq(expenses.caseId, caseId)).orderBy(desc(expenses.createdAt)),
-      db.select().from(collections).where(eq(collections.caseId, caseId)).orderBy(desc(collections.createdAt)),
-      db.select().from(notes).where(eq(notes.caseId, caseId)).orderBy(desc(notes.createdAt)),
-      db.select().from(documents).where(eq(documents.caseId, caseId)).orderBy(desc(documents.createdAt)),
+      db
+        .select()
+        .from(caseHearings)
+        .where(and(eq(caseHearings.caseId, caseId), isNull(caseHearings.archivedAt)))
+        .orderBy(desc(caseHearings.hearingDate)),
+      db
+        .select()
+        .from(tasks)
+        .where(and(eq(tasks.caseId, caseId), isNull(tasks.archivedAt)))
+        .orderBy(desc(tasks.createdAt)),
+      db
+        .select()
+        .from(expenses)
+        .where(and(eq(expenses.caseId, caseId), isNull(expenses.archivedAt)))
+        .orderBy(desc(expenses.createdAt)),
+      db
+        .select()
+        .from(collections)
+        .where(and(eq(collections.caseId, caseId), isNull(collections.archivedAt)))
+        .orderBy(desc(collections.createdAt)),
+      db
+        .select()
+        .from(notes)
+        .where(and(eq(notes.caseId, caseId), isNull(notes.archivedAt)))
+        .orderBy(desc(notes.createdAt)),
+      db
+        .select()
+        .from(documents)
+        .where(and(eq(documents.caseId, caseId), isNull(documents.archivedAt)))
+        .orderBy(desc(documents.createdAt)),
     ])
 
   res.json({
@@ -268,7 +292,7 @@ router.put('/:id', validate(updateCaseSchema), async (req, res) => {
       ...normalizeCasePayload(req.body),
       updatedAt: new Date(),
     })
-    .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId)))
+    .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId), isNull(cases.archivedAt)))
     .returning()
 
   if (!updated) {
@@ -288,8 +312,9 @@ router.delete('/:id', async (req, res) => {
   }
 
   const [deleted] = await db
-    .delete(cases)
-    .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId)))
+    .update(cases)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId), isNull(cases.archivedAt)))
     .returning()
 
   if (!deleted) {
@@ -297,7 +322,17 @@ router.delete('/:id', async (req, res) => {
     return
   }
 
-  res.json({ message: 'Dava silindi.' })
+  const archivedAt = deleted.archivedAt || new Date()
+  await Promise.all([
+    db.update(caseHearings).set({ archivedAt, updatedAt: new Date() }).where(and(eq(caseHearings.caseId, caseId), isNull(caseHearings.archivedAt))),
+    db.update(tasks).set({ archivedAt, updatedAt: new Date() }).where(and(eq(tasks.caseId, caseId), isNull(tasks.archivedAt))),
+    db.update(expenses).set({ archivedAt }).where(and(eq(expenses.caseId, caseId), isNull(expenses.archivedAt))),
+    db.update(collections).set({ archivedAt }).where(and(eq(collections.caseId, caseId), isNull(collections.archivedAt))),
+    db.update(notes).set({ archivedAt, updatedAt: new Date() }).where(and(eq(notes.caseId, caseId), isNull(notes.archivedAt))),
+    db.update(documents).set({ archivedAt }).where(and(eq(documents.caseId, caseId), isNull(documents.archivedAt))),
+  ])
+
+  res.json({ message: 'Dava arşivlendi.' })
 })
 
 router.get('/:id/hearings', async (req, res) => {
@@ -317,7 +352,7 @@ router.get('/:id/hearings', async (req, res) => {
   const data = await db
     .select()
     .from(caseHearings)
-    .where(eq(caseHearings.caseId, caseId))
+    .where(and(eq(caseHearings.caseId, caseId), isNull(caseHearings.archivedAt)))
     .orderBy(desc(caseHearings.hearingDate))
 
   res.json(data)
@@ -340,7 +375,7 @@ router.get('/:id/tasks', async (req, res) => {
   const data = await db
     .select()
     .from(tasks)
-    .where(eq(tasks.caseId, caseId))
+    .where(and(eq(tasks.caseId, caseId), isNull(tasks.archivedAt)))
     .orderBy(desc(tasks.createdAt))
 
   res.json(data)
@@ -363,7 +398,7 @@ router.get('/:id/expenses', async (req, res) => {
   const data = await db
     .select()
     .from(expenses)
-    .where(eq(expenses.caseId, caseId))
+    .where(and(eq(expenses.caseId, caseId), isNull(expenses.archivedAt)))
     .orderBy(desc(expenses.createdAt))
 
   res.json(data)
@@ -386,7 +421,7 @@ router.get('/:id/collections', async (req, res) => {
   const data = await db
     .select()
     .from(collections)
-    .where(eq(collections.caseId, caseId))
+    .where(and(eq(collections.caseId, caseId), isNull(collections.archivedAt)))
     .orderBy(desc(collections.createdAt))
 
   res.json(data)
@@ -409,7 +444,7 @@ router.get('/:id/notes', async (req, res) => {
   const data = await db
     .select()
     .from(notes)
-    .where(eq(notes.caseId, caseId))
+    .where(and(eq(notes.caseId, caseId), isNull(notes.archivedAt)))
     .orderBy(desc(notes.createdAt))
 
   res.json(data)
@@ -432,7 +467,7 @@ router.get('/:id/documents', async (req, res) => {
   const data = await db
     .select()
     .from(documents)
-    .where(eq(documents.caseId, caseId))
+    .where(and(eq(documents.caseId, caseId), isNull(documents.archivedAt)))
     .orderBy(desc(documents.createdAt))
 
   res.json(data)

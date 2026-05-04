@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { collections, mediationFiles, mediationParties } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
@@ -19,7 +19,7 @@ router.get('/', async (req: Request, res: Response) => {
   const status = getSingleValue(req.query.status)
   const mediationType = getSingleValue(req.query.mediationType)
 
-  const conditions = [eq(mediationFiles.userId, req.user!.userId)]
+  const conditions = [eq(mediationFiles.userId, req.user!.userId), isNull(mediationFiles.archivedAt)]
 
   if (status) {
     conditions.push(eq(mediationFiles.status, status as any))
@@ -41,25 +41,13 @@ router.get('/', async (req: Request, res: Response) => {
       ? await db
           .select()
           .from(mediationParties)
-          .where(
-            fileIds.length === 1
-              ? eq(mediationParties.mediationFileId, fileIds[0])
-              : undefined as any // fallback below
-          )
+          .where(and(inArray(mediationParties.mediationFileId, fileIds), isNull(mediationParties.archivedAt)))
       : []
 
-  // If more than one file, fetch all parties and group
-  let partiesByFile: Record<string, typeof allParties> = {}
-  if (fileIds.length > 1) {
-    const allPartiesRaw = await db.select().from(mediationParties)
-    for (const p of allPartiesRaw) {
-      if (fileIds.includes(p.mediationFileId)) {
-        if (!partiesByFile[p.mediationFileId]) partiesByFile[p.mediationFileId] = []
-        partiesByFile[p.mediationFileId].push(p)
-      }
-    }
-  } else if (fileIds.length === 1) {
-    partiesByFile[fileIds[0]] = allParties
+  const partiesByFile: Record<string, typeof allParties> = {}
+  for (const p of allParties) {
+    if (!partiesByFile[p.mediationFileId]) partiesByFile[p.mediationFileId] = []
+    partiesByFile[p.mediationFileId].push(p)
   }
 
   const result = files.map((f) => ({
@@ -81,7 +69,13 @@ router.get('/:id', async (req: Request, res: Response) => {
   const [file] = await db
     .select()
     .from(mediationFiles)
-    .where(and(eq(mediationFiles.id, id), eq(mediationFiles.userId, req.user!.userId)))
+    .where(
+      and(
+        eq(mediationFiles.id, id),
+        eq(mediationFiles.userId, req.user!.userId),
+        isNull(mediationFiles.archivedAt)
+      )
+    )
     .limit(1)
 
   if (!file) {
@@ -92,7 +86,7 @@ router.get('/:id', async (req: Request, res: Response) => {
   const parties = await db
     .select()
     .from(mediationParties)
-    .where(eq(mediationParties.mediationFileId, id))
+    .where(and(eq(mediationParties.mediationFileId, id), isNull(mediationParties.archivedAt)))
 
   res.json({ ...file, parties })
 })
@@ -157,7 +151,13 @@ router.put('/:id', validate(updateMediationFileSchema), async (req: Request, res
   const [updated] = await db
     .update(mediationFiles)
     .set(updateData)
-    .where(and(eq(mediationFiles.id, id), eq(mediationFiles.userId, req.user!.userId)))
+    .where(
+      and(
+        eq(mediationFiles.id, id),
+        eq(mediationFiles.userId, req.user!.userId),
+        isNull(mediationFiles.archivedAt)
+      )
+    )
     .returning()
 
   if (!updated) {
@@ -167,7 +167,10 @@ router.put('/:id', validate(updateMediationFileSchema), async (req: Request, res
 
   // Replace parties if provided
   if (parties) {
-    await db.delete(mediationParties).where(eq(mediationParties.mediationFileId, id))
+    await db
+      .update(mediationParties)
+      .set({ archivedAt: new Date() })
+      .where(and(eq(mediationParties.mediationFileId, id), isNull(mediationParties.archivedAt)))
 
     if (parties.length) {
       await db.insert(mediationParties).values(
@@ -190,7 +193,7 @@ router.put('/:id', validate(updateMediationFileSchema), async (req: Request, res
   const updatedParties = await db
     .select()
     .from(mediationParties)
-    .where(eq(mediationParties.mediationFileId, id))
+    .where(and(eq(mediationParties.mediationFileId, id), isNull(mediationParties.archivedAt)))
 
   res.json({ ...updated, parties: updatedParties })
 })
@@ -212,7 +215,7 @@ router.get('/:id/collections', async (req: Request, res: Response) => {
   const data = await db
     .select()
     .from(collections)
-    .where(eq(collections.mediationFileId, id))
+    .where(and(eq(collections.mediationFileId, id), isNull(collections.archivedAt)))
     .orderBy(desc(collections.createdAt))
 
   res.json(data)
@@ -227,8 +230,15 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 
   const [deleted] = await db
-    .delete(mediationFiles)
-    .where(and(eq(mediationFiles.id, id), eq(mediationFiles.userId, req.user!.userId)))
+    .update(mediationFiles)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(mediationFiles.id, id),
+        eq(mediationFiles.userId, req.user!.userId),
+        isNull(mediationFiles.archivedAt)
+      )
+    )
     .returning()
 
   if (!deleted) {
@@ -236,7 +246,19 @@ router.delete('/:id', async (req: Request, res: Response) => {
     return
   }
 
-  res.json({ message: 'Arabuluculuk dosyasi silindi.' })
+  const archivedAt = deleted.archivedAt || new Date()
+  await Promise.all([
+    db
+      .update(mediationParties)
+      .set({ archivedAt })
+      .where(and(eq(mediationParties.mediationFileId, id), isNull(mediationParties.archivedAt))),
+    db
+      .update(collections)
+      .set({ archivedAt })
+      .where(and(eq(collections.mediationFileId, id), isNull(collections.archivedAt))),
+  ])
+
+  res.json({ message: 'Arabuluculuk dosyası arşivlendi.' })
 })
 
 export default router

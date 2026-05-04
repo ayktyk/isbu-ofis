@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, isNull } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { notes } from '../db/schema.js'
 import { validate } from '../middleware/validate.js'
@@ -54,7 +54,7 @@ router.put('/:id', validate(updateNoteSchema), async (req, res) => {
   const [updated] = await db
     .update(notes)
     .set({ content: req.body.content, updatedAt: new Date() })
-    .where(and(eq(notes.id, noteId), eq(notes.userId, req.user!.userId)))
+    .where(and(eq(notes.id, noteId), eq(notes.userId, req.user!.userId), isNull(notes.archivedAt)))
     .returning()
 
   if (!updated) {
@@ -74,8 +74,9 @@ router.delete('/:id', async (req, res) => {
   }
 
   const [deleted] = await db
-    .delete(notes)
-    .where(and(eq(notes.id, noteId), eq(notes.userId, req.user!.userId)))
+    .update(notes)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(notes.id, noteId), eq(notes.userId, req.user!.userId), isNull(notes.archivedAt)))
     .returning()
 
   if (!deleted) {
@@ -83,7 +84,7 @@ router.delete('/:id', async (req, res) => {
     return
   }
 
-  res.json({ message: 'Not silindi.' })
+  res.json({ message: 'Not arşivlendi.' })
 })
 
 export default router

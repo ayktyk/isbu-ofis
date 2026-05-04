@@ -169,6 +169,36 @@ EXCEPTION WHEN others THEN null;
 END $$;
 `
 
+// rev7 (2026-05): Kullanici "sil" dediginde satirlar DB'den atilmasin.
+// Bu kolonlar sadece arayuzden gizleme/arsivleme icin kullanilir; mevcut veri
+// aynen kalir. Tablolarin FK/cascade davranislari degistirilmez, cunku route'lar
+// hard delete yerine archived_at set edecek.
+const REV7_ARCHIVE_COLUMNS_SQL = `
+ALTER TABLE "clients" ADD COLUMN IF NOT EXISTS "archived_at" timestamp;
+ALTER TABLE "cases" ADD COLUMN IF NOT EXISTS "archived_at" timestamp;
+ALTER TABLE "case_hearings" ADD COLUMN IF NOT EXISTS "archived_at" timestamp;
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "archived_at" timestamp;
+ALTER TABLE "expenses" ADD COLUMN IF NOT EXISTS "archived_at" timestamp;
+ALTER TABLE "collections" ADD COLUMN IF NOT EXISTS "archived_at" timestamp;
+ALTER TABLE "documents" ADD COLUMN IF NOT EXISTS "archived_at" timestamp;
+ALTER TABLE "notes" ADD COLUMN IF NOT EXISTS "archived_at" timestamp;
+ALTER TABLE "mediation_files" ADD COLUMN IF NOT EXISTS "archived_at" timestamp;
+ALTER TABLE "mediation_parties" ADD COLUMN IF NOT EXISTS "archived_at" timestamp;
+ALTER TABLE "consultations" ADD COLUMN IF NOT EXISTS "archived_at" timestamp;
+
+CREATE INDEX IF NOT EXISTS "clients_archived_idx" ON "clients" ("archived_at");
+CREATE INDEX IF NOT EXISTS "cases_archived_idx" ON "cases" ("archived_at");
+CREATE INDEX IF NOT EXISTS "case_hearings_archived_idx" ON "case_hearings" ("archived_at");
+CREATE INDEX IF NOT EXISTS "tasks_archived_idx" ON "tasks" ("archived_at");
+CREATE INDEX IF NOT EXISTS "expenses_archived_idx" ON "expenses" ("archived_at");
+CREATE INDEX IF NOT EXISTS "collections_archived_idx" ON "collections" ("archived_at");
+CREATE INDEX IF NOT EXISTS "documents_archived_idx" ON "documents" ("archived_at");
+CREATE INDEX IF NOT EXISTS "notes_archived_idx" ON "notes" ("archived_at");
+CREATE INDEX IF NOT EXISTS "mediation_files_archived_idx" ON "mediation_files" ("archived_at");
+CREATE INDEX IF NOT EXISTS "mediation_parties_archived_idx" ON "mediation_parties" ("archived_at");
+CREATE INDEX IF NOT EXISTS "consultations_archived_idx" ON "consultations" ("archived_at");
+`
+
 export async function ensureSchema() {
   if (!process.env.DATABASE_URL) {
     console.warn('ensureSchema: DATABASE_URL yok, atlaniyor.')
@@ -188,6 +218,8 @@ export async function ensureSchema() {
     console.log('Schema guard: tasks süreli iş kolonları hazir.')
     await sql.unsafe(REV6_NOTIFICATION_LEGAL_DEADLINE_SQL)
     console.log('Schema guard: notification_type legal_deadline_critical hazir.')
+    await sql.unsafe(REV7_ARCHIVE_COLUMNS_SQL)
+    console.log('Schema guard: arsivleme kolonlari hazir.')
   } catch (err) {
     console.error('Schema guard hatasi:', err)
   } finally {

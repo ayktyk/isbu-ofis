@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express'
-import { and, desc, eq, gte, lte, sql } from 'drizzle-orm'
+import { and, desc, eq, gte, isNull, lte, sql } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { clients, consultations } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
@@ -21,7 +21,7 @@ router.get('/', async (req: Request, res: Response) => {
   const from = getSingleValue(req.query.from)
   const to = getSingleValue(req.query.to)
 
-  const conditions = [eq(consultations.userId, req.user!.userId)]
+  const conditions = [eq(consultations.userId, req.user!.userId), isNull(consultations.archivedAt)]
 
   if (status) conditions.push(eq(consultations.status, status as any))
   if (source) conditions.push(eq(consultations.source, source as any))
@@ -82,6 +82,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       .where(
         and(
           eq(consultations.userId, userId),
+          isNull(consultations.archivedAt),
           gte(consultations.consultationDate, todayStart),
           lte(consultations.consultationDate, todayEnd)
         )
@@ -92,6 +93,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       .where(
         and(
           eq(consultations.userId, userId),
+          isNull(consultations.archivedAt),
           gte(consultations.consultationDate, weekStart)
         )
       ),
@@ -101,6 +103,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       .where(
         and(
           eq(consultations.userId, userId),
+          isNull(consultations.archivedAt),
           gte(consultations.consultationDate, monthStart)
         )
       ),
@@ -110,6 +113,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       .where(
         and(
           eq(consultations.userId, userId),
+          isNull(consultations.archivedAt),
           eq(consultations.status, 'converted'),
           gte(consultations.consultationDate, monthStart)
         )
@@ -120,6 +124,7 @@ router.get('/stats', async (req: Request, res: Response) => {
       .where(
         and(
           eq(consultations.userId, userId),
+          isNull(consultations.archivedAt),
           eq(consultations.status, 'potential')
         )
       ),
@@ -198,7 +203,7 @@ router.put('/:id', validate(updateConsultationSchema), async (req: Request, res:
   const [updated] = await db
     .update(consultations)
     .set(updateData)
-    .where(and(eq(consultations.id, id), eq(consultations.userId, req.user!.userId)))
+    .where(and(eq(consultations.id, id), eq(consultations.userId, req.user!.userId), isNull(consultations.archivedAt)))
     .returning()
 
   if (!updated) {
@@ -221,7 +226,7 @@ router.post('/:id/convert', async (req: Request, res: Response) => {
   const [consultation] = await db
     .select()
     .from(consultations)
-    .where(and(eq(consultations.id, id), eq(consultations.userId, req.user!.userId)))
+    .where(and(eq(consultations.id, id), eq(consultations.userId, req.user!.userId), isNull(consultations.archivedAt)))
     .limit(1)
 
   if (!consultation) {
@@ -270,8 +275,9 @@ router.delete('/:id', async (req: Request, res: Response) => {
   }
 
   const [deleted] = await db
-    .delete(consultations)
-    .where(and(eq(consultations.id, id), eq(consultations.userId, req.user!.userId)))
+    .update(consultations)
+    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(consultations.id, id), eq(consultations.userId, req.user!.userId), isNull(consultations.archivedAt)))
     .returning()
 
   if (!deleted) {
@@ -279,7 +285,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
     return
   }
 
-  res.json({ message: 'Görüşme silindi.' })
+  res.json({ message: 'Görüşme arşivlendi.' })
 })
 
 export default router

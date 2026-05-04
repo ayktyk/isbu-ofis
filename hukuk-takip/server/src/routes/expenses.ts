@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, isNull } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { expenses, cases } from '../db/schema.js'
 import { validate } from '../middleware/validate.js'
@@ -15,7 +15,7 @@ router.use(authenticate)
 
 router.get('/', async (req, res) => {
   const caseId = getSingleValue(req.query.caseId)
-  const conditions = [eq(expenses.userId, req.user!.userId)]
+  const conditions = [eq(expenses.userId, req.user!.userId), isNull(expenses.archivedAt)]
   if (caseId) {
     conditions.push(eq(expenses.caseId, caseId))
   }
@@ -82,7 +82,7 @@ router.put('/:id', validate(updateExpenseSchema), async (req, res) => {
   const [updated] = await db
     .update(expenses)
     .set(req.body)
-    .where(and(eq(expenses.id, expenseId), eq(expenses.userId, req.user!.userId)))
+    .where(and(eq(expenses.id, expenseId), eq(expenses.userId, req.user!.userId), isNull(expenses.archivedAt)))
     .returning()
 
   if (!updated) {
@@ -104,8 +104,9 @@ router.delete('/:id', async (req, res) => {
   }
 
   const [deleted] = await db
-    .delete(expenses)
-    .where(and(eq(expenses.id, expenseId), eq(expenses.userId, req.user!.userId)))
+    .update(expenses)
+    .set({ archivedAt: new Date() })
+    .where(and(eq(expenses.id, expenseId), eq(expenses.userId, req.user!.userId), isNull(expenses.archivedAt)))
     .returning()
 
   if (!deleted) {
@@ -113,7 +114,7 @@ router.delete('/:id', async (req, res) => {
     return
   }
 
-  res.json({ message: 'Masraf silindi.' })
+  res.json({ message: 'Masraf arşivlendi.' })
 })
 
 export default router

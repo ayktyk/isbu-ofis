@@ -29,7 +29,12 @@ router.get('/', async (req, res) => {
     eq(cases.userId, req.user!.userId)
   )!
 
-  const conditions = [ownerCondition]
+  const conditions = [
+    ownerCondition,
+    isNull(collections.archivedAt),
+    or(isNull(collections.caseId), isNull(cases.archivedAt))!,
+    or(isNull(collections.mediationFileId), isNull(mediationFiles.archivedAt))!,
+  ]
 
   if (caseId) conditions.push(eq(collections.caseId, caseId))
   if (mediationFileId) conditions.push(eq(collections.mediationFileId, mediationFileId))
@@ -155,7 +160,7 @@ router.put('/:id', validate(updateCollectionSchema), async (req, res) => {
   const [updated] = await db
     .update(collections)
     .set(req.body)
-    .where(eq(collections.id, collectionId))
+    .where(and(eq(collections.id, collectionId), isNull(collections.archivedAt)))
     .returning()
 
   if (!updated) {
@@ -183,8 +188,9 @@ router.delete('/:id', async (req, res) => {
   }
 
   const [deleted] = await db
-    .delete(collections)
-    .where(eq(collections.id, collectionId))
+    .update(collections)
+    .set({ archivedAt: new Date() })
+    .where(and(eq(collections.id, collectionId), isNull(collections.archivedAt)))
     .returning()
 
   if (!deleted) {
@@ -192,7 +198,7 @@ router.delete('/:id', async (req, res) => {
     return
   }
 
-  res.json({ message: 'Tahsilat silindi.' })
+  res.json({ message: 'Tahsilat arşivlendi.' })
 })
 
 export default router

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { eq, and, ilike, or, desc, sql } from 'drizzle-orm'
+import { eq, and, ilike, isNull, or, desc, sql } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { clients, cases } from '../db/schema.js'
 import { validate } from '../middleware/validate.js'
@@ -20,7 +20,11 @@ router.get('/', async (req, res) => {
   const pageSize = getPositiveInt(req.query.pageSize, 20)
   const offset = (page - 1) * pageSize
 
-  const conditions = [eq(clients.userId, req.user!.userId), eq(clients.isActive, true)]
+  const conditions = [
+    eq(clients.userId, req.user!.userId),
+    eq(clients.isActive, true),
+    isNull(clients.archivedAt),
+  ]
 
   if (search?.trim()) {
     conditions.push(
@@ -72,7 +76,7 @@ router.get('/:id', async (req, res) => {
   const [client] = await db
     .select()
     .from(clients)
-    .where(and(eq(clients.id, clientId), eq(clients.userId, req.user!.userId)))
+    .where(and(eq(clients.id, clientId), eq(clients.userId, req.user!.userId), isNull(clients.archivedAt)))
     .limit(1)
 
   if (!client) {
@@ -113,7 +117,7 @@ router.put('/:id', validate(updateClientSchema), async (req, res) => {
       ...req.body,
       updatedAt: new Date(),
     })
-    .where(and(eq(clients.id, clientId), eq(clients.userId, req.user!.userId)))
+    .where(and(eq(clients.id, clientId), eq(clients.userId, req.user!.userId), isNull(clients.archivedAt)))
     .returning()
 
   if (!client) {
@@ -136,8 +140,8 @@ router.delete('/:id', async (req, res) => {
 
   const [client] = await db
     .update(clients)
-    .set({ isActive: false, updatedAt: new Date() })
-    .where(and(eq(clients.id, clientId), eq(clients.userId, req.user!.userId)))
+    .set({ isActive: false, archivedAt: new Date(), updatedAt: new Date() })
+    .where(and(eq(clients.id, clientId), eq(clients.userId, req.user!.userId), isNull(clients.archivedAt)))
     .returning()
 
   if (!client) {
@@ -161,7 +165,7 @@ router.get('/:id/cases', async (req, res) => {
   const data = await db
     .select()
     .from(cases)
-    .where(and(eq(cases.clientId, clientId), eq(cases.userId, req.user!.userId)))
+    .where(and(eq(cases.clientId, clientId), eq(cases.userId, req.user!.userId), isNull(cases.archivedAt)))
     .orderBy(desc(cases.createdAt))
 
   res.json(data)

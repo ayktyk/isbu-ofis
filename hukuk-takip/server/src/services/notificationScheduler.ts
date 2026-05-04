@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, inArray, isNotNull } from 'drizzle-orm'
+import { and, eq, gte, lte, inArray, isNotNull, isNull } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { caseHearings, tasks, notifications, cases } from '../db/schema.js'
 
@@ -119,7 +119,9 @@ export async function runReminderScan(): Promise<ScanResult> {
       and(
         gte(caseHearings.hearingDate, todayStart),
         lte(caseHearings.hearingDate, upcomingEnd),
-        inArray(caseHearings.result, ['pending', 'postponed'])
+        inArray(caseHearings.result, ['pending', 'postponed']),
+        isNull(caseHearings.archivedAt),
+        isNull(cases.archivedAt)
       )
     )
 
@@ -131,8 +133,7 @@ export async function runReminderScan(): Promise<ScanResult> {
         and(
           eq(notifications.userId, hearing.userId),
           eq(notifications.type, 'hearing'),
-          eq(notifications.relatedId, hearing.id),
-          eq(notifications.relatedType, 'hearing')
+          eq(notifications.relatedId, hearing.id)
         )
       )
       .limit(1)
@@ -174,7 +175,9 @@ export async function runReminderScan(): Promise<ScanResult> {
       and(
         gte(caseHearings.hearingDate, overdueStart),
         lte(caseHearings.hearingDate, overdueEnd),
-        inArray(caseHearings.result, ['pending', 'postponed'])
+        inArray(caseHearings.result, ['pending', 'postponed']),
+        isNull(caseHearings.archivedAt),
+        isNull(cases.archivedAt)
       )
     )
 
@@ -186,8 +189,7 @@ export async function runReminderScan(): Promise<ScanResult> {
         and(
           eq(notifications.userId, hearing.userId),
           eq(notifications.type, 'hearing'),
-          eq(notifications.relatedId, hearing.id),
-          eq(notifications.relatedType, 'hearing_overdue')
+          eq(notifications.relatedId, hearing.id)
         )
       )
       .limit(1)
@@ -224,7 +226,8 @@ export async function runReminderScan(): Promise<ScanResult> {
         gte(tasks.dueDate, todayStart),
         lte(tasks.dueDate, upcomingEnd),
         inArray(tasks.status, ['pending', 'in_progress']),
-        eq(tasks.isDeadline, false)
+        eq(tasks.isDeadline, false),
+        isNull(tasks.archivedAt)
       )
     )
 
@@ -236,8 +239,7 @@ export async function runReminderScan(): Promise<ScanResult> {
         and(
           eq(notifications.userId, task.userId),
           eq(notifications.type, 'task'),
-          eq(notifications.relatedId, task.id),
-          eq(notifications.relatedType, 'task')
+          eq(notifications.relatedId, task.id)
         )
       )
       .limit(1)
@@ -277,7 +279,8 @@ export async function runReminderScan(): Promise<ScanResult> {
         gte(tasks.dueDate, todayStart),
         lte(tasks.dueDate, now),
         inArray(tasks.status, ['pending', 'in_progress']),
-        eq(tasks.isDeadline, false)
+        eq(tasks.isDeadline, false),
+        isNull(tasks.archivedAt)
       )
     )
 
@@ -289,8 +292,7 @@ export async function runReminderScan(): Promise<ScanResult> {
         and(
           eq(notifications.userId, task.userId),
           eq(notifications.type, 'task'),
-          eq(notifications.relatedId, task.id),
-          eq(notifications.relatedType, 'task_due_now')
+          eq(notifications.relatedId, task.id)
         )
       )
       .limit(1)
@@ -325,7 +327,8 @@ export async function runReminderScan(): Promise<ScanResult> {
         gte(tasks.dueDate, overdueStart),
         lte(tasks.dueDate, overdueEnd),
         inArray(tasks.status, ['pending', 'in_progress']),
-        eq(tasks.isDeadline, false)
+        eq(tasks.isDeadline, false),
+        isNull(tasks.archivedAt)
       )
     )
 
@@ -337,8 +340,7 @@ export async function runReminderScan(): Promise<ScanResult> {
         and(
           eq(notifications.userId, task.userId),
           eq(notifications.type, 'task'),
-          eq(notifications.relatedId, task.id),
-          eq(notifications.relatedType, 'task_overdue')
+          eq(notifications.relatedId, task.id)
         )
       )
       .limit(1)
@@ -382,6 +384,7 @@ export async function runReminderScan(): Promise<ScanResult> {
       .where(
         and(
           eq(tasks.isDeadline, true),
+          isNull(tasks.archivedAt),
           isNotNull(tasks.dueDate),
           gte(tasks.dueDate, target),
           lte(tasks.dueDate, targetEnd),

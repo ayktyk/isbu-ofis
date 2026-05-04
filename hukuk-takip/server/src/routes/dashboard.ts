@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { and, asc, desc, eq, gte, inArray, isNotNull, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import {
   caseHearings,
@@ -29,9 +29,12 @@ function triggerReminderScanInBackground() {
 // hem arabuluculuk bazlı (mediation.user_id) tahsilatları toplar.
 const userOwnedCollectionsClause = (userId: string) =>
   sql`(
-    ${collections.userId} = ${userId}
-    OR EXISTS (SELECT 1 FROM ${cases} WHERE ${cases.id} = ${collections.caseId} AND ${cases.userId} = ${userId})
-    OR EXISTS (SELECT 1 FROM ${mediationFiles} WHERE ${mediationFiles.id} = ${collections.mediationFileId} AND ${mediationFiles.userId} = ${userId})
+    ${collections.archivedAt} IS NULL
+    AND (
+      ${collections.userId} = ${userId}
+      OR EXISTS (SELECT 1 FROM ${cases} WHERE ${cases.id} = ${collections.caseId} AND ${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL)
+      OR EXISTS (SELECT 1 FROM ${mediationFiles} WHERE ${mediationFiles.id} = ${collections.mediationFileId} AND ${mediationFiles.userId} = ${userId} AND ${mediationFiles.archivedAt} IS NULL)
+    )
   )`
 
 // Kritik süreli işler — önümüzdeki N gün içinde son bulan, hala açık olanlar.
@@ -59,6 +62,7 @@ async function loadCriticalDeadlines(userId: string, withinDays = 7) {
       and(
         eq(tasks.userId, userId),
         eq(tasks.isDeadline, true),
+        isNull(tasks.archivedAt),
         isNotNull(tasks.dueDate),
         gte(tasks.dueDate, start),
         lte(tasks.dueDate, end),
@@ -92,7 +96,7 @@ router.get('/', async (req, res) => {
         count: sql<number>`count(*)::int`,
       })
       .from(cases)
-      .where(eq(cases.userId, userId))
+      .where(and(eq(cases.userId, userId), isNull(cases.archivedAt)))
       .groupBy(cases.status),
 
     db
@@ -112,6 +116,8 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(cases.userId, userId),
+          isNull(cases.archivedAt),
+          isNull(caseHearings.archivedAt),
           gte(caseHearings.hearingDate, now),
           lte(caseHearings.hearingDate, sevenDaysLater),
           eq(caseHearings.result, 'pending')
@@ -131,7 +137,12 @@ router.get('/', async (req, res) => {
       .from(tasks)
       .leftJoin(cases, eq(tasks.caseId, cases.id))
       .where(
-        and(eq(tasks.userId, userId), eq(tasks.status, 'pending'), eq(tasks.isDeadline, false))
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.status, 'pending'),
+          eq(tasks.isDeadline, false),
+          isNull(tasks.archivedAt)
+        )
       )
       .orderBy(tasks.dueDate)
       .limit(10),
@@ -147,7 +158,7 @@ router.get('/', async (req, res) => {
       })
       .from(cases)
       .leftJoin(clients, eq(cases.clientId, clients.id))
-      .where(eq(cases.userId, userId))
+      .where(and(eq(cases.userId, userId), isNull(cases.archivedAt)))
       .orderBy(desc(cases.createdAt))
       .limit(5),
 
@@ -174,10 +185,11 @@ router.get('/', async (req, res) => {
       })
       .from(cases)
       .leftJoin(clients, eq(cases.clientId, clients.id))
-      .leftJoin(collections, eq(collections.caseId, cases.id))
+      .leftJoin(collections, and(eq(collections.caseId, cases.id), isNull(collections.archivedAt)))
       .where(
         and(
           eq(cases.userId, userId),
+          isNull(cases.archivedAt),
           sql`${cases.contractedFee} IS NOT NULL`,
           sql`${cases.contractedFee}::numeric > 0`,
           or(eq(cases.status, 'active'), eq(cases.status, 'istinafta'), eq(cases.status, 'yargıtayda'))
@@ -200,10 +212,11 @@ router.get('/', async (req, res) => {
         source: sql<string>`'mediation'`,
       })
       .from(mediationFiles)
-      .leftJoin(collections, eq(collections.mediationFileId, mediationFiles.id))
+      .leftJoin(collections, and(eq(collections.mediationFileId, mediationFiles.id), isNull(collections.archivedAt)))
       .where(
         and(
           eq(mediationFiles.userId, userId),
+          isNull(mediationFiles.archivedAt),
           sql`${mediationFiles.agreedFee} IS NOT NULL`,
           sql`${mediationFiles.agreedFee}::numeric > 0`,
           eq(mediationFiles.status, 'active')
@@ -217,7 +230,7 @@ router.get('/', async (req, res) => {
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(consultations)
-      .where(and(eq(consultations.userId, userId), eq(consultations.status, 'potential'))),
+      .where(and(eq(consultations.userId, userId), eq(consultations.status, 'potential'), isNull(consultations.archivedAt))),
 
     loadCriticalDeadlines(userId, 7),
   ])
@@ -316,7 +329,7 @@ router.get('/summary', async (req, res) => {
     db
       .select({ status: cases.status, count: sql<number>`count(*)::int` })
       .from(cases)
-      .where(eq(cases.userId, userId))
+      .where(and(eq(cases.userId, userId), isNull(cases.archivedAt)))
       .groupBy(cases.status),
 
     db
@@ -336,6 +349,8 @@ router.get('/summary', async (req, res) => {
       .where(
         and(
           eq(cases.userId, userId),
+          isNull(cases.archivedAt),
+          isNull(caseHearings.archivedAt),
           gte(caseHearings.hearingDate, now),
           lte(caseHearings.hearingDate, sevenDaysLater),
           eq(caseHearings.result, 'pending')
@@ -355,7 +370,12 @@ router.get('/summary', async (req, res) => {
       .from(tasks)
       .leftJoin(cases, eq(tasks.caseId, cases.id))
       .where(
-        and(eq(tasks.userId, userId), eq(tasks.status, 'pending'), eq(tasks.isDeadline, false))
+        and(
+          eq(tasks.userId, userId),
+          eq(tasks.status, 'pending'),
+          eq(tasks.isDeadline, false),
+          isNull(tasks.archivedAt)
+        )
       )
       .orderBy(tasks.dueDate)
       .limit(10),
@@ -371,7 +391,7 @@ router.get('/summary', async (req, res) => {
       })
       .from(cases)
       .leftJoin(clients, eq(cases.clientId, clients.id))
-      .where(eq(cases.userId, userId))
+      .where(and(eq(cases.userId, userId), isNull(cases.archivedAt)))
       .orderBy(desc(cases.createdAt))
       .limit(5),
 
@@ -396,10 +416,11 @@ router.get('/summary', async (req, res) => {
       })
       .from(cases)
       .leftJoin(clients, eq(cases.clientId, clients.id))
-      .leftJoin(collections, eq(collections.caseId, cases.id))
+      .leftJoin(collections, and(eq(collections.caseId, cases.id), isNull(collections.archivedAt)))
       .where(
         and(
           eq(cases.userId, userId),
+          isNull(cases.archivedAt),
           sql`${cases.contractedFee} IS NOT NULL`,
           sql`${cases.contractedFee}::numeric > 0`,
           or(eq(cases.status, 'active'), eq(cases.status, 'istinafta'), eq(cases.status, 'yargıtayda'))
@@ -421,10 +442,11 @@ router.get('/summary', async (req, res) => {
         source: sql<string>`'mediation'`,
       })
       .from(mediationFiles)
-      .leftJoin(collections, eq(collections.mediationFileId, mediationFiles.id))
+      .leftJoin(collections, and(eq(collections.mediationFileId, mediationFiles.id), isNull(collections.archivedAt)))
       .where(
         and(
           eq(mediationFiles.userId, userId),
+          isNull(mediationFiles.archivedAt),
           sql`${mediationFiles.agreedFee} IS NOT NULL`,
           sql`${mediationFiles.agreedFee}::numeric > 0`,
           eq(mediationFiles.status, 'active')
@@ -438,7 +460,7 @@ router.get('/summary', async (req, res) => {
     db
       .select({ count: sql<number>`count(*)::int` })
       .from(consultations)
-      .where(and(eq(consultations.userId, userId), eq(consultations.status, 'potential'))),
+      .where(and(eq(consultations.userId, userId), eq(consultations.status, 'potential'), isNull(consultations.archivedAt))),
 
     // Bu ay gelir — dava + arabuluculuk kırılımı
     db
@@ -458,7 +480,7 @@ router.get('/summary', async (req, res) => {
     db
       .select({ status: consultations.status, count: sql<number>`count(*)::int` })
       .from(consultations)
-      .where(eq(consultations.userId, userId))
+      .where(and(eq(consultations.userId, userId), isNull(consultations.archivedAt)))
       .groupBy(consultations.status),
 
     // Kritik süreli işler — önümüzdeki 7 gün

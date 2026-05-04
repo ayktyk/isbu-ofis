@@ -57,22 +57,12 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           maxAge: 1000 * 60 * 60 * 24, // 24 saat sonra at
           buster: CACHE_BUSTER,
           dehydrateOptions: {
-            // Hassas/gerçek zamanli olmayan verileri persist et.
-            // Notifications persist edilmez (her zaman taze gelsin).
+            // Büyük liste query'lerini localStorage'a senkron yazmak mobilde takılma yaratır.
+            // Kullanıcı cache'i authCache ile ayrıca tutuluyor; burada yalnızca küçük auth query'si saklanır.
             shouldDehydrateQuery: (query) => {
               const key = query.queryKey?.[0]
               if (typeof key !== 'string') return false
-              const persisted = [
-                'auth',
-                'dashboard',
-                'cases',
-                'clients',
-                'tasks',
-                'hearings',
-                'calendar',
-                'statistics',
-                'consultations',
-              ]
+              const persisted = ['auth']
               return persisted.includes(key) && query.state.status === 'success'
             },
           },

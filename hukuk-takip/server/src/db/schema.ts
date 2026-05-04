@@ -136,6 +136,7 @@ export const clients = pgTable(
     address: text('address'),
     notes: text('notes'),
     isActive: boolean('is_active').default(true).notNull(),
+    archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -165,6 +166,7 @@ export const cases = pgTable(
     closeDate: date('close_date'),
     contractedFee: decimal('contracted_fee', { precision: 12, scale: 2 }),
     currency: varchar('currency', { length: 3 }).default('TRY').notNull(),
+    archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -188,6 +190,7 @@ export const caseHearings = pgTable(
     result: hearingResultEnum('result').default('pending').notNull(),
     notes: text('notes'),
     nextHearingDate: timestamp('next_hearing_date'),
+    archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -225,6 +228,7 @@ export const tasks = pgTable(
     adjustedForHoliday: boolean('adjusted_for_holiday').default(false).notNull(),
     legalBasis: varchar('legal_basis', { length: 200 }),
     completionEvidence: text('completion_evidence'),
+    archivedAt: timestamp('archived_at'),
   },
   (table) => ({
     userIdx: index('tasks_user_idx').on(table.userId),
@@ -252,6 +256,7 @@ export const expenses = pgTable(
     expenseDate: date('expense_date').notNull(),
     receiptUrl: varchar('receipt_url', { length: 1000 }),
     isBillable: boolean('is_billable').default(true).notNull(),
+    archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => ({
@@ -276,6 +281,7 @@ export const collections = pgTable(
     description: varchar('description', { length: 500 }),
     paymentMethod: varchar('payment_method', { length: 50 }),
     receiptNo: varchar('receipt_no', { length: 100 }),
+    archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => ({
@@ -322,6 +328,7 @@ export const documents = pgTable(
     fileSize: integer('file_size'),
     mimeType: varchar('mime_type', { length: 100 }),
     description: text('description'),
+    archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => ({
@@ -337,6 +344,7 @@ export const notes = pgTable('notes', {
     .references(() => users.id, { onDelete: 'cascade' })
     .notNull(),
   content: text('content').notNull(),
+  archivedAt: timestamp('archived_at'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -386,6 +394,7 @@ export const mediationFiles = pgTable(
     agreedFee: decimal('agreed_fee', { precision: 12, scale: 2 }),
     currency: varchar('currency', { length: 3 }).default('TRY').notNull(),
     notes: text('notes'),
+    archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -411,6 +420,7 @@ export const mediationParties = pgTable(
     lawyerName: varchar('lawyer_name', { length: 255 }),
     lawyerBarNo: varchar('lawyer_bar_no', { length: 50 }),
     lawyerPhone: varchar('lawyer_phone', { length: 20 }),
+    archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => ({
@@ -441,6 +451,7 @@ export const consultations = pgTable(
     convertedClientId: uuid('converted_client_id').references(() => clients.id, {
       onDelete: 'set null',
     }),
+    archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -460,4 +471,3 @@ export type MediationFile = typeof mediationFiles.$inferSelect
 export type NewMediationFile = typeof mediationFiles.$inferInsert
 export type MediationParty = typeof mediationParties.$inferSelect
 export type NewMediationParty = typeof mediationParties.$inferInsert
-

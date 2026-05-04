@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { caseHearings, cases, clients, collections, mediationFiles } from '../db/schema.js'
 
@@ -10,7 +10,7 @@ export async function getOwnedCase(userId: string, caseId: string) {
       userId: cases.userId,
     })
     .from(cases)
-    .where(and(eq(cases.id, caseId), eq(cases.userId, userId)))
+    .where(and(eq(cases.id, caseId), eq(cases.userId, userId), isNull(cases.archivedAt)))
     .limit(1)
 
   return ownedCase ?? null
@@ -23,7 +23,7 @@ export async function getOwnedClient(userId: string, clientId: string) {
       userId: clients.userId,
     })
     .from(clients)
-    .where(and(eq(clients.id, clientId), eq(clients.userId, userId)))
+    .where(and(eq(clients.id, clientId), eq(clients.userId, userId), isNull(clients.archivedAt)))
     .limit(1)
 
   return ownedClient ?? null
@@ -37,7 +37,14 @@ export async function getOwnedHearing(userId: string, hearingId: string) {
     })
     .from(caseHearings)
     .innerJoin(cases, eq(caseHearings.caseId, cases.id))
-    .where(and(eq(caseHearings.id, hearingId), eq(cases.userId, userId)))
+    .where(
+      and(
+        eq(caseHearings.id, hearingId),
+        eq(cases.userId, userId),
+        isNull(caseHearings.archivedAt),
+        isNull(cases.archivedAt)
+      )
+    )
     .limit(1)
 
   return ownedHearing ?? null
@@ -55,7 +62,7 @@ export async function getOwnedCollection(userId: string, collectionId: string) {
       userId: collections.userId,
     })
     .from(collections)
-    .where(and(eq(collections.id, collectionId), eq(collections.userId, userId)))
+    .where(and(eq(collections.id, collectionId), eq(collections.userId, userId), isNull(collections.archivedAt)))
     .limit(1)
 
   if (ownedCollection) return ownedCollection
@@ -71,7 +78,14 @@ export async function getOwnedCollection(userId: string, collectionId: string) {
     })
     .from(collections)
     .innerJoin(cases, eq(collections.caseId, cases.id))
-    .where(and(eq(collections.id, collectionId), eq(cases.userId, userId)))
+    .where(
+      and(
+        eq(collections.id, collectionId),
+        eq(cases.userId, userId),
+        isNull(collections.archivedAt),
+        isNull(cases.archivedAt)
+      )
+    )
     .limit(1)
 
   return legacy ?? null
@@ -86,7 +100,13 @@ export async function getOwnedMediationFile(userId: string, mediationFileId: str
       currency: mediationFiles.currency,
     })
     .from(mediationFiles)
-    .where(and(eq(mediationFiles.id, mediationFileId), eq(mediationFiles.userId, userId)))
+    .where(
+      and(
+        eq(mediationFiles.id, mediationFileId),
+        eq(mediationFiles.userId, userId),
+        isNull(mediationFiles.archivedAt)
+      )
+    )
     .limit(1)
 
   return owned ?? null

@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { and, eq, desc, sql, type SQL } from 'drizzle-orm'
+import { and, eq, desc, isNull, sql, type SQL } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import {
   clients,
@@ -92,6 +92,8 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(clients.userId, userId),
+          eq(clients.isActive, true),
+          isNull(clients.archivedAt),
           anyOf([
             m(clients.fullName),
             m(clients.phone),
@@ -119,6 +121,7 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(cases.userId, userId),
+          isNull(cases.archivedAt),
           anyOf([
             m(cases.title),
             m(cases.caseNumber),
@@ -143,6 +146,7 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(tasks.userId, userId),
+          isNull(tasks.archivedAt),
           anyOf([m(tasks.title), m(tasks.description), m(tasks.label)])
         )
       )
@@ -162,6 +166,8 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(cases.userId, userId),
+          isNull(cases.archivedAt),
+          isNull(caseHearings.archivedAt),
           anyOf([
             m(caseHearings.courtRoom),
             m(caseHearings.notes),
@@ -186,6 +192,7 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(mediationFiles.userId, userId),
+          isNull(mediationFiles.archivedAt),
           anyOf([
             m(mediationFiles.fileNo),
             m(mediationFiles.disputeType),
@@ -210,6 +217,8 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(mediationFiles.userId, userId),
+          isNull(mediationFiles.archivedAt),
+          isNull(mediationParties.archivedAt),
           anyOf([
             m(mediationParties.fullName),
             m(mediationParties.tcNo),
@@ -237,6 +246,7 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(consultations.userId, userId),
+          isNull(consultations.archivedAt),
           anyOf([
             m(consultations.fullName),
             m(consultations.phone),

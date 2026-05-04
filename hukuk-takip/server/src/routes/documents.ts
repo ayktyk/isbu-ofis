@@ -4,7 +4,7 @@ import fs from 'fs/promises'
 import multer from 'multer'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import { and, eq } from 'drizzle-orm'
+import { and, eq, isNull } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { cases, documents } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
@@ -127,7 +127,7 @@ async function getOwnedCase(userId: string, caseId: string) {
       title: cases.title,
     })
     .from(cases)
-    .where(and(eq(cases.id, caseId), eq(cases.userId, userId)))
+    .where(and(eq(cases.id, caseId), eq(cases.userId, userId), isNull(cases.archivedAt)))
     .limit(1)
 
   return caseRecord ?? null
@@ -251,7 +251,14 @@ router.get('/:id/download', async (req, res) => {
       })
       .from(documents)
       .innerJoin(cases, eq(documents.caseId, cases.id))
-      .where(and(eq(documents.id, documentId), eq(cases.userId, req.user!.userId)))
+      .where(
+        and(
+          eq(documents.id, documentId),
+          eq(cases.userId, req.user!.userId),
+          isNull(documents.archivedAt),
+          isNull(cases.archivedAt)
+        )
+      )
       .limit(1)
 
     if (!document) {
@@ -284,11 +291,17 @@ router.delete('/:id', async (req, res) => {
     const [document] = await db
       .select({
         id: documents.id,
-        fileUrl: documents.fileUrl,
       })
       .from(documents)
       .innerJoin(cases, eq(documents.caseId, cases.id))
-      .where(and(eq(documents.id, documentId), eq(cases.userId, req.user!.userId)))
+      .where(
+        and(
+          eq(documents.id, documentId),
+          eq(cases.userId, req.user!.userId),
+          isNull(documents.archivedAt),
+          isNull(cases.archivedAt)
+        )
+      )
       .limit(1)
 
     if (!document) {
@@ -296,18 +309,8 @@ router.delete('/:id', async (req, res) => {
       return
     }
 
-    if (isPathInside(LOCAL_DOCUMENTS_ROOT, document.fileUrl)) {
-      try {
-        await fs.unlink(document.fileUrl)
-      } catch (error: any) {
-        if (error?.code !== 'ENOENT') {
-          throw error
-        }
-      }
-    }
-
-    await db.delete(documents).where(eq(documents.id, documentId))
-    res.json({ message: 'Belge silindi.' })
+    await db.update(documents).set({ archivedAt: new Date() }).where(eq(documents.id, documentId))
+    res.json({ message: 'Belge arşivlendi.' })
   } catch (error) {
     console.error('[Documents][Delete]', error)
     res.status(500).json({ error: 'Belge silinemedi.' })

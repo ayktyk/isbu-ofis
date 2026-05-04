@@ -24,7 +24,13 @@ export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled'
 export type TaskPriority = 'low' | 'medium' | 'high' | 'urgent'
 export type HearingResult = 'pending' | 'completed' | 'postponed' | 'cancelled'
 export type ExpenseType = 'court_fee' | 'notary' | 'expert' | 'travel' | 'document' | 'other'
-export type NotificationType = 'hearing' | 'deadline' | 'task' | 'payment' | 'system'
+export type NotificationType =
+  | 'hearing'
+  | 'deadline'
+  | 'task'
+  | 'payment'
+  | 'system'
+  | 'legal_deadline_critical'
 
 export interface ApiResponse<T> {
   data: T
