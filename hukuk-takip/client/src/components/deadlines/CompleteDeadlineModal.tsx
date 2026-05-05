@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { CheckCircle2, Loader2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
@@ -12,7 +12,8 @@ export function CompleteDeadlineModal({
   onClose: () => void
 }) {
   const [evidence, setEvidence] = useState('')
-  const [viewportHeight, setViewportHeight] = useState<number | null>(null)
+  const [viewport, setViewport] = useState<{ height: number; offsetTop: number } | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const updateStatus = useUpdateTaskStatus()
 
   useEffect(() => {
@@ -27,15 +28,35 @@ export function CompleteDeadlineModal({
     const visualViewport = window.visualViewport
     if (!visualViewport) return
 
-    const syncViewportHeight = () => setViewportHeight(visualViewport.height)
-    syncViewportHeight()
-    visualViewport.addEventListener('resize', syncViewportHeight)
-    visualViewport.addEventListener('scroll', syncViewportHeight)
+    const keepActiveTextareaVisible = () => {
+      if (document.activeElement !== textareaRef.current) return
+      window.requestAnimationFrame(() => {
+        textareaRef.current?.scrollIntoView({ block: 'center', inline: 'nearest' })
+      })
+    }
+
+    const syncViewport = () => {
+      setViewport({
+        height: visualViewport.height,
+        offsetTop: visualViewport.offsetTop || 0,
+      })
+      keepActiveTextareaVisible()
+    }
+
+    syncViewport()
+    visualViewport.addEventListener('resize', syncViewport)
+    visualViewport.addEventListener('scroll', syncViewport)
     return () => {
-      visualViewport.removeEventListener('resize', syncViewportHeight)
-      visualViewport.removeEventListener('scroll', syncViewportHeight)
+      visualViewport.removeEventListener('resize', syncViewport)
+      visualViewport.removeEventListener('scroll', syncViewport)
     }
   }, [])
+
+  function keepTextareaVisible() {
+    window.requestAnimationFrame(() => {
+      textareaRef.current?.scrollIntoView({ block: 'center', inline: 'nearest' })
+    })
+  }
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault()
@@ -54,15 +75,18 @@ export function CompleteDeadlineModal({
   return (
     <div
       className="fixed inset-x-0 top-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
-      style={{ height: viewportHeight ? `${viewportHeight}px` : '100dvh' }}
+      style={{
+        height: viewport ? `${viewport.height}px` : '100dvh',
+        transform: viewport?.offsetTop ? `translateY(${viewport.offsetTop}px)` : undefined,
+      }}
     >
       <button className="absolute inset-0 cursor-default" onClick={onClose} aria-label="Kapat" />
-      <Card className="relative flex max-h-full w-full flex-col overflow-hidden rounded-none shadow-xl sm:max-h-[min(90dvh,640px)] sm:max-w-lg sm:rounded-xl">
+      <Card className="relative z-10 flex max-h-full w-full flex-col overflow-hidden rounded-none shadow-xl sm:max-h-[min(90dvh,640px)] sm:max-w-lg sm:rounded-xl">
         <CardContent className="flex min-h-0 flex-1 flex-col p-0">
           <div className="flex flex-shrink-0 items-center justify-between border-b bg-card px-4 pb-3 pt-4 sm:px-5">
-            <div>
+            <div className="min-w-0">
               <h2 className="text-lg font-semibold text-law-primary">Süreli İşi Tamamla</h2>
-              <p className="mt-0.5 text-xs text-muted-foreground">{task.title}</p>
+              <p className="mt-0.5 truncate text-xs text-muted-foreground">{task.title}</p>
             </div>
             <button
               onClick={onClose}
@@ -79,11 +103,16 @@ export function CompleteDeadlineModal({
                 Ne yapıldı? <span className="text-red-500">*</span>
               </label>
               <textarea
+                ref={textareaRef}
                 value={evidence}
-                onChange={(event) => setEvidence(event.target.value)}
+                onChange={(event) => {
+                  setEvidence(event.target.value)
+                  keepTextareaVisible()
+                }}
+                onFocus={keepTextareaVisible}
                 rows={5}
                 placeholder="Örn: İtiraz dilekçesi 02.05.2026 tarihinde UYAP üzerinden sunuldu. Tevzi no: ..."
-                className="min-h-[132px] w-full resize-y rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
+                className="min-h-[132px] w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent"
                 autoFocus
               />
               <p className="mt-1 text-xs text-muted-foreground">

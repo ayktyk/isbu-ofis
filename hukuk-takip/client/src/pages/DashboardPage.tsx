@@ -15,8 +15,6 @@ import {
 } from 'lucide-react'
 import { daysUntil, deadlineDaysClass, deadlineDaysLabel, deadlineSeverityLabels } from '@/lib/utils'
 import { useDashboard } from '@/hooks/useDashboard'
-import { useStatistics } from '@/hooks/useStatistics'
-import { useConsultationStats } from '@/hooks/useConsultations'
 import {
   caseStatusLabels,
   caseTypeLabels,
@@ -151,16 +149,6 @@ function DashboardSkeleton() {
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { data, isLoading, isError } = useDashboard()
-  const { data: stats } = useStatistics()
-  const { data: consultStats } = useConsultationStats()
-
-  const currentMonth = new Date().toISOString().slice(0, 7)
-  const thisMonthCases = stats?.monthlyCases?.find((m: any) => m.month === currentMonth)?.count ?? 0
-  const thisMonthMediations = stats?.monthlyMediations?.find((m: any) => m.month === currentMonth)?.count ?? 0
-  const thisMonthIncomeRow = stats?.monthlyIncome?.find((m: any) => m.month === currentMonth)
-  const thisMonthCaseIncome = thisMonthIncomeRow?.caseAmount ?? '0'
-  const thisMonthMediationIncome = thisMonthIncomeRow?.mediationAmount ?? '0'
-  const thisMonthCollections = thisMonthIncomeRow?.total ?? stats?.monthlyCollections?.find((m: any) => m.month === currentMonth)?.amount ?? '0'
 
   if (isLoading) {
     return (
@@ -193,8 +181,24 @@ export default function DashboardPage() {
     )
   }
 
-  const { cases, upcomingHearings, pendingTasks, recentCases, financials, outstandingFees, criticalDeadlines } = data
+  const {
+    cases,
+    upcomingHearings,
+    pendingTasks,
+    recentCases,
+    financials,
+    outstandingFees,
+    criticalDeadlines,
+    activity,
+    consultations,
+  } = data
   const criticalDeadlinesList: any[] = Array.isArray(criticalDeadlines) ? criticalDeadlines : []
+  const consultStats = consultations || {}
+  const thisMonthCases = activity?.thisMonthCases ?? 0
+  const thisMonthMediations = activity?.thisMonthMediations ?? 0
+  const thisMonthCaseIncome = financials?.thisMonthCaseIncome ?? '0'
+  const thisMonthMediationIncome = financials?.thisMonthMediationIncome ?? '0'
+  const thisMonthCollections = financials?.thisMonthTotalIncome ?? '0'
 
   return (
     <div className="space-y-6">

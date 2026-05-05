@@ -331,6 +331,8 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     status?: string
     completionEvidence?: string
   }
+  const trimmedCompletionEvidence =
+    typeof completionEvidence === 'string' ? completionEvidence.trim() : undefined
 
   // Süreli iş tamamlanırken kanıt notu zorunlu
   if (status === 'completed') {
@@ -340,8 +342,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
       .where(and(eq(tasks.id, taskId), eq(tasks.userId, req.user!.userId), isNull(tasks.archivedAt)))
       .limit(1)
     if (existing?.isDeadline) {
-      const trimmed = (completionEvidence || '').trim()
-      if (trimmed.length < 5) {
+      if (!trimmedCompletionEvidence || trimmedCompletionEvidence.length < 5) {
         res.status(400).json({
           error: 'Süreli iş tamamlanırken en az 5 karakterlik kanıt notu zorunludur.',
           field: 'completionEvidence',
@@ -359,7 +360,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
   const updateData: Record<string, unknown> = { status, updatedAt: new Date() }
   if (status === 'completed') updateData.completedAt = new Date()
   if (status && status !== 'completed') updateData.completedAt = null
-  if (completionEvidence !== undefined) updateData.completionEvidence = completionEvidence || null
+  if (completionEvidence !== undefined) updateData.completionEvidence = trimmedCompletionEvidence || null
 
   const [updated] = await db
     .update(tasks)

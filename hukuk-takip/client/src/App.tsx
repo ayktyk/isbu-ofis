@@ -228,7 +228,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     const runPrefetch = () => {
       queryClient.prefetchQuery({
         queryKey: ['dashboard'],
-        queryFn: async () => (await api.get('/dashboard')).data,
+        queryFn: async () => (await api.get('/dashboard/summary')).data,
       })
       queryClient.prefetchQuery({
         queryKey: ['notifications', { unread: true }],

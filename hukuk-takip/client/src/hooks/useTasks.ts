@@ -9,6 +9,110 @@ import {
 } from '@hukuk-takip/shared'
 import { api } from '@/lib/axios'
 
+function taskMatchesParams(task: any, params: any) {
+  if (!params) return true
+  if (params.status && task.status !== params.status) return false
+  if (params.priority && task.priority !== params.priority) return false
+  if (typeof params.isDeadline === 'boolean' && task.isDeadline !== params.isDeadline) return false
+  if (params.category && task.deadlineCategory !== params.category) return false
+  if (params.severity && task.deadlineSeverity !== params.severity) return false
+  return true
+}
+
+function patchTaskList(list: any[], updatedTask: any, params?: any) {
+  let changed = false
+  const next = list
+    .map((task) => {
+      if (task?.id !== updatedTask.id) return task
+      changed = true
+      return { ...task, ...updatedTask }
+    })
+    .filter((task) => task?.id !== updatedTask.id || taskMatchesParams(task, params))
+
+  return changed ? next : list
+}
+
+function patchTaskCacheValue(old: any, updatedTask: any, params?: any) {
+  if (!old) return old
+  if (Array.isArray(old)) return patchTaskList(old, updatedTask, params)
+  if (Array.isArray(old.data)) {
+    return { ...old, data: patchTaskList(old.data, updatedTask, params) }
+  }
+  if (old.id === updatedTask.id) return { ...old, ...updatedTask }
+  return old
+}
+
+function patchCriticalDeadlineCacheValue(old: any, updatedTask: any) {
+  const activeDeadline =
+    updatedTask.isDeadline === true &&
+    (updatedTask.status === 'pending' || updatedTask.status === 'in_progress')
+
+  const patchList = (list: any[]) => {
+    const hasTask = list.some((task) => task?.id === updatedTask.id)
+    if (!hasTask) return list
+    if (!activeDeadline) return list.filter((task) => task?.id !== updatedTask.id)
+    return list.map((task) => (task?.id === updatedTask.id ? { ...task, ...updatedTask } : task))
+  }
+
+  if (!old) return old
+  if (Array.isArray(old)) return patchList(old)
+  if (Array.isArray(old.data)) return { ...old, data: patchList(old.data) }
+  return old
+}
+
+function patchDashboardCacheValue(old: any, updatedTask: any) {
+  if (!old) return old
+
+  const activeDeadline =
+    updatedTask.isDeadline === true &&
+    (updatedTask.status === 'pending' || updatedTask.status === 'in_progress')
+  const patchCritical = (list: any[]) => {
+    const hasTask = list.some((task) => task?.id === updatedTask.id)
+    if (!hasTask) return list
+    if (!activeDeadline) return list.filter((task) => task?.id !== updatedTask.id)
+    return list.map((task) => (task?.id === updatedTask.id ? { ...task, ...updatedTask } : task))
+  }
+
+  const patchPendingTasks = (list: any[]) => {
+    const hasTask = list.some((task) => task?.id === updatedTask.id)
+    if (!hasTask) return list
+    if (updatedTask.status !== 'pending' || updatedTask.isDeadline === true) {
+      return list.filter((task) => task?.id !== updatedTask.id)
+    }
+    return list.map((task) => (task?.id === updatedTask.id ? { ...task, ...updatedTask } : task))
+  }
+
+  return {
+    ...old,
+    criticalDeadlines: Array.isArray(old.criticalDeadlines)
+      ? patchCritical(old.criticalDeadlines)
+      : old.criticalDeadlines,
+    pendingTasks: Array.isArray(old.pendingTasks)
+      ? patchPendingTasks(old.pendingTasks)
+      : old.pendingTasks,
+  }
+}
+
+function patchTaskCaches(queryClient: ReturnType<typeof useQueryClient>, updatedTask: any) {
+  queryClient.getQueriesData({ queryKey: ['tasks'] }).forEach(([queryKey, old]) => {
+    const params = Array.isArray(queryKey) ? queryKey[1] : undefined
+    queryClient.setQueryData(queryKey, patchTaskCacheValue(old, updatedTask, params))
+  })
+
+  queryClient.getQueriesData({ queryKey: ['deadlines'] }).forEach(([queryKey, old]) => {
+    queryClient.setQueryData(queryKey, patchCriticalDeadlineCacheValue(old, updatedTask))
+  })
+
+  queryClient.getQueriesData({ queryKey: ['dashboard'] }).forEach(([queryKey, old]) => {
+    queryClient.setQueryData(queryKey, patchDashboardCacheValue(old, updatedTask))
+  })
+
+  queryClient.setQueriesData({ queryKey: ['cases'] }, (old: any) => {
+    if (!old || !Array.isArray(old.tasks)) return old
+    return { ...old, tasks: patchTaskList(old.tasks, updatedTask) }
+  })
+}
+
 export function useTasks(params?: {
   status?: string
   priority?: string
@@ -89,6 +193,7 @@ export function useCreateTask() {
     mutationFn: (data: CreateTaskInput) => api.post('/tasks', data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['deadlines'] })
       queryClient.invalidateQueries({ queryKey: ['cases'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       toast.success('Görev oluşturuldu.')
@@ -105,8 +210,10 @@ export function useUpdateTask(id: string) {
 
   return useMutation({
     mutationFn: (data: UpdateTaskInput) => api.put(`/tasks/${id}`, data),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      patchTaskCaches(queryClient, response.data)
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['deadlines'] })
       queryClient.invalidateQueries({ queryKey: ['cases'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       toast.success('Görev güncellendi.')
@@ -131,10 +238,13 @@ export function useUpdateTaskStatus() {
       status: string
       completionEvidence?: string
     }) => api.patch(`/tasks/${id}/status`, { status, completionEvidence }),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      patchTaskCaches(queryClient, response.data)
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['deadlines'] })
       queryClient.invalidateQueries({ queryKey: ['cases'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['notifications'] })
       toast.success('Görev durumu güncellendi.')
     },
     onError: (error: any) => {
@@ -179,6 +289,7 @@ export function useDeleteTask() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['deadlines'] })
       queryClient.invalidateQueries({ queryKey: ['cases'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
     },

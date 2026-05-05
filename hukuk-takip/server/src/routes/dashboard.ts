@@ -312,6 +312,15 @@ router.get('/summary', async (req, res) => {
   const now = new Date()
   const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
   const currentMonthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+  const todayStart = new Date(now)
+  todayStart.setHours(0, 0, 0, 0)
+  const todayEnd = new Date(now)
+  todayEnd.setHours(23, 59, 59, 999)
+  const dayOfWeek = now.getDay() === 0 ? 6 : now.getDay() - 1
+  const weekStart = new Date(now)
+  weekStart.setDate(now.getDate() - dayOfWeek)
+  weekStart.setHours(0, 0, 0, 0)
 
   const [
     caseStats,
@@ -324,6 +333,9 @@ router.get('/summary', async (req, res) => {
     potentialConsultations,
     thisMonthIncome,
     consultationStats,
+    thisMonthCaseCount,
+    thisMonthMediationCount,
+    consultationDashboardStats,
     criticalDeadlines,
   ] = await Promise.all([
     db
@@ -483,6 +495,32 @@ router.get('/summary', async (req, res) => {
       .where(and(eq(consultations.userId, userId), isNull(consultations.archivedAt)))
       .groupBy(consultations.status),
 
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(cases)
+      .where(and(eq(cases.userId, userId), isNull(cases.archivedAt), gte(cases.createdAt, monthStart))),
+
+    db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(mediationFiles)
+      .where(
+        and(
+          eq(mediationFiles.userId, userId),
+          isNull(mediationFiles.archivedAt),
+          gte(mediationFiles.createdAt, monthStart)
+        )
+      ),
+
+    db
+      .select({
+        today: sql<number>`COUNT(*) FILTER (WHERE ${consultations.consultationDate} >= ${todayStart} AND ${consultations.consultationDate} <= ${todayEnd})::int`,
+        week: sql<number>`COUNT(*) FILTER (WHERE ${consultations.consultationDate} >= ${weekStart})::int`,
+        month: sql<number>`COUNT(*) FILTER (WHERE ${consultations.consultationDate} >= ${monthStart})::int`,
+        converted: sql<number>`COUNT(*) FILTER (WHERE ${consultations.status} = 'converted' AND ${consultations.consultationDate} >= ${monthStart})::int`,
+      })
+      .from(consultations)
+      .where(and(eq(consultations.userId, userId), isNull(consultations.archivedAt))),
+
     // Kritik süreli işler — önümüzdeki 7 gün
     loadCriticalDeadlines(userId, 7),
   ])
@@ -519,6 +557,16 @@ router.get('/summary', async (req, res) => {
   const thisMonth = thisMonthIncome[0] || { caseAmount: '0', mediationAmount: '0' }
   const thisMonthCase = parseFloat(thisMonth.caseAmount || '0')
   const thisMonthMediation = parseFloat(thisMonth.mediationAmount || '0')
+  const consultationDashboard = consultationDashboardStats[0] || {
+    today: 0,
+    week: 0,
+    month: 0,
+    converted: 0,
+  }
+  const consultationMonth = Number(consultationDashboard.month || 0)
+  const consultationConverted = Number(consultationDashboard.converted || 0)
+  const consultationConversionRate =
+    consultationMonth > 0 ? Math.round((consultationConverted / consultationMonth) * 100) : 0
 
   res.json({
     cases: caseCount,
@@ -536,10 +584,22 @@ router.get('/summary', async (req, res) => {
       thisMonthMediationIncome: thisMonthMediation.toFixed(2),
       thisMonthTotalIncome: (thisMonthCase + thisMonthMediation).toFixed(2),
     },
+    activity: {
+      thisMonthCases: thisMonthCaseCount[0]?.count ?? 0,
+      thisMonthMediations: thisMonthMediationCount[0]?.count ?? 0,
+    },
     outstandingFees,
     consultations: {
       potential: potentialConsultationCount,
       byStatus: consultationStats,
+      today: Number(consultationDashboard.today || 0),
+      week: Number(consultationDashboard.week || 0),
+      month: consultationMonth,
+      converted: consultationConverted,
+      conversionRate: consultationConversionRate,
+      weeklyGoal: 5,
+      monthlyGoal: 20,
+      dailyGoal: 1,
     },
     criticalDeadlines,
   })

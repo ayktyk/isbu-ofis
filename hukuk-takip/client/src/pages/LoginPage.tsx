@@ -42,7 +42,7 @@ export default function LoginPage() {
       // Dashboard verisini arka planda prefetch et — login sonrası anında açılsın
       queryClient.prefetchQuery({
         queryKey: ['dashboard'],
-        queryFn: async () => (await api.get('/dashboard')).data,
+        queryFn: async () => (await api.get('/dashboard/summary')).data,
       })
       navigate('/dashboard', { replace: true })
     },
