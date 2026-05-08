@@ -31,7 +31,7 @@ const navItems: Array<{
   icon: ElementType
   prefetch?: { queryKey: unknown[]; url: string }
 }> = [
-  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, prefetch: { queryKey: ['dashboard'], url: '/dashboard' } },
+  { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, prefetch: { queryKey: ['dashboard'], url: '/dashboard/summary' } },
   { to: '/clients', label: 'Müvekkiller', icon: Users, prefetch: { queryKey: ['clients', undefined], url: '/clients' } },
   { to: '/cases', label: 'Davalar', icon: Briefcase, prefetch: { queryKey: ['cases', undefined], url: '/cases' } },
   { to: '/tools/mediation-files', label: 'Arabuluculuk Dosyaları', icon: FolderOpen },

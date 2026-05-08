@@ -222,17 +222,21 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     }
   }, [isError, user, queryClient])
 
-  // Cache varsa dashboard'u ve kritik sayfalari arka planda prefetch et
+  // Cache varsa dashboard'u ve kritik sayfalari arka planda prefetch et.
+  // staleTime: useDashboard / useNotifications hook'larıyla aynı (5dk) — cache
+  // hâlâ tazeyse prefetch no-op olur, gereksiz network round-trip atlanır.
   useEffect(() => {
     if (!cachedUser) return
     const runPrefetch = () => {
       queryClient.prefetchQuery({
         queryKey: ['dashboard'],
         queryFn: async () => (await api.get('/dashboard/summary')).data,
+        staleTime: 1000 * 60 * 5,
       })
       queryClient.prefetchQuery({
         queryKey: ['notifications', { unread: true }],
         queryFn: async () => (await api.get('/notifications', { params: { unread: true } })).data,
+        staleTime: 1000 * 60 * 5,
       })
     }
     const requestIdle = (window as any).requestIdleCallback as

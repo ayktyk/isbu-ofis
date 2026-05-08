@@ -393,20 +393,35 @@ export async function runReminderScan(): Promise<ScanResult> {
       )
 
     for (const task of criticalRows) {
-      const existing = await db
-        .select({ id: notifications.id })
+      // Bu task'ın TÜM legal_deadline_critical satırlarını çek (her offset, dismiss
+      // dahil). İki kontrol:
+      //   - sameOffsetExists: bu offset için aktif/dismissed satır var mı?
+      //     (Var ise re-yaratma — duplicate önleme. Önceki davranış.)
+      //   - userDismissedAny: kullanıcı bu task için herhangi bir offset'i sildiyse
+      //     yeni offset'leri de yaratma. Önceki davranış 30→14→7→3→1→0 her offset'te
+      //     yeni satır yaratıyordu çünkü existence check relatedType'a kilitliydi —
+      //     bu da kullanıcının "tekrar çıkıyor" şikayetinin kaynağıydı.
+      // Tek round-trip; sınırı 20 (6 offset × 3 olası buffer).
+      const blockers = await db
+        .select({
+          id: notifications.id,
+          relatedType: notifications.relatedType,
+          dismissedAt: notifications.dismissedAt,
+        })
         .from(notifications)
         .where(
           and(
             eq(notifications.userId, task.userId),
             eq(notifications.type, 'legal_deadline_critical'),
-            eq(notifications.relatedId, task.id),
-            eq(notifications.relatedType, relatedType)
+            eq(notifications.relatedId, task.id)
           )
         )
-        .limit(1)
+        .limit(20)
 
-      if (existing.length > 0) {
+      const userDismissedAny = blockers.some((b) => b.dismissedAt !== null)
+      const sameOffsetExists = blockers.some((b) => b.relatedType === relatedType)
+
+      if (userDismissedAny || sameOffsetExists) {
         skipped++
         continue
       }

@@ -9,11 +9,12 @@ export function useNotifications(params?: { unread?: boolean }) {
       const res = await api.get('/notifications', { params })
       return res.data
     },
-    // 60 sn taze say — sayfa geçişlerinde gereksiz refetch yok.
-    // Polling 3 dk'da bir; mobil bataryayı yememesi ve Render Free spin-down
-    // tetiklememesi için 60sn'den çıkarıldı. Server cron her 15 dk yeni
-    // bildirim üretir; 3dk pencere kullanıcıya hızlıca yansıtmak için yeterli.
-    staleTime: 60_000,
+    // 5 dk taze say — sayfa geçişlerinde gereksiz refetch yok. Polling 3 dk'da bir
+    // arka planda yine taze veri çekiyor; mutation'lar (delete/markAsRead)
+    // invalidateQueries ile anında geçersiz kılıyor, yan etki yok. Önceki 60sn
+    // değer dashboard ↔ notifications hızlı tab geçişinde fazladan refetch
+    // tetikliyordu, kullanıcıya yavaşlık olarak yansıyordu.
+    staleTime: 1000 * 60 * 5,
     refetchInterval: 1000 * 60 * 3,
     refetchIntervalInBackground: false,
   })
