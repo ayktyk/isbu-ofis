@@ -130,10 +130,11 @@ export function useTasks(params?: {
       return res.data
     },
     placeholderData: keepPreviousData,
-    // Sayfa geçişlerinde anında render — cache 1 dk taze, 30 dk yedekte
+    // Sayfa geçişlerinde anında render — 1 dk taze sayılır, mount'ta sadece
+    // stale ise refetch (default refetchOnMount: true). Invalidation sonrası
+    // (görev tamamlama, yeni görev) bir sonraki mount'ta otomatik tazelenir.
     staleTime: 1000 * 60,
     gcTime: 1000 * 60 * 30,
-    refetchOnMount: false,
   })
 }
 
