@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { NavLink } from 'react-router-dom'
+import { NavLink, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Briefcase, Calendar, CheckSquare, LayoutDashboard, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -13,8 +13,21 @@ const items = [
   { to: '/clients', label: 'Müvekkil', icon: Users, queryKey: 'clients', api: '/clients' },
 ]
 
+// Aktif sekmeye tekrar basıldığında ana scroll konteynerini yumuşakça başa kaydır.
+// iOS/Android'in standart "tap active tab to scroll to top" davranışı.
+function scrollAppContainerToTop() {
+  const main = document.getElementById('app-scroll-main')
+  if (main) {
+    main.scrollTo({ top: 0, behavior: 'smooth' })
+  } else {
+    // Fallback: bazı eski tarayıcılarda ana scroll window olabilir.
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+}
+
 export default function MobileBottomNav() {
   const qc = useQueryClient()
+  const location = useLocation()
 
   const prefetch = useCallback((queryKey: string, url: string) => {
     qc.prefetchQuery({
@@ -27,6 +40,19 @@ export default function MobileBottomNav() {
     })
   }, [qc])
 
+  const handleClick = useCallback(
+    (event: React.MouseEvent<HTMLAnchorElement>, to: string) => {
+      // Zaten aktif sekmedeyiz → navigate yerine başa kaydır.
+      // Tam path eşleşmesi: /cases'de iken tıklarsan kaydırır,
+      // /cases/123 detay sayfasındaysan /cases listesine navigate olur (varsayılan).
+      if (location.pathname === to) {
+        event.preventDefault()
+        scrollAppContainerToTop()
+      }
+    },
+    [location.pathname]
+  )
+
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur-md md:hidden">
       <div className="flex items-center justify-around px-1">
@@ -35,6 +61,7 @@ export default function MobileBottomNav() {
             key={to}
             to={to}
             onTouchStart={() => prefetch(queryKey, apiUrl)}
+            onClick={(event) => handleClick(event, to)}
             className={({ isActive }) =>
               cn(
                 'relative flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[10px] font-medium transition-all active:scale-95',
