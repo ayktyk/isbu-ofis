@@ -38,6 +38,14 @@ async function safeQuery<T>(label: string, runner: () => Promise<T>, fallback: T
   }
 }
 
+// String numeric değeri güvenle float'a çevir. NaN/Infinity → 0. Aksi halde
+// dashboard "NaN" string'i göstermek zorunda kalıyor (frontend "-" çevirir
+// ama yanlış sıralama / yanlış toplam üretir).
+function safeNumeric(value: unknown): number {
+  const n = typeof value === 'number' ? value : parseFloat(String(value ?? ''))
+  return Number.isFinite(n) ? n : 0
+}
+
 // Owner'ın tahsilat toplamını tutar: hem dava bazlı (collections.user_id ya da case.user_id)
 // hem arabuluculuk bazlı (mediation.user_id) tahsilatları toplar.
 const userOwnedCollectionsClause = (userId: string) =>
@@ -282,18 +290,18 @@ router.get('/', async (req, res) => {
 
   // Bekleyen ücret toplamı (dava + arabuluculuk)
   const outstandingByCases = outstandingCases.reduce(
-    (sum, r) => sum + parseFloat(r.remaining || '0'),
+    (sum, r) => sum + safeNumeric(r.remaining),
     0
   )
   const outstandingByMediations = outstandingMediations.reduce(
-    (sum, r) => sum + parseFloat(r.remaining || '0'),
+    (sum, r) => sum + safeNumeric(r.remaining),
     0
   )
   const outstandingTotal = outstandingByCases + outstandingByMediations
 
   // Birleştirilmiş ve sıralanmış liste (en büyük bekleyen üstte)
   const outstandingFees = [...outstandingCases, ...outstandingMediations].sort(
-    (a, b) => parseFloat(b.remaining || '0') - parseFloat(a.remaining || '0')
+    (a, b) => safeNumeric(b.remaining) - safeNumeric(a.remaining)
   )
 
   res.json({
@@ -560,16 +568,16 @@ router.get('/summary', async (req, res) => {
   const potentialConsultationCount = potentialConsultations[0]?.count ?? 0
   caseCount.pending += potentialConsultationCount
 
-  const outstandingByCases = outstandingCases.reduce((sum, r) => sum + parseFloat(r.remaining || '0'), 0)
-  const outstandingByMediations = outstandingMediations.reduce((sum, r) => sum + parseFloat(r.remaining || '0'), 0)
+  const outstandingByCases = outstandingCases.reduce((sum, r) => sum + safeNumeric(r.remaining), 0)
+  const outstandingByMediations = outstandingMediations.reduce((sum, r) => sum + safeNumeric(r.remaining), 0)
   const outstandingTotal = outstandingByCases + outstandingByMediations
   const outstandingFees = [...outstandingCases, ...outstandingMediations].sort(
-    (a, b) => parseFloat(b.remaining || '0') - parseFloat(a.remaining || '0')
+    (a, b) => safeNumeric(b.remaining) - safeNumeric(a.remaining)
   )
 
   const thisMonth = thisMonthIncome[0] || { caseAmount: '0', mediationAmount: '0' }
-  const thisMonthCase = parseFloat(thisMonth.caseAmount || '0')
-  const thisMonthMediation = parseFloat(thisMonth.mediationAmount || '0')
+  const thisMonthCase = safeNumeric(thisMonth.caseAmount)
+  const thisMonthMediation = safeNumeric(thisMonth.mediationAmount)
   const consultationDashboard = consultationDashboardStats[0] || {
     today: 0,
     week: 0,

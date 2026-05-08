@@ -75,10 +75,24 @@ api.interceptors.response.use(
           { refreshToken },
           { withCredentials: true }
         )
-        if (refreshResponse.data?.accessToken || refreshResponse.data?.refreshToken) {
+        const newAccess =
+          typeof refreshResponse.data?.accessToken === 'string' && refreshResponse.data.accessToken.length > 0
+            ? refreshResponse.data.accessToken
+            : null
+        const newRefresh =
+          typeof refreshResponse.data?.refreshToken === 'string' && refreshResponse.data.refreshToken.length > 0
+            ? refreshResponse.data.refreshToken
+            : null
+        // Sunucu cookie tabanlı session kullanıyorsa response body boş olabilir;
+        // bu durumda mevcut token'larla devam eder. Ama "ne body ne cookie"
+        // senaryosunda sonsuz 401 döngüsüne girmemek için boş response'u hata say.
+        if (!newAccess && !newRefresh && !refreshResponse.headers?.['set-cookie']) {
+          throw new Error('Refresh response invalid: no tokens returned')
+        }
+        if (newAccess || newRefresh) {
           setAuthTokens({
-            accessToken: refreshResponse.data.accessToken,
-            refreshToken: refreshResponse.data.refreshToken,
+            accessToken: newAccess,
+            refreshToken: newRefresh,
           })
         }
         processQueue(null)

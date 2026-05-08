@@ -5,12 +5,27 @@ import { Briefcase, Calendar, CheckSquare, LayoutDashboard, Users } from 'lucide
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/axios'
 
-const items = [
-  { to: '/dashboard', label: 'Panel', icon: LayoutDashboard, queryKey: 'dashboard', api: '/dashboard' },
-  { to: '/cases', label: 'Davalar', icon: Briefcase, queryKey: 'cases', api: '/cases' },
-  { to: '/calendar', label: 'Takvim', icon: Calendar, queryKey: 'calendar', api: '/calendar' },
-  { to: '/tasks', label: 'Görevler', icon: CheckSquare, queryKey: 'tasks', api: '/tasks' },
-  { to: '/clients', label: 'Müvekkil', icon: Users, queryKey: 'clients', api: '/clients' },
+// Prefetch için kullanılan queryKey'ler ilgili hook'lardakilerle BIRE BIR aynı
+// olmalı, aksi halde cache hit olmaz ve sayfa yine boş yüklenir.
+//   useDashboard      → ['dashboard']
+//   useCases          → ['cases', undefined]  (params undefined default)
+//   useCalendar       → ['calendar', undefined]  (varsa) — biz query çağırmıyorsak prefetch yararsız, atlanır
+//   useTasks          → ['tasks', undefined]
+//   useClients        → ['clients', undefined]
+// Dashboard endpoint'i /dashboard/summary; diğerleri liste endpoint'leri.
+type NavItem = {
+  to: string
+  label: string
+  icon: typeof LayoutDashboard
+  prefetch?: { queryKey: unknown[]; url: string }
+}
+
+const items: NavItem[] = [
+  { to: '/dashboard', label: 'Panel', icon: LayoutDashboard, prefetch: { queryKey: ['dashboard'], url: '/dashboard/summary' } },
+  { to: '/cases', label: 'Davalar', icon: Briefcase, prefetch: { queryKey: ['cases', undefined], url: '/cases' } },
+  { to: '/calendar', label: 'Takvim', icon: Calendar }, // takvim sayfası tarihe göre fetch — liste prefetch'i anlamlı değil
+  { to: '/tasks', label: 'Görevler', icon: CheckSquare, prefetch: { queryKey: ['tasks', undefined], url: '/tasks' } },
+  { to: '/clients', label: 'Müvekkil', icon: Users, prefetch: { queryKey: ['clients', undefined], url: '/clients' } },
 ]
 
 // Aktif sekmeye tekrar basıldığında ana scroll konteynerini yumuşakça başa kaydır.
@@ -29,9 +44,9 @@ export default function MobileBottomNav() {
   const qc = useQueryClient()
   const location = useLocation()
 
-  const prefetch = useCallback((queryKey: string, url: string) => {
+  const prefetch = useCallback((queryKey: unknown[], url: string) => {
     qc.prefetchQuery({
-      queryKey: [queryKey, undefined] as unknown[],
+      queryKey,
       queryFn: async () => {
         const res = await api.get(url)
         return res.data
@@ -56,11 +71,13 @@ export default function MobileBottomNav() {
   return (
     <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-border bg-card/95 backdrop-blur-md md:hidden">
       <div className="flex items-center justify-around px-1">
-        {items.map(({ to, label, icon: Icon, queryKey, api: apiUrl }) => (
+        {items.map(({ to, label, icon: Icon, prefetch: prefetchInfo }) => (
           <NavLink
             key={to}
             to={to}
-            onTouchStart={() => prefetch(queryKey, apiUrl)}
+            onTouchStart={() => {
+              if (prefetchInfo) prefetch(prefetchInfo.queryKey, prefetchInfo.url)
+            }}
             onClick={(event) => handleClick(event, to)}
             className={({ isActive }) =>
               cn(

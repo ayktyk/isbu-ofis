@@ -62,7 +62,8 @@ export function formatCurrency(
 ): string {
   if (amount == null || amount === '') return '-'
   const num = typeof amount === 'string' ? Number.parseFloat(amount) : amount
-  if (Number.isNaN(num)) return '-'
+  // NaN VE Infinity koruması — backend "NaN" string dönerse bile temiz "-" gösterir
+  if (!Number.isFinite(num)) return '-'
 
   return new Intl.NumberFormat('tr-TR', {
     style: 'currency',

@@ -42,6 +42,17 @@ function normalizeCasePayload(payload: any) {
   }
 }
 
+// Query string'den gelen status/caseType doğrulaması — geçersiz değer Drizzle eq
+// üzerinden DB'ye gidip "invalid input value for enum" 500'üne yol açıyordu.
+// Bilinen enum değerleri ile sınırla; bilinmeyense filtre uygulanmaz.
+const VALID_CASE_STATUSES = new Set([
+  'active', 'passive', 'closed', 'won', 'lost', 'settled', 'istinafta', 'yargıtayda',
+])
+const VALID_CASE_TYPES = new Set([
+  'iscilik_alacagi', 'bosanma', 'velayet', 'mal_paylasimi', 'kira', 'tuketici',
+  'icra', 'ceza', 'idare', 'diger',
+])
+
 router.get('/', async (req, res) => {
   const search = getSingleValue(req.query.search)
   const status = getSingleValue(req.query.status)
@@ -91,11 +102,11 @@ router.get('/', async (req, res) => {
     )
   }
 
-  if (status) {
+  if (status && VALID_CASE_STATUSES.has(status)) {
     conditions.push(eq(cases.status, status as any))
   }
 
-  if (caseType) {
+  if (caseType && VALID_CASE_TYPES.has(caseType)) {
     conditions.push(eq(cases.caseType, caseType as any))
   }
 

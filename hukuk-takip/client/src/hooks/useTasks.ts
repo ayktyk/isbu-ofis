@@ -159,8 +159,13 @@ export function useCriticalDeadlines(withinDays = 7) {
 }
 
 function parseDateInput(value: string) {
-  const [year, month, day] = value.split('-').map((part) => Number.parseInt(part, 10))
-  return new Date(year, (month || 1) - 1, day || 1)
+  const [yearRaw, monthRaw, dayRaw] = value.split('-').map((part) => Number.parseInt(part, 10))
+  // Geçersiz parça → bugün döner (frontend tarihler input restricted, NaN olmamalı
+  // ama defensive). Aşağıdaki computeLegalDeadline NaN tarih ile hesap yapamaz.
+  const year = Number.isFinite(yearRaw) ? yearRaw : new Date().getFullYear()
+  const month = Number.isFinite(monthRaw) && monthRaw >= 1 && monthRaw <= 12 ? monthRaw : 1
+  const day = Number.isFinite(dayRaw) && dayRaw >= 1 && dayRaw <= 31 ? dayRaw : 1
+  return new Date(year, month - 1, day)
 }
 
 function formatDateOnly(date: Date) {

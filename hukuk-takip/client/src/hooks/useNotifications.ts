@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { api } from '@/lib/axios'
 
 export function useNotifications(params?: { unread?: boolean }) {
@@ -8,8 +9,12 @@ export function useNotifications(params?: { unread?: boolean }) {
       const res = await api.get('/notifications', { params })
       return res.data
     },
-    staleTime: 15000,
-    refetchInterval: 60000, // 60 saniyede bir yenile
+    // 60 sn taze say — sayfa geçişlerinde gereksiz refetch yok.
+    // Polling 3 dk'da bir; mobil bataryayı yememesi ve Render Free spin-down
+    // tetiklememesi için 60sn'den çıkarıldı. Server cron her 15 dk yeni
+    // bildirim üretir; 3dk pencere kullanıcıya hızlıca yansıtmak için yeterli.
+    staleTime: 60_000,
+    refetchInterval: 1000 * 60 * 3,
     refetchIntervalInBackground: false,
   })
 }
@@ -28,6 +33,10 @@ export function useMarkAsRead() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
     },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error || 'Bildirim güncellenemedi.'
+      toast.error(message)
+    },
   })
 }
 
@@ -38,6 +47,10 @@ export function useMarkAllAsRead() {
     mutationFn: () => api.patch('/notifications/read-all'),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
+    },
+    onError: (error: any) => {
+      const message = error?.response?.data?.error || 'Bildirimler güncellenemedi.'
+      toast.error(message)
     },
   })
 }

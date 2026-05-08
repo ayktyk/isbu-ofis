@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
+import rateLimit from 'express-rate-limit'
 import { eq } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { users } from '../db/schema.js'
@@ -9,6 +10,29 @@ import { authenticate, type JwtPayload } from '../middleware/auth.js'
 import { loginSchema } from '../../../shared/dist/index.js'
 
 const router = Router()
+
+// Brute-force koruma — login endpoint'i için sıkı IP başına limit.
+// Global limit (1500/15dk) login için çok gevşek; 10 dk içinde 8 başarısız
+// deneme sonrası 15 dk bekletme. Başarılı login skipFailedRequests=false ile
+// sayılır, ama gerçek senaryoda kullanıcı 1-2 denemede girer.
+const loginLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 8,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çok fazla başarısız giriş denemesi. Lütfen 10 dakika sonra tekrar deneyin.' },
+  // Başarılı giriş sayıma katılmasın → kullanıcı 1-2 yanlış denese de devam edebilir
+  skipSuccessfulRequests: true,
+})
+
+// Refresh endpoint'i de sıkı tutulur — token spam ile DoS olmasın
+const refreshLimiter = rateLimit({
+  windowMs: 5 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çok fazla istek. Lütfen kısa süre sonra tekrar deneyin.' },
+})
 
 const ACCESS_TOKEN_EXPIRES = (process.env.JWT_EXPIRES_IN || '2h') as jwt.SignOptions['expiresIn']
 const REFRESH_TOKEN_EXPIRES = (process.env.JWT_REFRESH_EXPIRES_IN || '7d') as jwt.SignOptions['expiresIn']
@@ -88,7 +112,7 @@ function getRefreshTokenFromRequest(req: import('express').Request) {
 
 // ─── POST /api/auth/login ─────────────────────────────────────────────────────
 
-router.post('/login', validate(loginSchema), async (req, res) => {
+router.post('/login', loginLimiter, validate(loginSchema), async (req, res) => {
   const { email, password } = req.body
 
   const [user] = await db
@@ -134,7 +158,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
 
 // ─── POST /api/auth/refresh ───────────────────────────────────────────────────
 
-router.post('/refresh', async (req, res) => {
+router.post('/refresh', refreshLimiter, async (req, res) => {
   const refreshToken = getRefreshTokenFromRequest(req)
 
   if (!refreshToken) {

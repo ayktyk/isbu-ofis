@@ -1224,6 +1224,12 @@ function FaizTab() {
       (a, b) => new Date(b.start).getTime() - new Date(a.start).getTime()
     )
 
+    // Konfigürasyon değişikliği veya filtre nedeniyle rates boş kalırsa hesap
+    // yapılamaz; kullanıcıya 0 göster, crash etme.
+    if (sortedRates.length === 0) {
+      return { detay, totalFaiz: 0 }
+    }
+
     while (cursor < end) {
       let oran = sortedRates[sortedRates.length - 1].oran
       for (const r of sortedRates) {

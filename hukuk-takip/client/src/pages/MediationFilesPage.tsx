@@ -641,11 +641,12 @@ function MediationFinancePanel({
   const [editingFee, setEditingFee] = useState(false)
   const [feeInput, setFeeInput] = useState(agreedFee || '')
 
-  const agreedFeeNum = parseFloat(agreedFee || '0')
-  const collected = (collections || []).reduce(
-    (sum, c) => sum + parseFloat(c.amount || '0'),
-    0
-  )
+  const parsedFee = parseFloat(agreedFee || '0')
+  const agreedFeeNum = Number.isFinite(parsedFee) ? parsedFee : 0
+  const collected = (collections || []).reduce((sum, c) => {
+    const n = parseFloat(c?.amount || '0')
+    return sum + (Number.isFinite(n) ? n : 0)
+  }, 0)
   const remaining = agreedFeeNum - collected
   const progress = agreedFeeNum > 0 ? Math.min(100, (collected / agreedFeeNum) * 100) : 0
 
