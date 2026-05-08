@@ -25,6 +25,19 @@ function triggerReminderScanInBackground() {
   }
 }
 
+// Dashboard, 14 paralel sorgu yürütüyor. Tek bir sorgunun çökmesi (geçici DB
+// hatası, network blip vb.) tüm response'u 500'e götürmesin diye allSettled
+// kullanıyoruz; başarısız blok için emniyetli default döner. Hiçbir veri silinmez,
+// sadece o sorgu o istek için boş set olarak görünür ve loglanır.
+async function safeQuery<T>(label: string, runner: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await runner()
+  } catch (err) {
+    console.error(`[Dashboard] ${label} sorgusu hata verdi, fallback kullanılıyor:`, err)
+    return fallback
+  }
+}
+
 // Owner'ın tahsilat toplamını tutar: hem dava bazlı (collections.user_id ya da case.user_id)
 // hem arabuluculuk bazlı (mediation.user_id) tahsilatları toplar.
 const userOwnedCollectionsClause = (userId: string) =>
@@ -338,13 +351,13 @@ router.get('/summary', async (req, res) => {
     consultationDashboardStats,
     criticalDeadlines,
   ] = await Promise.all([
-    db
+    safeQuery('caseStats', () => db
       .select({ status: cases.status, count: sql<number>`count(*)::int` })
       .from(cases)
       .where(and(eq(cases.userId, userId), isNull(cases.archivedAt)))
-      .groupBy(cases.status),
+      .groupBy(cases.status), [] as { status: string; count: number }[]),
 
-    db
+    safeQuery('upcomingHearings', () => db
       .select({
         caseId: cases.id,
         id: caseHearings.id,
@@ -369,9 +382,9 @@ router.get('/summary', async (req, res) => {
         )
       )
       .orderBy(caseHearings.hearingDate)
-      .limit(10),
+      .limit(10), [] as any[]),
 
-    db
+    safeQuery('pendingTasks', () => db
       .select({
         id: tasks.id,
         title: tasks.title,
@@ -390,9 +403,9 @@ router.get('/summary', async (req, res) => {
         )
       )
       .orderBy(tasks.dueDate)
-      .limit(10),
+      .limit(10), [] as any[]),
 
-    db
+    safeQuery('recentCases', () => db
       .select({
         id: cases.id,
         title: cases.title,
@@ -405,18 +418,18 @@ router.get('/summary', async (req, res) => {
       .leftJoin(clients, eq(cases.clientId, clients.id))
       .where(and(eq(cases.userId, userId), isNull(cases.archivedAt)))
       .orderBy(desc(cases.createdAt))
-      .limit(5),
+      .limit(5), [] as any[]),
 
-    db
+    safeQuery('totalCollections', () => db
       .select({
         total: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
         caseTotal: sql<string>`COALESCE(SUM(CASE WHEN ${collections.caseId} IS NOT NULL THEN ${collections.amount}::numeric ELSE 0 END), 0)::text`,
         mediationTotal: sql<string>`COALESCE(SUM(CASE WHEN ${collections.mediationFileId} IS NOT NULL THEN ${collections.amount}::numeric ELSE 0 END), 0)::text`,
       })
       .from(collections)
-      .where(userOwnedCollectionsClause(userId)),
+      .where(userOwnedCollectionsClause(userId)), [{ total: '0', caseTotal: '0', mediationTotal: '0' }]),
 
-    db
+    safeQuery('outstandingCases', () => db
       .select({
         id: cases.id,
         title: cases.title,
@@ -441,9 +454,9 @@ router.get('/summary', async (req, res) => {
       .groupBy(cases.id, cases.title, cases.contractedFee, clients.fullName)
       .having(sql`${cases.contractedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`)
       .orderBy(sql`${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`)
-      .limit(10),
+      .limit(10), [] as any[]),
 
-    db
+    safeQuery('outstandingMediations', () => db
       .select({
         id: mediationFiles.id,
         title: sql<string>`COALESCE(${mediationFiles.fileNo}, ${mediationFiles.disputeType})`,
@@ -467,15 +480,15 @@ router.get('/summary', async (req, res) => {
       .groupBy(mediationFiles.id, mediationFiles.fileNo, mediationFiles.disputeType, mediationFiles.agreedFee)
       .having(sql`${mediationFiles.agreedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`)
       .orderBy(sql`${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`)
-      .limit(10),
+      .limit(10), [] as any[]),
 
-    db
+    safeQuery('potentialConsultations', () => db
       .select({ count: sql<number>`count(*)::int` })
       .from(consultations)
-      .where(and(eq(consultations.userId, userId), eq(consultations.status, 'potential'), isNull(consultations.archivedAt))),
+      .where(and(eq(consultations.userId, userId), eq(consultations.status, 'potential'), isNull(consultations.archivedAt))), [{ count: 0 }]),
 
     // Bu ay gelir — dava + arabuluculuk kırılımı
-    db
+    safeQuery('thisMonthIncome', () => db
       .select({
         caseAmount: sql<string>`COALESCE(SUM(CASE WHEN ${collections.caseId} IS NOT NULL THEN ${collections.amount}::numeric ELSE 0 END), 0)::text`,
         mediationAmount: sql<string>`COALESCE(SUM(CASE WHEN ${collections.mediationFileId} IS NOT NULL THEN ${collections.amount}::numeric ELSE 0 END), 0)::text`,
@@ -486,21 +499,21 @@ router.get('/summary', async (req, res) => {
           userOwnedCollectionsClause(userId),
           sql`TO_CHAR(${collections.collectionDate}, 'YYYY-MM') = ${currentMonthKey}`
         )
-      ),
+      ), [{ caseAmount: '0', mediationAmount: '0' }]),
 
     // Görüşme stats (kısa)
-    db
+    safeQuery('consultationStats', () => db
       .select({ status: consultations.status, count: sql<number>`count(*)::int` })
       .from(consultations)
       .where(and(eq(consultations.userId, userId), isNull(consultations.archivedAt)))
-      .groupBy(consultations.status),
+      .groupBy(consultations.status), [] as { status: string; count: number }[]),
 
-    db
+    safeQuery('thisMonthCaseCount', () => db
       .select({ count: sql<number>`count(*)::int` })
       .from(cases)
-      .where(and(eq(cases.userId, userId), isNull(cases.archivedAt), gte(cases.createdAt, monthStart))),
+      .where(and(eq(cases.userId, userId), isNull(cases.archivedAt), gte(cases.createdAt, monthStart))), [{ count: 0 }]),
 
-    db
+    safeQuery('thisMonthMediationCount', () => db
       .select({ count: sql<number>`count(*)::int` })
       .from(mediationFiles)
       .where(
@@ -509,9 +522,9 @@ router.get('/summary', async (req, res) => {
           isNull(mediationFiles.archivedAt),
           gte(mediationFiles.createdAt, monthStart)
         )
-      ),
+      ), [{ count: 0 }]),
 
-    db
+    safeQuery('consultationDashboardStats', () => db
       .select({
         today: sql<number>`COUNT(*) FILTER (WHERE ${consultations.consultationDate} >= ${todayStart} AND ${consultations.consultationDate} <= ${todayEnd})::int`,
         week: sql<number>`COUNT(*) FILTER (WHERE ${consultations.consultationDate} >= ${weekStart})::int`,
@@ -519,10 +532,10 @@ router.get('/summary', async (req, res) => {
         converted: sql<number>`COUNT(*) FILTER (WHERE ${consultations.status} = 'converted' AND ${consultations.consultationDate} >= ${monthStart})::int`,
       })
       .from(consultations)
-      .where(and(eq(consultations.userId, userId), isNull(consultations.archivedAt))),
+      .where(and(eq(consultations.userId, userId), isNull(consultations.archivedAt))), [{ today: 0, week: 0, month: 0, converted: 0 }]),
 
     // Kritik süreli işler — önümüzdeki 7 gün
-    loadCriticalDeadlines(userId, 7),
+    safeQuery('criticalDeadlines', () => loadCriticalDeadlines(userId, 7), [] as any[]),
   ])
 
   const caseCount = {

@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express'
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm'
 import { db } from '../db/index.js'
-import { cases, tasks } from '../db/schema.js'
+import { cases, notifications, tasks } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import {
@@ -371,6 +371,28 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
   if (!updated) {
     res.status(404).json({ error: 'Görev bulunamadı.' })
     return
+  }
+
+  // Süreli iş tamamlandı/iptal edildi — bu task için üretilmiş eski "legal_deadline_critical"
+  // bildirimleri soft-delete et (dismissed_at). Veri silinmez, sadece kullanıcı arayüzünde
+  // gözükmez. Bell badge'i ve bildirimler sayfası "X gün kaldı" gibi eski uyarıları
+  // göstermesin diye gerekli.
+  if (updated.isDeadline && (status === 'completed' || status === 'cancelled')) {
+    try {
+      await db
+        .update(notifications)
+        .set({ dismissedAt: new Date(), isRead: true })
+        .where(
+          and(
+            eq(notifications.userId, req.user!.userId),
+            eq(notifications.type, 'legal_deadline_critical'),
+            eq(notifications.relatedId, updated.id),
+            isNull(notifications.dismissedAt)
+          )
+        )
+    } catch (error) {
+      console.error('[Notifications] Deadline tamamlandığında bildirim dismiss başarısız:', error)
+    }
   }
 
   try {

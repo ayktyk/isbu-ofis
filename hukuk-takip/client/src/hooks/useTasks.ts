@@ -130,6 +130,10 @@ export function useTasks(params?: {
       return res.data
     },
     placeholderData: keepPreviousData,
+    // Sayfa geçişlerinde anında render — cache 1 dk taze, 30 dk yedekte
+    staleTime: 1000 * 60,
+    gcTime: 1000 * 60 * 30,
+    refetchOnMount: false,
   })
 }
 
@@ -238,18 +242,60 @@ export function useUpdateTaskStatus() {
       status: string
       completionEvidence?: string
     }) => api.patch(`/tasks/${id}/status`, { status, completionEvidence }),
+    // Optimistic update — kullanıcı "Yapıldı" tıkladığı an task hem listelerden
+    // (aktif filtre ile) düşer hem de dashboard "kritik süreli işler" bandından
+    // kalkar. Server cevabı beklenmez. Hata olursa snapshot'tan geri yüklenir.
+    onMutate: async ({ id, status, completionEvidence }) => {
+      // Aktif refetch'leri iptal et ki optimistic değer üzerine yazmasın
+      await Promise.all([
+        queryClient.cancelQueries({ queryKey: ['tasks'] }),
+        queryClient.cancelQueries({ queryKey: ['deadlines'] }),
+        queryClient.cancelQueries({ queryKey: ['dashboard'] }),
+        queryClient.cancelQueries({ queryKey: ['cases'] }),
+      ])
+
+      const taskSnapshots = queryClient.getQueriesData({ queryKey: ['tasks'] })
+      const deadlineSnapshots = queryClient.getQueriesData({ queryKey: ['deadlines'] })
+      const dashboardSnapshots = queryClient.getQueriesData({ queryKey: ['dashboard'] })
+      const caseSnapshots = queryClient.getQueriesData({ queryKey: ['cases'] })
+
+      const optimisticPatch: Record<string, unknown> = {
+        id,
+        status,
+        completedAt: status === 'completed' ? new Date().toISOString() : null,
+      }
+      if (completionEvidence !== undefined) {
+        optimisticPatch.completionEvidence = completionEvidence
+      }
+
+      patchTaskCaches(queryClient, optimisticPatch)
+
+      return { taskSnapshots, deadlineSnapshots, dashboardSnapshots, caseSnapshots }
+    },
     onSuccess: (response) => {
+      // Server'ın gönderdiği gerçek değerleri yine cache'e yedir (completedAt timestamp,
+      // updatedAt vs server-generated alanlar). Optimistic patch ile aynı task ama
+      // tam değerlerle.
       patchTaskCaches(queryClient, response.data)
+      toast.success('Görev durumu güncellendi.')
+    },
+    onError: (error: any, _vars, ctx) => {
+      // Hata: optimistic değişiklikleri geri al
+      ctx?.taskSnapshots?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      ctx?.deadlineSnapshots?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      ctx?.dashboardSnapshots?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      ctx?.caseSnapshots?.forEach(([key, data]) => queryClient.setQueryData(key, data))
+      const message = error?.response?.data?.error || 'Görev durumu güncellenemedi.'
+      toast.error(message)
+    },
+    onSettled: () => {
+      // Server'la senkron kalmak için arka planda refetch — kullanıcı bekletilmez,
+      // çünkü optimistic patch zaten ekranı güncelledi.
       queryClient.invalidateQueries({ queryKey: ['tasks'] })
       queryClient.invalidateQueries({ queryKey: ['deadlines'] })
       queryClient.invalidateQueries({ queryKey: ['cases'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       queryClient.invalidateQueries({ queryKey: ['notifications'] })
-      toast.success('Görev durumu güncellendi.')
-    },
-    onError: (error: any) => {
-      const message = error?.response?.data?.error || 'Görev durumu güncellenemedi.'
-      toast.error(message)
     },
   })
 }
