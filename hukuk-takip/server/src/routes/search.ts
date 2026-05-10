@@ -9,6 +9,10 @@ import {
   mediationFiles,
   mediationParties,
   consultations,
+  notes,
+  expenses,
+  collections,
+  documents,
 } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
 import type { AnyColumn } from 'drizzle-orm'
@@ -61,6 +65,10 @@ router.get('/', async (req, res) => {
       hearings: [],
       mediations: [],
       consultations: [],
+      notes: [],
+      expenses: [],
+      collections: [],
+      documents: [],
     })
     return
   }
@@ -79,6 +87,10 @@ router.get('/', async (req, res) => {
     foundMediations,
     foundMediationsByParty,
     foundConsultations,
+    foundNotes,
+    foundExpenses,
+    foundCollections,
+    foundDocuments,
   ] = await Promise.all([
     // Clients
     db
@@ -257,6 +269,101 @@ router.get('/', async (req, res) => {
         )
       )
       .limit(15),
+
+    // Notes — bağımsız notlar (dava veya müvekkile bağlı olabilir)
+    db
+      .select({
+        id: notes.id,
+        content: notes.content,
+        caseId: notes.caseId,
+        clientId: notes.clientId,
+        createdAt: notes.createdAt,
+        caseTitle: cases.title,
+        clientName: clients.fullName,
+      })
+      .from(notes)
+      .leftJoin(cases, eq(notes.caseId, cases.id))
+      .leftJoin(clients, eq(notes.clientId, clients.id))
+      .where(
+        and(
+          eq(notes.userId, userId),
+          isNull(notes.archivedAt),
+          m(notes.content)
+        )
+      )
+      .orderBy(desc(notes.createdAt))
+      .limit(15),
+
+    // Expenses — masraflar (yalnızca açıklama metninde arar)
+    db
+      .select({
+        id: expenses.id,
+        description: expenses.description,
+        amount: expenses.amount,
+        caseId: expenses.caseId,
+        caseTitle: cases.title,
+        expenseDate: expenses.expenseDate,
+      })
+      .from(expenses)
+      .leftJoin(cases, eq(expenses.caseId, cases.id))
+      .where(
+        and(
+          eq(expenses.userId, userId),
+          isNull(expenses.archivedAt),
+          m(expenses.description)
+        )
+      )
+      .orderBy(desc(expenses.expenseDate))
+      .limit(15),
+
+    // Collections — tahsilatlar (açıklama + makbuz no)
+    db
+      .select({
+        id: collections.id,
+        description: collections.description,
+        amount: collections.amount,
+        caseId: collections.caseId,
+        mediationFileId: collections.mediationFileId,
+        caseTitle: cases.title,
+        clientName: clients.fullName,
+        collectionDate: collections.collectionDate,
+      })
+      .from(collections)
+      .leftJoin(cases, eq(collections.caseId, cases.id))
+      .leftJoin(clients, eq(collections.clientId, clients.id))
+      .where(
+        and(
+          eq(collections.userId, userId),
+          isNull(collections.archivedAt),
+          anyOf([m(collections.description), m(collections.receiptNo)])
+        )
+      )
+      .orderBy(desc(collections.collectionDate))
+      .limit(15),
+
+    // Documents — belge adı veya açıklamasında arar; cases JOIN ile sahip
+    // kontrolü (documents tablosunda userId yok, uploadedBy var ama
+    // başkasının yüklediği belge de aynı kullanıcının davasında olabilir)
+    db
+      .select({
+        id: documents.id,
+        fileName: documents.fileName,
+        description: documents.description,
+        caseId: documents.caseId,
+        caseTitle: cases.title,
+      })
+      .from(documents)
+      .innerJoin(cases, eq(documents.caseId, cases.id))
+      .where(
+        and(
+          eq(cases.userId, userId),
+          isNull(cases.archivedAt),
+          isNull(documents.archivedAt),
+          anyOf([m(documents.fileName), m(documents.description)])
+        )
+      )
+      .orderBy(desc(documents.createdAt))
+      .limit(15),
   ])
 
   // Merge mediations by id (deduplicate)
@@ -272,6 +379,10 @@ router.get('/', async (req, res) => {
     hearings: foundHearings,
     mediations: Array.from(mediationMap.values()).slice(0, 15),
     consultations: foundConsultations,
+    notes: foundNotes,
+    expenses: foundExpenses,
+    collections: foundCollections,
+    documents: foundDocuments,
   })
 })
 

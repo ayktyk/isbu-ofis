@@ -71,8 +71,14 @@ export default function CalendarPage() {
 
     tasks.forEach((t: any) => {
       if (!t.dueDate) return
+      // Tamamlanan veya iptal edilen görevler (süreli iş veya normal)
+      // takvimde gösterilmez. Silinen görevler zaten API'den `archivedAt`
+      // ile filtreleniyor; bu kontrol kullanıcı bir işi "Tamamla"
+      // dediğinde de takvimden anında düşmesini garanti eder.
+      if (t.status === 'completed' || t.status === 'cancelled') return
+
       // Süreli işler ayrı tip — kırmızı duvar render'ı için
-      if (t.isDeadline && t.status !== 'completed' && t.status !== 'cancelled') {
+      if (t.isDeadline) {
         const eventDate = new Date(t.dueDate)
         const left = daysUntil(t.dueDate)
         items.push({
@@ -102,6 +108,23 @@ export default function CalendarPage() {
     return items
   }, [hearings, tasks])
 
+  // Performans: hücre başına events.filter() yerine gün anahtarına göre
+  // önceden gruplandırılmış Map. Yoğun bir ayda 100+ etkinlik × 42 hücre =
+  // 4000+ isSameDay çağrısını O(1) lookup'a indirgiyor.
+  const eventsByDay = useMemo<Map<string, CalendarEvent[]>>(() => {
+    const map = new Map<string, CalendarEvent[]>()
+    for (const evt of events) {
+      const key = format(evt.date, 'yyyy-MM-dd')
+      const arr = map.get(key)
+      if (arr) {
+        arr.push(evt)
+      } else {
+        map.set(key, [evt])
+      }
+    }
+    return map
+  }, [events])
+
   // Takvim günlerini hesapla
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(currentMonth)
@@ -110,7 +133,7 @@ export default function CalendarPage() {
   const days = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
 
   function getEventsForDay(day: Date) {
-    return events.filter((e) => isSameDay(e.date, day))
+    return eventsByDay.get(format(day, 'yyyy-MM-dd')) ?? []
   }
 
   // Seçili gün

@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertOctagon,
@@ -6,6 +7,8 @@ import {
   CalendarClock,
   ChevronRight,
   Clock3,
+  Eye,
+  EyeOff,
   ListChecks,
   MessageSquare,
   PhoneCall,
@@ -64,14 +67,25 @@ function StatCard({
   )
 }
 
+// Tutar gizliyken her yerde aynı maskeyi kullanırız: tek satır gözle taranınca
+// rakam yokluğu net görünsün, ama kart yapısı bozulmasın diye sabit genişlik.
+const MONEY_MASK = '₺ ••••'
+
+function maskMoney(value: string | number | null | undefined, visible: boolean) {
+  if (!visible) return MONEY_MASK
+  return formatCurrency(value ?? 0)
+}
+
 function OutstandingStatCard({
   total,
   cases,
   mediations,
+  visible,
 }: {
   total: string
   cases: string
   mediations: string
+  visible: boolean
 }) {
   const totalNum = parseFloat(total || '0')
   const caseNum = parseFloat(cases || '0')
@@ -85,10 +99,10 @@ function OutstandingStatCard({
               Bekleyen Tahsilat
             </p>
             <p className="text-xl font-semibold tracking-tight text-foreground sm:text-3xl">
-              {formatCurrency(totalNum)}
+              {maskMoney(totalNum, visible)}
             </p>
             <p className="hidden text-[11px] text-muted-foreground sm:block">
-              Dava {formatCurrency(caseNum)} · Arabuluculuk {formatCurrency(medNum)}
+              Dava {maskMoney(caseNum, visible)} · Arabuluculuk {maskMoney(medNum, visible)}
             </p>
           </div>
           <div className="flex-shrink-0 rounded-xl bg-[hsl(var(--gold))]/15 p-2 sm:rounded-2xl sm:p-3">
@@ -146,16 +160,43 @@ function DashboardSkeleton() {
   )
 }
 
+// Tercih cihaz bazlı saklanır — birden fazla kullanıcı aynı bilgisayarı paylaşıyorsa
+// bile her kullanıcı kendi tarayıcısında ayrı tercihe sahip olur.
+const MONEY_VISIBLE_KEY = 'hz-dashboard-money-visible'
+
+function readMoneyVisible(): boolean {
+  try {
+    const v = localStorage.getItem(MONEY_VISIBLE_KEY)
+    if (v === 'false') return false
+    return true
+  } catch {
+    return true
+  }
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate()
   const { data, isLoading, isError } = useDashboard()
+  const [moneyVisible, setMoneyVisible] = useState<boolean>(() => readMoneyVisible())
+
+  const toggleMoneyVisible = useCallback(() => {
+    setMoneyVisible((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(MONEY_VISIBLE_KEY, String(next))
+      } catch {
+        // sessizce geç — quota / private mode
+      }
+      return next
+    })
+  }, [])
 
   if (isLoading) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="page-title">Gösterge Paneli</h1>
-          <p className="mt-1 text-sm text-muted-foreground">Büroluk genel görünümü hazırlanıyor</p>
+          <h1 className="page-title">Dîvan</h1>
+          <p className="mt-1 text-sm text-muted-foreground">Tehir-i hak, hakka cefadır. İş bugünündür.</p>
         </div>
         <DashboardSkeleton />
       </div>
@@ -166,7 +207,7 @@ export default function DashboardPage() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="page-title">Gösterge Paneli</h1>
+          <h1 className="page-title">Dîvan</h1>
           <p className="mt-1 text-sm text-muted-foreground">Veri cekilemedi</p>
         </div>
         <Card className="border-destructive/30 bg-destructive/10">
@@ -204,12 +245,27 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="page-title">Gösterge Paneli</h1>
+          <h1 className="page-title">Dîvan</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Dava, görev, duruşma ve tahsilat akışınıza tek ekrandan bakın.
+            Tehir-i hak, hakka cefadır. İş bugünündür.
           </p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={toggleMoneyVisible}
+            aria-pressed={!moneyVisible}
+            aria-label={moneyVisible ? 'Tutarları gizle' : 'Tutarları göster'}
+            title={moneyVisible ? 'Tutarları gizle' : 'Tutarları göster'}
+            className="inline-flex items-center gap-2 rounded-xl border bg-card px-3 py-2.5 text-sm font-medium transition hover:bg-muted/50"
+          >
+            {moneyVisible ? (
+              <EyeOff className="h-4 w-4 text-law-accent" />
+            ) : (
+              <Eye className="h-4 w-4 text-law-accent" />
+            )}
+            <span className="hidden sm:inline">{moneyVisible ? 'Tutarları gizle' : 'Tutarları göster'}</span>
+          </button>
           <button
             type="button"
             onClick={() => navigate('/cases/new')}
@@ -316,7 +372,7 @@ export default function DashboardPage() {
         />
         <StatCard
           title="Toplam Tahsilat"
-          value={formatCurrency(financials?.totalCollections)}
+          value={maskMoney(financials?.totalCollections, moneyVisible)}
           description="Dava + arabuluculuk tüm tahsilatlar"
           icon={Banknote}
         />
@@ -324,6 +380,7 @@ export default function DashboardPage() {
           total={financials?.outstandingTotal || '0'}
           cases={financials?.outstandingByCases || '0'}
           mediations={financials?.outstandingByMediations || '0'}
+          visible={moneyVisible}
         />
       </div>
 
@@ -346,12 +403,12 @@ export default function DashboardPage() {
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-medium text-muted-foreground">Bu Ay Tahsilat</p>
-                <p className="text-xl font-bold text-emerald-600">{formatCurrency(thisMonthCollections)}</p>
+                <p className="text-xl font-bold text-emerald-600">{maskMoney(thisMonthCollections, moneyVisible)}</p>
               </div>
             </div>
             <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
-              <span>Dava: <span className="font-medium text-foreground">{formatCurrency(thisMonthCaseIncome)}</span></span>
-              <span>Arabuluculuk: <span className="font-medium text-foreground">{formatCurrency(thisMonthMediationIncome)}</span></span>
+              <span>Dava: <span className="font-medium text-foreground">{maskMoney(thisMonthCaseIncome, moneyVisible)}</span></span>
+              <span>Arabuluculuk: <span className="font-medium text-foreground">{maskMoney(thisMonthMediationIncome, moneyVisible)}</span></span>
             </div>
           </CardContent>
         </Card>
@@ -645,7 +702,7 @@ export default function DashboardPage() {
                 <div className="text-right">
                   <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Toplam</p>
                   <p className="text-sm font-semibold text-amber-700">
-                    {formatCurrency(financials.outstandingTotal)}
+                    {maskMoney(financials.outstandingTotal, moneyVisible)}
                   </p>
                 </div>
               ) : null}
@@ -683,10 +740,10 @@ export default function DashboardPage() {
                       </div>
                       <div className="text-right">
                         <p className="text-sm font-semibold text-law-primary">
-                          {formatCurrency(fee.remaining)}
+                          {maskMoney(fee.remaining, moneyVisible)}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Toplam: {formatCurrency(fee.contractedFee)}
+                          Toplam: {maskMoney(fee.contractedFee, moneyVisible)}
                         </p>
                       </div>
                     </button>

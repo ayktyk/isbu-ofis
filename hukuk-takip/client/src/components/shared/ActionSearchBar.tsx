@@ -5,13 +5,17 @@ import {
   Calendar,
   CalendarClock,
   CheckSquare,
+  FileText,
   Handshake,
   LayoutDashboard,
   ListChecks,
   MessageSquare,
   Plus,
+  Receipt,
   Settings,
+  StickyNote,
   Users,
+  Wallet,
 } from 'lucide-react'
 import {
   CommandDialog,
@@ -32,9 +36,24 @@ interface SearchResults {
   hearings: { id: string; caseId: string; hearingDate: string; courtRoom?: string; caseTitle?: string }[]
   mediations: { id: string; fileNo?: string; disputeType: string; disputeSubject?: string; status: string }[]
   consultations: { id: string; fullName: string; phone?: string; subject?: string; status: string; consultationDate: string }[]
+  notes: { id: string; content: string; caseId?: string | null; clientId?: string | null; caseTitle?: string | null; clientName?: string | null }[]
+  expenses: { id: string; description: string; amount: string; caseId?: string | null; caseTitle?: string | null; expenseDate?: string }[]
+  collections: { id: string; description?: string | null; amount: string; caseId?: string | null; mediationFileId?: string | null; caseTitle?: string | null; clientName?: string | null; collectionDate?: string }[]
+  documents: { id: string; fileName: string; description?: string | null; caseId: string; caseTitle?: string | null }[]
 }
 
-const EMPTY: SearchResults = { clients: [], cases: [], tasks: [], hearings: [], mediations: [], consultations: [] }
+const EMPTY: SearchResults = {
+  clients: [],
+  cases: [],
+  tasks: [],
+  hearings: [],
+  mediations: [],
+  consultations: [],
+  notes: [],
+  expenses: [],
+  collections: [],
+  documents: [],
+}
 
 export default function ActionSearchBar() {
   const [open, setOpen] = useState(false)
@@ -92,12 +111,16 @@ export default function ActionSearchBar() {
     results.tasks.length > 0 ||
     results.hearings.length > 0 ||
     results.mediations.length > 0 ||
-    results.consultations.length > 0
+    results.consultations.length > 0 ||
+    results.notes.length > 0 ||
+    results.expenses.length > 0 ||
+    results.collections.length > 0 ||
+    results.documents.length > 0
 
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
       <CommandInput
-        placeholder="Müvekkil, dava, görev, duruşma, arabuluculuk ara..."
+        placeholder="Müvekkil, dava, görev, duruşma, not, masraf, tahsilat, belge ara..."
         value={query}
         onValueChange={setQuery}
       />
@@ -201,6 +224,97 @@ export default function ActionSearchBar() {
                   <span>{m.disputeType}</span>
                   {(m.fileNo || m.disputeSubject) && (
                     <span className="text-xs text-muted-foreground">{m.fileNo || m.disputeSubject}</span>
+                  )}
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* Notlar */}
+        {results.notes.length > 0 && (
+          <CommandGroup heading="Notlar">
+            {results.notes.map((n) => {
+              const target = n.caseId
+                ? `/cases/${n.caseId}`
+                : n.clientId
+                  ? `/clients/${n.clientId}`
+                  : '/dashboard'
+              const preview = (n.content || '').replace(/\s+/g, ' ').trim().slice(0, 80)
+              const context = n.caseTitle || n.clientName
+              return (
+                <CommandItem key={`note-${n.id}`} onSelect={() => runAction(target)}>
+                  <StickyNote className="mr-2 h-4 w-4 text-yellow-500" />
+                  <div className="flex flex-col min-w-0">
+                    <span className="truncate">{preview || 'Not'}</span>
+                    {context && (
+                      <span className="text-xs text-muted-foreground truncate">{context}</span>
+                    )}
+                  </div>
+                </CommandItem>
+              )
+            })}
+          </CommandGroup>
+        )}
+
+        {/* Masraflar */}
+        {results.expenses.length > 0 && (
+          <CommandGroup heading="Masraflar">
+            {results.expenses.map((e) => (
+              <CommandItem
+                key={`exp-${e.id}`}
+                onSelect={() => runAction(e.caseId ? `/cases/${e.caseId}` : '/dashboard')}
+              >
+                <Receipt className="mr-2 h-4 w-4 text-orange-500" />
+                <div className="flex flex-col min-w-0">
+                  <span className="truncate">{e.description}</span>
+                  <span className="text-xs text-muted-foreground truncate">
+                    {e.caseTitle || ''}{e.caseTitle && e.amount ? ' · ' : ''}
+                    {e.amount ? `${parseFloat(e.amount).toLocaleString('tr-TR')} ₺` : ''}
+                  </span>
+                </div>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {/* Tahsilatlar */}
+        {results.collections.length > 0 && (
+          <CommandGroup heading="Tahsilatlar">
+            {results.collections.map((c) => {
+              const target = c.caseId
+                ? `/cases/${c.caseId}`
+                : c.mediationFileId
+                  ? '/tools/mediation-files'
+                  : '/collections'
+              return (
+                <CommandItem key={`col-${c.id}`} onSelect={() => runAction(target)}>
+                  <Wallet className="mr-2 h-4 w-4 text-emerald-500" />
+                  <div className="flex flex-col min-w-0">
+                    <span className="truncate">{c.description || 'Tahsilat'}</span>
+                    <span className="text-xs text-muted-foreground truncate">
+                      {c.caseTitle || c.clientName || ''}{(c.caseTitle || c.clientName) && c.amount ? ' · ' : ''}
+                      {c.amount ? `${parseFloat(c.amount).toLocaleString('tr-TR')} ₺` : ''}
+                    </span>
+                  </div>
+                </CommandItem>
+              )
+            })}
+          </CommandGroup>
+        )}
+
+        {/* Belgeler */}
+        {results.documents.length > 0 && (
+          <CommandGroup heading="Belgeler">
+            {results.documents.map((d) => (
+              <CommandItem key={`doc-${d.id}`} onSelect={() => runAction(`/cases/${d.caseId}`)}>
+                <FileText className="mr-2 h-4 w-4 text-sky-500" />
+                <div className="flex flex-col min-w-0">
+                  <span className="truncate">{d.fileName}</span>
+                  {(d.caseTitle || d.description) && (
+                    <span className="text-xs text-muted-foreground truncate">
+                      {d.caseTitle || d.description}
+                    </span>
                   )}
                 </div>
               </CommandItem>

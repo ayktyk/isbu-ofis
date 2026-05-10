@@ -340,10 +340,14 @@ export function useDeleteTask() {
       toast.error('Görev silinemedi.')
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['tasks'] })
-      queryClient.invalidateQueries({ queryKey: ['deadlines'] })
-      queryClient.invalidateQueries({ queryKey: ['cases'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      // refetchType: 'all' — sadece aktif değil, INACTIVE (mounted ama görünür
+      // olmayan) query'leri de refetch eder. Görev silindiğinde takvim
+      // sekmesine geçildiğinde stale cache görünmesin diye gerekli.
+      queryClient.invalidateQueries({ queryKey: ['tasks'], refetchType: 'all' })
+      queryClient.invalidateQueries({ queryKey: ['deadlines'], refetchType: 'all' })
+      queryClient.invalidateQueries({ queryKey: ['cases'], refetchType: 'all' })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'all' })
+      queryClient.invalidateQueries({ queryKey: ['calendar'], refetchType: 'all' })
     },
     onSuccess: () => {
       toast.success('Görev silindi.')
