@@ -118,7 +118,12 @@ export default function ActionSearchBar() {
     results.documents.length > 0
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen}>
+    // shouldFilter={false}: arama tamamen sunucuda yapılıyor; cmdk'nın
+    // varsayılan client-side filter'ı (input ile fuzzy match) sunucu sonuçlarını
+    // ilk render'da gizliyordu — bu yüzden "ilk seferde sonuç yok, tekrar
+    // açınca dolu" görünümü oluşuyordu. Filter'ı kapatınca tüm sunucu sonuçları
+    // doğrudan render edilir.
+    <CommandDialog open={open} onOpenChange={setOpen} shouldFilter={false}>
       <CommandInput
         placeholder="Müvekkil, dava, görev, duruşma, not, masraf, tahsilat, belge ara..."
         value={query}

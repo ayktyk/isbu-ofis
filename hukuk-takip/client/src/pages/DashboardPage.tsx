@@ -10,11 +10,9 @@ import {
   Eye,
   EyeOff,
   ListChecks,
-  MessageSquare,
   PhoneCall,
   Scale,
   TrendingUp,
-  Users,
 } from 'lucide-react'
 import { daysUntil, deadlineDaysClass, deadlineDaysLabel, deadlineSeverityLabels } from '@/lib/utils'
 import { useDashboard } from '@/hooks/useDashboard'
@@ -265,30 +263,6 @@ export default function DashboardPage() {
               <Eye className="h-4 w-4 text-law-accent" />
             )}
             <span className="hidden sm:inline">{moneyVisible ? 'Tutarları gizle' : 'Tutarları göster'}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/cases/new')}
-            className="inline-flex items-center gap-2 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium transition hover:bg-muted/50"
-          >
-            <Scale className="h-4 w-4 text-law-accent" />
-            Yeni Dava
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/clients/new')}
-            className="inline-flex items-center gap-2 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium transition hover:bg-muted/50"
-          >
-            <Users className="h-4 w-4 text-law-accent" />
-            Yeni Müvekkil
-          </button>
-          <button
-            type="button"
-            onClick={() => navigate('/consultations')}
-            className="inline-flex items-center gap-2 rounded-xl border bg-card px-4 py-2.5 text-sm font-medium transition hover:bg-muted/50"
-          >
-            <MessageSquare className="h-4 w-4 text-law-accent" />
-            Yeni Görüşme
           </button>
         </div>
       </div>

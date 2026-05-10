@@ -388,21 +388,24 @@ export default function StatisticsPage() {
                   <Pie
                     data={typeData}
                     cx="50%"
-                    cy="50%"
+                    cy="45%"
                     innerRadius={50}
-                    outerRadius={90}
+                    outerRadius={85}
                     paddingAngle={3}
                     dataKey="value"
-                    label={({ name, percent }) =>
-                      `${name} (${(percent * 100).toFixed(0)}%)`
-                    }
-                    labelLine={false}
                   >
                     {typeData.map((_: any, i: number) => (
                       <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip
+                    formatter={(value: any, name: any) => [`${value} dosya`, name]}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
+                    iconType="circle"
+                    iconSize={8}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (
@@ -428,15 +431,11 @@ export default function StatisticsPage() {
                   <Pie
                     data={statusData}
                     cx="50%"
-                    cy="50%"
+                    cy="45%"
                     innerRadius={50}
-                    outerRadius={90}
+                    outerRadius={85}
                     paddingAngle={3}
                     dataKey="value"
-                    label={({ name, percent }) =>
-                      `${name} (${(percent * 100).toFixed(0)}%)`
-                    }
-                    labelLine={false}
                   >
                     {statusData.map((s: any, i: number) => (
                       <Cell
@@ -445,7 +444,14 @@ export default function StatisticsPage() {
                       />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip
+                    formatter={(value: any, name: any) => [`${value} dosya`, name]}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
+                    iconType="circle"
+                    iconSize={8}
+                  />
                 </PieChart>
               </ResponsiveContainer>
             ) : (

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, Suspense } from 'react'
+import { useState, useCallback, useEffect, useRef, Suspense } from 'react'
 import { Outlet } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import Sidebar from './Sidebar'
@@ -89,14 +89,96 @@ function useBackendKeepWarm() {
   }, [])
 }
 
+// Mobil drawer için soldan-sağa kenar swipe — Android/iOS native pattern.
+// Sidebar kapalıyken ekranın sol kenarında (ilk 24px) parmak basılır,
+// sağa doğru en az 60px kayarsa sidebar açılır. Açıkken sağdan sola
+// kayma kapatır. Yatay hareket dikeyden belirgin daha fazla olmalı —
+// scroll'a karışmasın.
+function useSidebarSwipe(open: boolean, onOpen: () => void, onClose: () => void) {
+  const startX = useRef<number | null>(null)
+  const startY = useRef<number | null>(null)
+  const moved = useRef(false)
+
+  useEffect(() => {
+    const EDGE_THRESHOLD = 24
+    const OPEN_THRESHOLD = 60
+    const CLOSE_THRESHOLD = 60
+    const MAX_VERTICAL_DRIFT = 50
+
+    const onTouchStart = (e: TouchEvent) => {
+      const t = e.touches[0]
+      if (!t) return
+      moved.current = false
+      // Sidebar açıkken her yerden swipe close kabul et
+      if (open) {
+        startX.current = t.clientX
+        startY.current = t.clientY
+        return
+      }
+      // Sidebar kapalıyken sadece sol kenardan başlayan swipe sayılır
+      if (t.clientX <= EDGE_THRESHOLD) {
+        startX.current = t.clientX
+        startY.current = t.clientY
+      } else {
+        startX.current = null
+        startY.current = null
+      }
+    }
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (startX.current === null || startY.current === null) return
+      const t = e.touches[0]
+      if (!t) return
+      const dx = t.clientX - startX.current
+      const dy = Math.abs(t.clientY - startY.current)
+      // Dikey hareket baskın → kullanıcı scroll'luyor, swipe iptal
+      if (dy > MAX_VERTICAL_DRIFT && Math.abs(dx) < dy) {
+        startX.current = null
+        startY.current = null
+        return
+      }
+      if (!open && dx >= OPEN_THRESHOLD) {
+        moved.current = true
+        onOpen()
+        startX.current = null
+        startY.current = null
+      } else if (open && dx <= -CLOSE_THRESHOLD) {
+        moved.current = true
+        onClose()
+        startX.current = null
+        startY.current = null
+      }
+    }
+
+    const onTouchEnd = () => {
+      startX.current = null
+      startY.current = null
+      moved.current = false
+    }
+
+    document.addEventListener('touchstart', onTouchStart, { passive: true })
+    document.addEventListener('touchmove', onTouchMove, { passive: true })
+    document.addEventListener('touchend', onTouchEnd, { passive: true })
+    document.addEventListener('touchcancel', onTouchEnd, { passive: true })
+    return () => {
+      document.removeEventListener('touchstart', onTouchStart)
+      document.removeEventListener('touchmove', onTouchMove)
+      document.removeEventListener('touchend', onTouchEnd)
+      document.removeEventListener('touchcancel', onTouchEnd)
+    }
+  }, [open, onOpen, onClose])
+}
+
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), [])
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
+  const openSidebar = useCallback(() => setSidebarOpen(true), [])
 
   usePrefetchCoreData()
   useBackendKeepWarm()
+  useSidebarSwipe(sidebarOpen, openSidebar, closeSidebar)
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, ChevronLeft, ChevronRight, Edit, Eye, Plus, Scale, Search, Trash2, X } from 'lucide-react'
+import { AlertTriangle, ChevronLeft, ChevronRight, Edit, Eye, PhoneCall, Plus, Scale, Search, Trash2, X } from 'lucide-react'
 import { useCases, useDeleteCase } from '@/hooks/useCases'
+import { useConsultations } from '@/hooks/useConsultations'
 import { caseStatusLabels, caseTypeLabels, formatDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -87,10 +88,25 @@ export default function CasesPage() {
     pageSize,
   })
 
+  // "Potansiyel Davalar" sekmesinde, henüz dosya açılmamış potansiyel
+  // görüşmeler de listenin üstüne eklenir. Diğer sekmelerde sorgu fetch
+  // edilmez (enabled false ile çağrılma maliyeti yok).
+  const showPotentialConsultations = statusGroup === 'pending' && !debouncedSearch && !status && !caseType
+  const { data: potentialConsultations } = useConsultations(
+    showPotentialConsultations ? { status: 'potential' } : undefined
+  )
+  const allConsultationRows = showPotentialConsultations && Array.isArray(potentialConsultations)
+    ? potentialConsultations
+    : []
+  // Pagination cases üzerinden ilerlerken görüşmeler her sayfada tekrar
+  // edilmesin — yalnızca ilk sayfada üstte göster.
+  const consultationRows = page === 1 ? allConsultationRows : []
+
   const cases = data?.data || []
-  const total = data?.total || 0
-  const totalPages = Math.ceil(total / pageSize)
+  const total = (data?.total || 0) + allConsultationRows.length
+  const totalPages = Math.max(1, Math.ceil((data?.total || 0) / pageSize))
   const hasFilters = Boolean(debouncedSearch || statusGroup || status || caseType)
+  const hasAnyRow = cases.length > 0 || consultationRows.length > 0
 
   return (
     <div className="space-y-6">
@@ -217,7 +233,7 @@ export default function CasesPage() {
 
       {!isLoading && !isError && (
         <>
-          {cases.length === 0 ? (
+          {!hasAnyRow ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16 text-center">
                 <Scale className="mb-3 h-12 w-12 text-muted-foreground/30" />
@@ -258,6 +274,56 @@ export default function CasesPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
+                      {/* Potansiyel görüşmeler — sadece "Potansiyel Davalar" sekmesinde
+                          ve filtre yokken üstte gösterilir. Tıklanınca Görüşmeler
+                          sayfasına yönlendirir; cases gibi düzenle/sil eylemi yok. */}
+                      {consultationRows.map((cons: any) => (
+                        <tr
+                          key={`cons-${cons.id}`}
+                          onClick={() => navigate('/consultations')}
+                          className="cursor-pointer bg-amber-50/40 transition hover:bg-amber-100/60"
+                        >
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <PhoneCall className="h-3.5 w-3.5 flex-shrink-0 text-amber-600" />
+                              <p className="font-medium">{cons.fullName}</p>
+                            </div>
+                            {cons.subject && (
+                              <p className="ml-5 text-xs text-muted-foreground truncate">{cons.subject}</p>
+                            )}
+                          </td>
+                          <td className="hidden px-4 py-3 sm:table-cell text-muted-foreground">
+                            {cons.phone || '-'}
+                          </td>
+                          <td className="hidden px-4 py-3 md:table-cell text-muted-foreground">
+                            Görüşme
+                          </td>
+                          <td className="px-4 py-3">
+                            <Badge variant="warning">GÖRÜŞME</Badge>
+                          </td>
+                          <td className="hidden px-4 py-3 lg:table-cell text-muted-foreground">
+                            -
+                          </td>
+                          <td className="hidden px-4 py-3 lg:table-cell text-muted-foreground">
+                            {cons.consultationDate ? formatDate(cons.consultationDate) : '-'}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                onClick={(event) => {
+                                  event.stopPropagation()
+                                  navigate('/consultations')
+                                }}
+                                className="rounded p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                                title="Görüşmeyi Aç"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
                       {cases.map((item: any) => (
                         <tr
                           key={item.id}

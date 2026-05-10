@@ -58,15 +58,18 @@ const CASE_TYPE_LABELS: Record<string, string> = {
   diger: 'Diğer',
 }
 
+// Client tarafındaki caseStatusLabels (lib/utils.ts) ile birebir aynı —
+// "passive" istemcide "Potansiyel" anlamında kullanılıyor (pasif dosyalar +
+// potansiyel görüşmeler). İki ucun ayrı çevirisi tutarsızlık yaratıyordu.
 const STATUS_LABELS: Record<string, string> = {
   active: 'Aktif',
   istinafta: 'İstinafta',
   'yargıtayda': 'Yargıtayda',
-  passive: 'Pasif',
+  passive: 'Potansiyel',
   won: 'Kazanıldı',
   lost: 'Kaybedildi',
-  settled: 'Uzlaşma',
-  closed: 'Kapandı',
+  settled: 'Uzlaşıldı',
+  closed: 'Kapatıldı',
 }
 
 router.get('/', async (req, res) => {
@@ -81,6 +84,8 @@ router.get('/', async (req, res) => {
     casesByStatus,
     expectedFromCases,
     expectedFromMediations,
+    allTimeCaseIncomeRaw,
+    allTimeMediationIncomeRaw,
   ] = await Promise.all([
     // monthlyCases
     db
@@ -208,6 +213,30 @@ router.get('/', async (req, res) => {
         sql`(${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0)) DESC`
       )
       .limit(20),
+
+    // ALL-TIME tahsilat toplamları — eski sürüm sadece son 12 ay'dan toplam
+    // çıkarıyordu, dolayısıyla 1 yıl önceki tahsilat "Toplam Tahsilat"a
+    // yansımıyordu. Bunu ayrı sorgu olarak alıp tüm zamanın doğru toplamını
+    // gösteriyoruz.
+    db
+      .select({
+        amount: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
+      })
+      .from(collections)
+      .innerJoin(cases, eq(collections.caseId, cases.id))
+      .where(
+        sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${collections.archivedAt} IS NULL AND ${collections.caseId} IS NOT NULL`
+      ),
+
+    db
+      .select({
+        amount: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
+      })
+      .from(collections)
+      .innerJoin(mediationFiles, eq(collections.mediationFileId, mediationFiles.id))
+      .where(
+        sql`${mediationFiles.userId} = ${userId} AND ${mediationFiles.archivedAt} IS NULL AND ${collections.archivedAt} IS NULL AND ${collections.mediationFileId} IS NOT NULL`
+      ),
   ])
 
   // Fill empty months and add labels
@@ -254,11 +283,11 @@ router.get('/', async (req, res) => {
     label: STATUS_LABELS[r.status] || r.status,
   }))
 
-  // Totals
+  // Totals — all-time (12 ay grafiği aynı kalıyor; özet kartlar tüm zaman)
   const totalCases = casesByStatus.reduce((sum, r) => sum + r.count, 0)
   const totalMediations = monthlyMediationsRaw.reduce((sum, r) => sum + r.count, 0)
-  const totalCaseIncome = monthlyIncome.reduce((s, r) => s + parseFloat(r.caseAmount), 0)
-  const totalMediationIncome = monthlyIncome.reduce((s, r) => s + parseFloat(r.mediationAmount), 0)
+  const totalCaseIncome = parseFloat(allTimeCaseIncomeRaw[0]?.amount || '0')
+  const totalMediationIncome = parseFloat(allTimeMediationIncomeRaw[0]?.amount || '0')
   const totalCollected = totalCaseIncome + totalMediationIncome
 
   // totalExpected: düzgün hesap — tüm bekleyen kalemlerin toplamı
