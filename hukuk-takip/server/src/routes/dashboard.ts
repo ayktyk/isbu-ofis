@@ -12,6 +12,11 @@ import {
 } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
 import { ensureRecentReminderScan } from '../services/notificationScheduler.js'
+import {
+  getOutstandingCaseFees,
+  getOutstandingMediationFees,
+  sumOutstanding,
+} from '../utils/outstandingFees.js'
 
 const router = Router()
 router.use(authenticate)
@@ -108,6 +113,8 @@ router.get('/', async (req, res) => {
     totalCollections,
     outstandingCases,
     outstandingMediations,
+    outstandingCasesAll,
+    outstandingMediationsAll,
     potentialConsultations,
     criticalDeadlines,
   ] = await Promise.all([
@@ -193,78 +200,21 @@ router.get('/', async (req, res) => {
       .from(collections)
       .where(userOwnedCollectionsClause(userId)),
 
-    // Bekleyen ücret — davalar
-    // Sıralama: önce en yeni eklenen, sonra en çok kalan. Avukatın az önce
-    // eklediği bir dava (örn. 10.000 TL ceza davası) widget'ın listesinde
-    // büyük tutarlı eski davaların ardına düşmesin diye createdAt DESC öncelikli.
-    db
-      .select({
-        id: cases.id,
-        title: cases.title,
-        clientName: clients.fullName,
-        contractedFee: cases.contractedFee,
-        totalCollected: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
-        remaining: sql<string>`(${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0))::text`,
-        source: sql<string>`'case'`,
-        createdAt: cases.createdAt,
-      })
-      .from(cases)
-      .leftJoin(clients, eq(cases.clientId, clients.id))
-      .leftJoin(collections, and(eq(collections.caseId, cases.id), isNull(collections.archivedAt)))
-      .where(
-        and(
-          eq(cases.userId, userId),
-          isNull(cases.archivedAt),
-          sql`${cases.contractedFee} IS NOT NULL`,
-          sql`${cases.contractedFee}::numeric > 0`,
-          // passive da dahil: avukat henüz başlanmamış ama ücret konuşulmuş
-          // davalardan da tahsilat bekliyor olabilir.
-          or(
-            eq(cases.status, 'active'),
-            eq(cases.status, 'istinafta'),
-            eq(cases.status, 'yargıtayda'),
-            eq(cases.status, 'passive'),
-          )
-        )
-      )
-      .groupBy(cases.id, cases.title, cases.contractedFee, clients.fullName, cases.createdAt)
-      .having(sql`${cases.contractedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`)
-      .orderBy(
-        desc(cases.createdAt),
-        sql`${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`,
-      )
-      .limit(20),
+    // Bekleyen ücret — davalar (CMK dahil; ayrım frontend tarafında rozet ile yapılır).
+    // Tek kaynak: utils/outstandingFees.getOutstandingCaseFees — istatistik sayfası
+    // ile aynı filtre/order kullanır.
+    // Widget listesi LIMIT 20 ile sınırlı; ancak header'daki "Toplam" rakamı
+    // statistics ile birebir tutsun diye AYRI bir limit'siz sorgu ile hesaplanır
+    // (outstandingCasesAll). Aksi halde 20+ bekleyen davası olan kullanıcıda
+    // dashboard widget toplamı statistics'ten düşük çıkıyordu.
+    getOutstandingCaseFees(userId, { limit: 20 }),
 
-    // Bekleyen ücret — arabuluculuklar
-    db
-      .select({
-        id: mediationFiles.id,
-        title: sql<string>`COALESCE(${mediationFiles.fileNo}, ${mediationFiles.disputeType})`,
-        clientName: sql<string>`${mediationFiles.disputeType}`,
-        contractedFee: mediationFiles.agreedFee,
-        totalCollected: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
-        remaining: sql<string>`(${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0))::text`,
-        source: sql<string>`'mediation'`,
-        createdAt: mediationFiles.createdAt,
-      })
-      .from(mediationFiles)
-      .leftJoin(collections, and(eq(collections.mediationFileId, mediationFiles.id), isNull(collections.archivedAt)))
-      .where(
-        and(
-          eq(mediationFiles.userId, userId),
-          isNull(mediationFiles.archivedAt),
-          sql`${mediationFiles.agreedFee} IS NOT NULL`,
-          sql`${mediationFiles.agreedFee}::numeric > 0`,
-          eq(mediationFiles.status, 'active')
-        )
-      )
-      .groupBy(mediationFiles.id, mediationFiles.fileNo, mediationFiles.disputeType, mediationFiles.agreedFee, mediationFiles.createdAt)
-      .having(sql`${mediationFiles.agreedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`)
-      .orderBy(
-        desc(mediationFiles.createdAt),
-        sql`${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`,
-      )
-      .limit(20),
+    // Bekleyen ücret — arabuluculuklar (aynı helper)
+    getOutstandingMediationFees(userId, { limit: 20 }),
+
+    // Toplam hesabı için limit'siz aynı helper sorguları
+    getOutstandingCaseFees(userId),
+    getOutstandingMediationFees(userId),
 
     db
       .select({ count: sql<number>`count(*)::int` })
@@ -306,21 +256,15 @@ router.get('/', async (req, res) => {
   const potentialConsultationCount = potentialConsultations[0]?.count ?? 0
   caseCount.pending += potentialConsultationCount
 
-  // Bekleyen ücret toplamı (dava + arabuluculuk)
-  const outstandingByCases = outstandingCases.reduce(
-    (sum, r) => sum + safeNumeric(r.remaining),
-    0
-  )
-  const outstandingByMediations = outstandingMediations.reduce(
-    (sum, r) => sum + safeNumeric(r.remaining),
-    0
-  )
+  // Bekleyen ücret TOPLAMI: limit'siz sorgudan (outstandingCasesAll/Mediations)
+  // hesaplanır ki Statistics sayfasındaki BigStat ile birebir tutsun.
+  // Liste (outstandingCases/Mediations) ise LIMIT 20 — sadece görünür ilk satırlar.
+  const outstandingByCases = sumOutstanding(outstandingCasesAll)
+  const outstandingByMediations = sumOutstanding(outstandingMediationsAll)
   const outstandingTotal = outstandingByCases + outstandingByMediations
 
-  // Birleştirilmiş ve sıralanmış liste (en büyük bekleyen üstte)
-  const outstandingFees = [...outstandingCases, ...outstandingMediations].sort(
-    (a, b) => safeNumeric(b.remaining) - safeNumeric(a.remaining)
-  )
+  // Birleştirilmiş ve sıralanmış liste (en yeni eklenen üstte, sonra büyük bekleyen)
+  const outstandingFees = [...outstandingCases, ...outstandingMediations]
 
   res.json({
     cases: caseCount,
@@ -369,6 +313,8 @@ router.get('/summary', async (req, res) => {
     totalCollections,
     outstandingCases,
     outstandingMediations,
+    outstandingCasesAll,
+    outstandingMediationsAll,
     potentialConsultations,
     thisMonthIncome,
     consultationStats,
@@ -455,58 +401,33 @@ router.get('/summary', async (req, res) => {
       .from(collections)
       .where(userOwnedCollectionsClause(userId)), [{ total: '0', caseTotal: '0', mediationTotal: '0' }]),
 
-    safeQuery('outstandingCases', () => db
-      .select({
-        id: cases.id,
-        title: cases.title,
-        clientName: clients.fullName,
-        contractedFee: cases.contractedFee,
-        totalCollected: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
-        remaining: sql<string>`(${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0))::text`,
-        source: sql<string>`'case'`,
-      })
-      .from(cases)
-      .leftJoin(clients, eq(cases.clientId, clients.id))
-      .leftJoin(collections, and(eq(collections.caseId, cases.id), isNull(collections.archivedAt)))
-      .where(
-        and(
-          eq(cases.userId, userId),
-          isNull(cases.archivedAt),
-          sql`${cases.contractedFee} IS NOT NULL`,
-          sql`${cases.contractedFee}::numeric > 0`,
-          or(eq(cases.status, 'active'), eq(cases.status, 'istinafta'), eq(cases.status, 'yargıtayda'))
-        )
-      )
-      .groupBy(cases.id, cases.title, cases.contractedFee, clients.fullName)
-      .having(sql`${cases.contractedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`)
-      .orderBy(sql`${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`)
-      .limit(10), [] as any[]),
+    // Bekleyen ücret listesi — widget'a görünür ilk satırlar (LIMIT 20).
+    // Tek kaynak: utils/outstandingFees — statistics ile aynı filtre/order.
+    safeQuery(
+      'outstandingCases',
+      () => getOutstandingCaseFees(userId, { limit: 20 }),
+      [] as any[],
+    ),
 
-    safeQuery('outstandingMediations', () => db
-      .select({
-        id: mediationFiles.id,
-        title: sql<string>`COALESCE(${mediationFiles.fileNo}, ${mediationFiles.disputeType})`,
-        clientName: sql<string>`${mediationFiles.disputeType}`,
-        contractedFee: mediationFiles.agreedFee,
-        totalCollected: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
-        remaining: sql<string>`(${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0))::text`,
-        source: sql<string>`'mediation'`,
-      })
-      .from(mediationFiles)
-      .leftJoin(collections, and(eq(collections.mediationFileId, mediationFiles.id), isNull(collections.archivedAt)))
-      .where(
-        and(
-          eq(mediationFiles.userId, userId),
-          isNull(mediationFiles.archivedAt),
-          sql`${mediationFiles.agreedFee} IS NOT NULL`,
-          sql`${mediationFiles.agreedFee}::numeric > 0`,
-          eq(mediationFiles.status, 'active')
-        )
-      )
-      .groupBy(mediationFiles.id, mediationFiles.fileNo, mediationFiles.disputeType, mediationFiles.agreedFee)
-      .having(sql`${mediationFiles.agreedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`)
-      .orderBy(sql`${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`)
-      .limit(10), [] as any[]),
+    safeQuery(
+      'outstandingMediations',
+      () => getOutstandingMediationFees(userId, { limit: 20 }),
+      [] as any[],
+    ),
+
+    // Toplam hesabı için limit'siz aynı sorgular — widget header'ındaki "Toplam"
+    // statistics BigStat'ı ile birebir tutsun diye gerekli.
+    safeQuery(
+      'outstandingCasesAll',
+      () => getOutstandingCaseFees(userId),
+      [] as any[],
+    ),
+
+    safeQuery(
+      'outstandingMediationsAll',
+      () => getOutstandingMediationFees(userId),
+      [] as any[],
+    ),
 
     safeQuery('potentialConsultations', () => db
       .select({ count: sql<number>`count(*)::int` })
@@ -586,12 +507,11 @@ router.get('/summary', async (req, res) => {
   const potentialConsultationCount = potentialConsultations[0]?.count ?? 0
   caseCount.pending += potentialConsultationCount
 
-  const outstandingByCases = outstandingCases.reduce((sum, r) => sum + safeNumeric(r.remaining), 0)
-  const outstandingByMediations = outstandingMediations.reduce((sum, r) => sum + safeNumeric(r.remaining), 0)
+  // Toplam: limit'siz sorgudan; liste: limit 20 — statistics ile birebir tutar.
+  const outstandingByCases = sumOutstanding(outstandingCasesAll)
+  const outstandingByMediations = sumOutstanding(outstandingMediationsAll)
   const outstandingTotal = outstandingByCases + outstandingByMediations
-  const outstandingFees = [...outstandingCases, ...outstandingMediations].sort(
-    (a, b) => safeNumeric(b.remaining) - safeNumeric(a.remaining)
-  )
+  const outstandingFees = [...outstandingCases, ...outstandingMediations]
 
   const thisMonth = thisMonthIncome[0] || { caseAmount: '0', mediationAmount: '0' }
   const thisMonthCase = safeNumeric(thisMonth.caseAmount)

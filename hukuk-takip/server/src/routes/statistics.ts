@@ -3,6 +3,11 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { cases, collections, clients, mediationFiles } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
+import {
+  getOutstandingCaseFees,
+  getOutstandingMediationFees,
+  sumOutstanding,
+} from '../utils/outstandingFees.js'
 
 const router = Router()
 router.use(authenticate)
@@ -167,66 +172,14 @@ router.get('/', async (req, res) => {
       .groupBy(cases.status)
       .orderBy(sql`COUNT(*) DESC`),
 
-    // expectedFromCases — davalardan bekleyen
-    // Sıralama: en yeni eklenen üstte, sonra en çok kalan. Avukatın az önce
-    // eklediği davalar (örn. ceza davaları) büyük tutarlı eski davaların
-    // altına düşüp gözden kaçmasın.
-    db
-      .select({
-        caseId: cases.id,
-        title: cases.title,
-        clientName: clients.fullName,
-        contractedFee: cases.contractedFee,
-        collected: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
-        remaining: sql<string>`(${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0))::text`,
-        source: sql<string>`'case'`,
-        createdAt: cases.createdAt,
-      })
-      .from(cases)
-      .leftJoin(clients, eq(cases.clientId, clients.id))
-      .leftJoin(collections, and(eq(collections.caseId, cases.id), isNull(collections.archivedAt)))
-      .where(
-        sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.contractedFee} IS NOT NULL AND ${cases.contractedFee}::numeric > 0`
-      )
-      .groupBy(cases.id, cases.title, clients.fullName, cases.contractedFee, cases.createdAt)
-      .having(
-        sql`${cases.contractedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`
-      )
-      .orderBy(
-        desc(cases.createdAt),
-        sql`(${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0)) DESC`,
-      )
-      .limit(50),
+    // expectedFromCases — tek kaynak: outstandingFees helper. Dashboard widget'ı
+    // ile aynı filtre/order; iki ekran arasındaki tutarsızlık burada elenir.
+    getOutstandingCaseFees(userId),
 
-    // expectedFromMediations — arabuluculuktan bekleyen
-    db
-      .select({
-        caseId: mediationFiles.id,
-        title: sql<string>`COALESCE(${mediationFiles.fileNo}, ${mediationFiles.disputeType})`,
-        clientName: sql<string>`${mediationFiles.disputeType}`,
-        contractedFee: mediationFiles.agreedFee,
-        collected: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
-        remaining: sql<string>`(${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0))::text`,
-        source: sql<string>`'mediation'`,
-      })
-      .from(mediationFiles)
-      .leftJoin(collections, and(eq(collections.mediationFileId, mediationFiles.id), isNull(collections.archivedAt)))
-      .where(
-        sql`${mediationFiles.userId} = ${userId} AND ${mediationFiles.archivedAt} IS NULL AND ${mediationFiles.agreedFee} IS NOT NULL AND ${mediationFiles.agreedFee}::numeric > 0 AND ${mediationFiles.status} = 'active'`
-      )
-      .groupBy(mediationFiles.id, mediationFiles.fileNo, mediationFiles.disputeType, mediationFiles.agreedFee)
-      .having(
-        sql`${mediationFiles.agreedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`
-      )
-      .orderBy(
-        sql`(${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0)) DESC`
-      )
-      .limit(20),
+    // expectedFromMediations — tek kaynak: outstandingFees helper.
+    getOutstandingMediationFees(userId),
 
-    // ALL-TIME tahsilat toplamları — eski sürüm sadece son 12 ay'dan toplam
-    // çıkarıyordu, dolayısıyla 1 yıl önceki tahsilat "Toplam Tahsilat"a
-    // yansımıyordu. Bunu ayrı sorgu olarak alıp tüm zamanın doğru toplamını
-    // gösteriyoruz.
+    // allTimeCaseIncome — tüm zaman tahsilat toplamı (sadece dava bağlı tahsilatlar)
     db
       .select({
         amount: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
@@ -237,6 +190,7 @@ router.get('/', async (req, res) => {
         sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${collections.archivedAt} IS NULL AND ${collections.caseId} IS NOT NULL`
       ),
 
+    // allTimeMediationIncome
     db
       .select({
         amount: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
@@ -247,7 +201,7 @@ router.get('/', async (req, res) => {
         sql`${mediationFiles.userId} = ${userId} AND ${mediationFiles.archivedAt} IS NULL AND ${collections.archivedAt} IS NULL AND ${collections.mediationFileId} IS NOT NULL`
       ),
 
-    // CMK toplam tahsilat — all-time (sadece is_cmk_assignment=true davalardan)
+    // allTimeCmkIncome — sadece CMK görevlendirmesi olan davalardan tahsilat
     db
       .select({
         amount: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
@@ -258,7 +212,7 @@ router.get('/', async (req, res) => {
         sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.isCmkAssignment} = true AND ${collections.archivedAt} IS NULL AND ${collections.caseId} IS NOT NULL`
       ),
 
-    // CMK aylık tahsilat — son 12 ay
+    // monthlyCmkCollections — son 12 ay CMK aylık
     db
       .select({
         month: sql<string>`TO_CHAR(${collections.collectionDate}, 'YYYY-MM')`,
@@ -272,7 +226,7 @@ router.get('/', async (req, res) => {
       .groupBy(sql`TO_CHAR(${collections.collectionDate}, 'YYYY-MM')`)
       .orderBy(sql`TO_CHAR(${collections.collectionDate}, 'YYYY-MM')`),
 
-    // CMK aktif görevlendirme sayısı
+    // cmkActiveCount — aktif CMK görevlendirme sayısı
     db
       .select({ count: sql<number>`COUNT(*)::int` })
       .from(cases)
@@ -280,19 +234,10 @@ router.get('/', async (req, res) => {
         sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.isCmkAssignment} = true`
       ),
 
-    // CMK bekleyen tahsilat (contractedFee dolu olanlardan, kollections düşülünce kalan)
-    db
-      .select({
-        remaining: sql<string>`COALESCE(SUM(GREATEST(${cases.contractedFee}::numeric - COALESCE(c_sum.collected_amount, 0), 0)), 0)::text`,
-      })
-      .from(cases)
-      .leftJoin(
-        sql`(SELECT case_id, SUM(amount::numeric) as collected_amount FROM collections WHERE archived_at IS NULL AND case_id IS NOT NULL GROUP BY case_id) AS c_sum`,
-        sql`c_sum.case_id = ${cases.id}`,
-      )
-      .where(
-        sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.isCmkAssignment} = true AND ${cases.contractedFee} IS NOT NULL AND ${cases.contractedFee}::numeric > 0`
-      ),
+    // cmkExpected — tek kaynak: helper'dan CMK'ya filtrelenmiş bekleyen liste.
+    // Toplam burada sum edilir; Dashboard'daki bekleyen widget toplamıyla
+    // tutarlı çalışsın diye aynı sorgu üzerinden gelir.
+    getOutstandingCaseFees(userId, { cmk: 'only' }),
   ])
 
   // Fill empty months and add labels
@@ -346,16 +291,45 @@ router.get('/', async (req, res) => {
   const totalMediationIncome = parseFloat(allTimeMediationIncomeRaw[0]?.amount || '0')
   const totalCollected = totalCaseIncome + totalMediationIncome
 
-  // totalExpected: düzgün hesap — tüm bekleyen kalemlerin toplamı
+  // totalExpected: düzgün hesap — tüm bekleyen kalemlerin toplamı.
+  // expectedFromCases ve expectedFromMediations helper'dan tipli geldiği için
+  // burada UI'ın eski `caseId` alanına uyumlu olacak şekilde normalize ediyoruz.
+  const normalizedExpectedFromCases = expectedFromCases.map((row) => ({
+    caseId: row.id,
+    title: row.title,
+    clientName: row.clientName,
+    contractedFee: row.contractedFee,
+    collected: row.totalCollected,
+    remaining: row.remaining,
+    source: row.source,
+    isCmkAssignment: row.isCmkAssignment,
+    createdAt: row.createdAt,
+  }))
+  const normalizedExpectedFromMediations = expectedFromMediations.map((row) => ({
+    caseId: row.id,
+    title: row.title,
+    clientName: row.clientName,
+    contractedFee: row.contractedFee,
+    collected: row.totalCollected,
+    remaining: row.remaining,
+    source: row.source,
+    createdAt: row.createdAt,
+  }))
   // Sıralama: en yeni eklenen üstte (avukatın yeni eklediği davalar büyük tutarlı
   // eski davaların altına düşmesin). createdAt yoksa fallback olarak remaining DESC.
-  const expectedCollections = [...expectedFromCases, ...expectedFromMediations].sort((a, b) => {
-    const aDate = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0
-    const bDate = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0
+  const expectedCollections = [
+    ...normalizedExpectedFromCases,
+    ...normalizedExpectedFromMediations,
+  ].sort((a, b) => {
+    const aDate = a.createdAt ? new Date(a.createdAt).getTime() : 0
+    const bDate = b.createdAt ? new Date(b.createdAt).getTime() : 0
     if (aDate !== bDate) return bDate - aDate
     return parseFloat(b.remaining || '0') - parseFloat(a.remaining || '0')
   })
-  const totalExpected = expectedCollections.reduce((s, r) => s + parseFloat(r.remaining || '0'), 0)
+  const totalExpected = expectedCollections.reduce(
+    (s, r) => s + parseFloat(r.remaining || '0'),
+    0,
+  )
 
   const grossTarget = totalCollected + totalExpected
   const collectionRate = grossTarget > 0 ? Math.round((totalCollected / grossTarget) * 10000) / 100 : 0
@@ -367,12 +341,14 @@ router.get('/', async (req, res) => {
   const thisMonthMediationIncome = thisMonth?.mediationAmount ?? '0.00'
   const thisMonthTotal = thisMonth?.total ?? '0.00'
 
-  // CMK metrikleri — toplam, bu ay, aktif sayısı, bekleyen
+  // CMK metrikleri — toplam, bu ay, aktif sayısı, bekleyen.
+  // cmkExpectedRaw artık helper'dan satır listesi olarak geliyor — sumOutstanding ile
+  // toplanır. Bu rakam Dashboard'da CMK rozetli davaların toplamıyla aynı olur.
   const cmkMap = new Map(monthlyCmkCollectionsRaw.map((r) => [r.month, r.amount]))
   const totalCmkIncome = parseFloat(allTimeCmkIncomeRaw[0]?.amount || '0')
   const thisMonthCmkIncome = parseFloat(cmkMap.get(currentMonthKey) || '0')
   const cmkActiveCount = cmkActiveCountRaw[0]?.count ?? 0
-  const cmkExpected = parseFloat(cmkExpectedRaw[0]?.remaining || '0')
+  const cmkExpected = sumOutstanding(cmkExpectedRaw)
 
   const monthlyCmkIncome = monthKeys.map((m) => ({
     month: m,
