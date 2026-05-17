@@ -275,6 +275,34 @@ export default function StatisticsPage() {
         </Card>
       </div>
 
+      {/* CMK Görevlendirmeleri özet kartları */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <Card className="border-l-4 border-l-indigo-500">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-muted-foreground">Bu Ay CMK'dan Kazanılan</p>
+            <p className="text-xl font-bold text-indigo-600">{formatCurrency(totals?.thisMonthCmkIncome)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-indigo-500/70">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-muted-foreground">Toplam CMK Geliri</p>
+            <p className="text-xl font-bold text-indigo-600">{formatCurrency(totals?.totalCmkIncome)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-amber-600">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-muted-foreground">CMK Bekleyen Tahsilat</p>
+            <p className="text-xl font-bold text-amber-600">{formatCurrency(totals?.cmkExpected)}</p>
+          </CardContent>
+        </Card>
+        <Card className="border-l-4 border-l-slate-500">
+          <CardContent className="p-3 sm:p-4">
+            <p className="text-[11px] font-medium text-muted-foreground">Aktif CMK Görevlendirmesi</p>
+            <p className="text-xl font-bold text-slate-700">{totals?.cmkActiveCount ?? 0}</p>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* ─── Charts Row 1: Monthly Cases + Collections ─────────── */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Monthly cases + mediations */}

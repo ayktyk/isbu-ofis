@@ -166,6 +166,10 @@ export const cases = pgTable(
     closeDate: date('close_date'),
     contractedFee: decimal('contracted_fee', { precision: 12, scale: 2 }),
     currency: varchar('currency', { length: 3 }).default('TRY').notNull(),
+    // CMK görevlendirmesi (Ceza Muhakemesi Kanunu — baro üzerinden gelen zorunlu müdafilik).
+    // Bu davalar UI'da ayrı "CMK Görevlendirmeleri" sayfasında listelenir, normal davalar
+    // listesinde gizlenir. Tahsilat raporlamasında "CMK'dan kazanılan" olarak ayrı sayılır.
+    isCmkAssignment: boolean('is_cmk_assignment').default(false).notNull(),
     archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -174,6 +178,7 @@ export const cases = pgTable(
     userIdx: index('cases_user_idx').on(table.userId),
     clientIdx: index('cases_client_idx').on(table.clientId),
     statusIdx: index('cases_status_idx').on(table.status),
+    cmkIdx: index('cases_cmk_idx').on(table.userId, table.isCmkAssignment),
   })
 )
 

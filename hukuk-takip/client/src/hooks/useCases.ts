@@ -8,6 +8,7 @@ export function useCases(params?: {
   statusGroup?: string
   status?: string
   caseType?: string
+  isCmk?: 'only' | 'include' | undefined
   page?: number
   pageSize?: number
 }) {

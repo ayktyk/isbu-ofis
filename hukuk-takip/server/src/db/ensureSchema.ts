@@ -243,6 +243,14 @@ CREATE INDEX IF NOT EXISTS "case_diary_occurred_idx" ON "case_diary_entries" ("o
 CREATE INDEX IF NOT EXISTS "case_diary_next_step_open_idx" ON "case_diary_entries" ("case_id", "next_step_done");
 `
 
+// rev9 (2026-05): CMK görevlendirmesi ayrımı. Cases tablosuna additive boolean kolon.
+// "CMK" ile başlayan davalar UI'da ayrı sayfada listelenir; tahsilat raporu CMK
+// gelirini ayrı gösterir. Mevcut satırlar default false alır (veri değişmez).
+const REV9_CMK_ASSIGNMENT_SQL = `
+ALTER TABLE "cases" ADD COLUMN IF NOT EXISTS "is_cmk_assignment" boolean NOT NULL DEFAULT false;
+CREATE INDEX IF NOT EXISTS "cases_cmk_idx" ON "cases" ("user_id", "is_cmk_assignment");
+`
+
 export async function ensureSchema() {
   if (!process.env.DATABASE_URL) {
     console.warn('ensureSchema: DATABASE_URL yok, atlaniyor.')
@@ -266,6 +274,8 @@ export async function ensureSchema() {
     console.log('Schema guard: arsivleme kolonlari hazir.')
     await sql.unsafe(REV8_CASE_DIARY_SQL)
     console.log('Schema guard: dava gunlugu (case_diary_entries) hazir.')
+    await sql.unsafe(REV9_CMK_ASSIGNMENT_SQL)
+    console.log('Schema guard: cases.is_cmk_assignment hazir.')
   } catch (err) {
     console.error('Schema guard hatasi:', err)
   } finally {

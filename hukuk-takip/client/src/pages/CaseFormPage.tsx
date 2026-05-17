@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -24,7 +24,9 @@ type CaseFormValues = CreateCaseInput & Pick<UpdateCaseInput, 'status' | 'closeD
 export default function CaseFormPage() {
   const navigate = useNavigate()
   const { id } = useParams()
+  const [searchParams] = useSearchParams()
   const isEdit = Boolean(id)
+  const cmkPrefill = !isEdit && searchParams.get('cmk') === '1'
 
   useMobileKeyboardFix()
   const { data: caseData, isLoading: loadingCase } = useCase(id)
@@ -62,6 +64,7 @@ export default function CaseFormPage() {
       currency: 'TRY',
       status: 'active',
       closeDate: '',
+      isCmkAssignment: cmkPrefill,
     },
   })
 
@@ -81,6 +84,7 @@ export default function CaseFormPage() {
       currency: caseData.currency || 'TRY',
       status: caseData.status || 'active',
       closeDate: caseData.closeDate ? new Date(caseData.closeDate).toISOString().split('T')[0] : '',
+      isCmkAssignment: !!caseData.isCmkAssignment,
     })
   }, [caseData, isEdit, reset])
 
@@ -281,6 +285,22 @@ export default function CaseFormPage() {
                 )}
               </div>
             </div>
+
+            <label className="flex items-start gap-3 rounded-xl border bg-muted/30 p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                {...register('isCmkAssignment')}
+                className="mt-0.5 h-4 w-4 rounded border-input text-law-accent focus:ring-2 focus:ring-law-accent/20"
+              />
+              <div>
+                <p className="text-sm font-medium">CMK Görevlendirmesi</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Bu dava baro üzerinden gelen zorunlu müdafilik görevlendirmesi mi? İşaretlersen
+                  davalar listesinden gizlenir, ayrı "CMK Görevlendirmeleri" sayfasında görünür ve
+                  tahsilat raporlamasında CMK kategorisinde sayılır.
+                </p>
+              </div>
+            </label>
 
             {isEdit && (
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

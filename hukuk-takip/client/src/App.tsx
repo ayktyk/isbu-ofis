@@ -154,6 +154,7 @@ const CalendarPage = lazy(() => import('./pages/CalendarPage'))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const StatisticsPage = lazy(() => import('./pages/StatisticsPage'))
 const MediationFilesPage = lazy(() => import('./pages/MediationFilesPage'))
+const CmkAssignmentsPage = lazy(() => import('./pages/CmkAssignmentsPage'))
 const ClientFormPage = lazy(() => import('./pages/ClientFormPage'))
 const ClientDetailPage = lazy(() => import('./pages/ClientDetailPage'))
 const CaseFormPage = lazy(() => import('./pages/CaseFormPage'))
@@ -305,6 +306,7 @@ export default function App() {
           <Route path="tools/mediation/dava-sarti" element={<MediationDocumentsPage mediationType="dava-sarti" />} />
           <Route path="tools/mediation/ihtiyari" element={<MediationDocumentsPage mediationType="ihtiyari" />} />
           <Route path="tools/mediation-files" element={<MediationFilesPage />} />
+          <Route path="cmk" element={<CmkAssignmentsPage />} />
           <Route path="tools/sentence" element={<SentenceCalcPage />} />
           <Route path="statistics" element={<StatisticsPage />} />
         </Route>

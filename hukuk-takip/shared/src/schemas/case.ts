@@ -39,6 +39,9 @@ export const createCaseSchema = z.object({
     .optional()
     .or(z.literal('')),
   currency: z.string().length(3).default('TRY'),
+  // CMK (Ceza Muhakemesi Kanunu) zorunlu müdafilik görevlendirmesi mi?
+  // True ise dava normal davalar listesinde değil "CMK Görevlendirmeleri" sayfasında görünür.
+  isCmkAssignment: z.boolean().optional(),
 })
 
 export const updateCaseSchema = createCaseSchema.partial().extend({

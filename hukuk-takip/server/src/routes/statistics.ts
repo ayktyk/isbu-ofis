@@ -86,6 +86,10 @@ router.get('/', async (req, res) => {
     expectedFromMediations,
     allTimeCaseIncomeRaw,
     allTimeMediationIncomeRaw,
+    allTimeCmkIncomeRaw,
+    monthlyCmkCollectionsRaw,
+    cmkActiveCountRaw,
+    cmkExpectedRaw,
   ] = await Promise.all([
     // monthlyCases
     db
@@ -242,6 +246,53 @@ router.get('/', async (req, res) => {
       .where(
         sql`${mediationFiles.userId} = ${userId} AND ${mediationFiles.archivedAt} IS NULL AND ${collections.archivedAt} IS NULL AND ${collections.mediationFileId} IS NOT NULL`
       ),
+
+    // CMK toplam tahsilat — all-time (sadece is_cmk_assignment=true davalardan)
+    db
+      .select({
+        amount: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
+      })
+      .from(collections)
+      .innerJoin(cases, eq(collections.caseId, cases.id))
+      .where(
+        sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.isCmkAssignment} = true AND ${collections.archivedAt} IS NULL AND ${collections.caseId} IS NOT NULL`
+      ),
+
+    // CMK aylık tahsilat — son 12 ay
+    db
+      .select({
+        month: sql<string>`TO_CHAR(${collections.collectionDate}, 'YYYY-MM')`,
+        amount: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
+      })
+      .from(collections)
+      .innerJoin(cases, eq(collections.caseId, cases.id))
+      .where(
+        sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.isCmkAssignment} = true AND ${collections.archivedAt} IS NULL AND ${collections.collectionDate}::date >= NOW() - INTERVAL '12 months' AND ${collections.caseId} IS NOT NULL`
+      )
+      .groupBy(sql`TO_CHAR(${collections.collectionDate}, 'YYYY-MM')`)
+      .orderBy(sql`TO_CHAR(${collections.collectionDate}, 'YYYY-MM')`),
+
+    // CMK aktif görevlendirme sayısı
+    db
+      .select({ count: sql<number>`COUNT(*)::int` })
+      .from(cases)
+      .where(
+        sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.isCmkAssignment} = true`
+      ),
+
+    // CMK bekleyen tahsilat (contractedFee dolu olanlardan, kollections düşülünce kalan)
+    db
+      .select({
+        remaining: sql<string>`COALESCE(SUM(GREATEST(${cases.contractedFee}::numeric - COALESCE(c_sum.collected_amount, 0), 0)), 0)::text`,
+      })
+      .from(cases)
+      .leftJoin(
+        sql`(SELECT case_id, SUM(amount::numeric) as collected_amount FROM collections WHERE archived_at IS NULL AND case_id IS NOT NULL GROUP BY case_id) AS c_sum`,
+        sql`c_sum.case_id = ${cases.id}`,
+      )
+      .where(
+        sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.isCmkAssignment} = true AND ${cases.contractedFee} IS NOT NULL AND ${cases.contractedFee}::numeric > 0`
+      ),
   ])
 
   // Fill empty months and add labels
@@ -316,6 +367,19 @@ router.get('/', async (req, res) => {
   const thisMonthMediationIncome = thisMonth?.mediationAmount ?? '0.00'
   const thisMonthTotal = thisMonth?.total ?? '0.00'
 
+  // CMK metrikleri — toplam, bu ay, aktif sayısı, bekleyen
+  const cmkMap = new Map(monthlyCmkCollectionsRaw.map((r) => [r.month, r.amount]))
+  const totalCmkIncome = parseFloat(allTimeCmkIncomeRaw[0]?.amount || '0')
+  const thisMonthCmkIncome = parseFloat(cmkMap.get(currentMonthKey) || '0')
+  const cmkActiveCount = cmkActiveCountRaw[0]?.count ?? 0
+  const cmkExpected = parseFloat(cmkExpectedRaw[0]?.remaining || '0')
+
+  const monthlyCmkIncome = monthKeys.map((m) => ({
+    month: m,
+    label: monthLabel(m),
+    amount: parseFloat(cmkMap.get(m) || '0').toFixed(2),
+  }))
+
   res.json({
     monthlyCases,
     monthlyCollections, // backward compat
@@ -335,7 +399,13 @@ router.get('/', async (req, res) => {
       thisMonthMediationIncome,
       thisMonthTotal,
       collectionRate,
+      // CMK ayrık metrikleri
+      totalCmkIncome: totalCmkIncome.toFixed(2),
+      thisMonthCmkIncome: thisMonthCmkIncome.toFixed(2),
+      cmkActiveCount,
+      cmkExpected: cmkExpected.toFixed(2),
     },
+    monthlyCmkIncome,
   })
 })
 

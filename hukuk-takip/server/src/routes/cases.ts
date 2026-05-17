@@ -41,8 +41,8 @@ function normalizeNullableString(value: unknown) {
   return trimmed === '' ? null : trimmed
 }
 
-function normalizeCasePayload(payload: any) {
-  return {
+function normalizeCasePayload(payload: any): any {
+  const normalized: any = {
     ...payload,
     startDate: normalizeNullableString(payload.startDate),
     closeDate: normalizeNullableString(payload.closeDate),
@@ -52,6 +52,11 @@ function normalizeCasePayload(payload: any) {
     courtName: normalizeNullableString(payload.courtName),
     description: normalizeNullableString(payload.description),
   }
+  // isCmkAssignment kullanıcı boolean olarak gönderir; undefined ise dokunma.
+  if (payload.isCmkAssignment !== undefined) {
+    normalized.isCmkAssignment = !!payload.isCmkAssignment
+  }
+  return normalized
 }
 
 // Query string'den gelen status/caseType doğrulaması — geçersiz değer Drizzle eq
@@ -65,16 +70,74 @@ const VALID_CASE_TYPES = new Set([
   'icra', 'ceza', 'idare', 'diger',
 ])
 
+// POST /api/cases/backfill-cmk — başlığı "CMK" ile başlayan davaları is_cmk_assignment=true yapar.
+// Tamamen additive: hiçbir kayıt silinmez, sadece flag atılır. Idempotent (zaten true olanlara dokunmaz).
+// Kullanıcı CMK sayfasından manuel tetikler; dönüş kaç satırın etkilendiğini gösterir.
+router.post('/backfill-cmk', async (req, res) => {
+  const dryRun = req.query.dryRun === 'true'
+
+  // Önce etkilenecek satırları seç (dry-run desteği)
+  const candidates = await db
+    .select({ id: cases.id, title: cases.title })
+    .from(cases)
+    .where(
+      and(
+        eq(cases.userId, req.user!.userId),
+        isNull(cases.archivedAt),
+        eq(cases.isCmkAssignment, false),
+        sql`${cases.title} ILIKE 'CMK%'`,
+      ),
+    )
+
+  if (dryRun || candidates.length === 0) {
+    res.json({
+      dryRun,
+      affected: candidates.length,
+      titles: candidates.map((c) => c.title),
+    })
+    return
+  }
+
+  await db
+    .update(cases)
+    .set({ isCmkAssignment: true, updatedAt: new Date() })
+    .where(
+      and(
+        eq(cases.userId, req.user!.userId),
+        isNull(cases.archivedAt),
+        eq(cases.isCmkAssignment, false),
+        sql`${cases.title} ILIKE 'CMK%'`,
+      ),
+    )
+
+  res.json({
+    dryRun: false,
+    affected: candidates.length,
+    titles: candidates.map((c) => c.title),
+  })
+})
+
 router.get('/', async (req, res) => {
   const search = getSingleValue(req.query.search)
   const status = getSingleValue(req.query.status)
   const statusGroup = getSingleValue(req.query.statusGroup)
   const caseType = getSingleValue(req.query.caseType)
+  // isCmk: 'only' → sadece CMK görevlendirmeleri
+  //         'include' → CMK dahil tüm davalar
+  //         (default) → CMK hariç (davalar listesi)
+  const isCmkParam = getSingleValue(req.query.isCmk)
   const page = getPositiveInt(req.query.page, 1)
   const pageSize = getPositiveInt(req.query.pageSize, 20)
   const offset = (page - 1) * pageSize
 
   const conditions = [eq(cases.userId, req.user!.userId), isNull(cases.archivedAt)]
+
+  if (isCmkParam === 'only') {
+    conditions.push(eq(cases.isCmkAssignment, true))
+  } else if (isCmkParam !== 'include') {
+    // Default: CMK davalarını davalar listesinden gizle
+    conditions.push(eq(cases.isCmkAssignment, false))
+  }
 
   if (search?.trim()) {
     const trimmedSearch = search.trim()
@@ -137,6 +200,7 @@ router.get('/', async (req, res) => {
         contractedFee: cases.contractedFee,
         clientId: cases.clientId,
         clientName: clients.fullName,
+        isCmkAssignment: cases.isCmkAssignment,
         createdAt: cases.createdAt,
       })
       .from(cases)
@@ -201,6 +265,7 @@ router.get('/:id', async (req, res) => {
       contractedFee: cases.contractedFee,
       currency: cases.currency,
       customCaseType: cases.customCaseType,
+      isCmkAssignment: cases.isCmkAssignment,
       clientId: cases.clientId,
       clientName: clients.fullName,
       clientPhone: clients.phone,
@@ -249,6 +314,7 @@ router.get('/:id/detail', async (req, res) => {
       contractedFee: cases.contractedFee,
       currency: cases.currency,
       customCaseType: cases.customCaseType,
+      isCmkAssignment: cases.isCmkAssignment,
       clientId: cases.clientId,
       clientName: clients.fullName,
       clientPhone: clients.phone,
