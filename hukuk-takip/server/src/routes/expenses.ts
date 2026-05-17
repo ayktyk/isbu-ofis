@@ -7,6 +7,7 @@ import { authenticate } from '../middleware/auth.js'
 import { createExpenseSchema, updateExpenseSchema } from '../../../shared/dist/index.js'
 import { getOwnedCase } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
+import { logDiaryEntry } from '../utils/diaryLog.js'
 
 const router = Router()
 router.use(authenticate)
@@ -57,6 +58,17 @@ router.post('/', validate(createExpenseSchema), async (req, res) => {
       userId: req.user!.userId,
     })
     .returning()
+
+  void logDiaryEntry({
+    caseId: expense.caseId,
+    userId: req.user!.userId,
+    entryType: 'expense_added',
+    title: 'Masraf eklendi',
+    content: `${expense.amount} ${expense.currency || 'TRY'}${expense.description ? ` • ${expense.description}` : ''}`,
+    linkedEntityType: 'expense',
+    linkedEntityId: expense.id,
+    occurredAt: expense.createdAt ?? new Date(),
+  })
 
   res.status(201).json(expense)
 })

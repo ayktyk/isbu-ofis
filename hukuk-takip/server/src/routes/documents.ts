@@ -9,6 +9,7 @@ import { db } from '../db/index.js'
 import { cases, documents } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
 import { getSingleValue } from '../utils/request.js'
+import { logDiaryEntry } from '../utils/diaryLog.js'
 import {
   MAX_DOCUMENT_FILES_PER_REQUEST,
   MAX_DOCUMENT_FILE_SIZE_BYTES,
@@ -210,6 +211,17 @@ router.post('/', async (req, res) => {
       createdDocuments.push({
         ...document,
         downloadUrl: `/api/documents/${document.id}/download`,
+      })
+
+      void logDiaryEntry({
+        caseId,
+        userId: req.user!.userId,
+        entryType: 'document_added',
+        title: 'Belge yüklendi',
+        content: document.fileName + (description ? ` • ${description}` : ''),
+        linkedEntityType: 'document',
+        linkedEntityId: document.id,
+        occurredAt: document.createdAt ?? new Date(),
       })
     }
 

@@ -471,3 +471,57 @@ export type MediationFile = typeof mediationFiles.$inferSelect
 export type NewMediationFile = typeof mediationFiles.$inferInsert
 export type MediationParty = typeof mediationParties.$inferSelect
 export type NewMediationParty = typeof mediationParties.$inferInsert
+
+// Dava günlüğü — manuel girdiler + otomatik aktivite olayları kronolojik akış
+export const diaryEntryTypeEnum = pgEnum('diary_entry_type', [
+  'manual',
+  'hearing_added',
+  'hearing_updated',
+  'hearing_completed',
+  'task_added',
+  'task_completed',
+  'expense_added',
+  'collection_added',
+  'document_added',
+  'status_changed',
+  'note_added',
+])
+
+export const caseDiaryEntries = pgTable(
+  'case_diary_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    caseId: uuid('case_id')
+      .references(() => cases.id, { onDelete: 'cascade' })
+      .notNull(),
+    userId: uuid('user_id')
+      .references(() => users.id, { onDelete: 'restrict' })
+      .notNull(),
+    entryType: diaryEntryTypeEnum('entry_type').default('manual').notNull(),
+    title: varchar('title', { length: 255 }),
+    content: text('content'),
+    // Sonraki adım — bu girdiden sonra ne yapılacak (opsiyonel)
+    nextStep: text('next_step'),
+    nextStepDueDate: date('next_step_due_date'),
+    nextStepDone: boolean('next_step_done').default(false).notNull(),
+    // Olayın gerçekleştiği zaman (manuel girdide kullanıcı seçer, otomatik girdide ilgili olay tarihi)
+    occurredAt: timestamp('occurred_at').defaultNow().notNull(),
+    // Otomatik girdinin bağlı olduğu kaynak kayıt (hearing/task/expense/collection/document/note id'si)
+    linkedEntityType: varchar('linked_entity_type', { length: 32 }),
+    linkedEntityId: uuid('linked_entity_id'),
+    archivedAt: timestamp('archived_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    caseIdx: index('case_diary_case_idx').on(table.caseId),
+    occurredIdx: index('case_diary_occurred_idx').on(table.occurredAt),
+    nextStepOpenIdx: index('case_diary_next_step_open_idx').on(
+      table.caseId,
+      table.nextStepDone,
+    ),
+  }),
+)
+
+export type CaseDiaryEntry = typeof caseDiaryEntries.$inferSelect
+export type NewCaseDiaryEntry = typeof caseDiaryEntries.$inferInsert

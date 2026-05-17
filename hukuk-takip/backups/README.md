@@ -1,5 +1,18 @@
 # DB Backup Notes
 
+## 2026-05-17 — pre-rev8 (dava günlüğü) migration
+
+**Migration:** `0013_add_case_diary.sql` + `ensureSchema.ts` REV8 bloğu
+
+**Tam ADDITIVE — risk yok:**
+- Yeni enum: `diary_entry_type`
+- Yeni tablo: `case_diary_entries` (PK + FK'lar + 3 indeks)
+- Hiçbir mevcut kolon değişmedi
+- Hiçbir mevcut satır silinmedi
+- Hiçbir mevcut tablo dokunulmadı
+
+`CREATE TABLE IF NOT EXISTS` ve `DO $$ ... EXCEPTION WHEN duplicate_object` blokları ile idempotent. Server boot'unda ensureSchema otomatik uygular. Geri alma gerekirse Neon dashboard → Branches → Restore to point before 2026-05-17.
+
 ## 2026-04-22 — pre-rev2 migration
 
 **Durum:** pg_dump yerel olarak yüklü değil, Docker kapalı.

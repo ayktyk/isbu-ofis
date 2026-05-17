@@ -16,6 +16,18 @@ import { authenticate } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { getOwnedCase } from '../utils/ownership.js'
 import { getPositiveInt, getSingleValue } from '../utils/request.js'
+import { logDiaryEntry } from '../utils/diaryLog.js'
+
+const CASE_STATUS_LABELS: Record<string, string> = {
+  active: 'Aktif',
+  istinafta: 'İstinafta',
+  yargıtayda: 'Yargıtayda',
+  passive: 'Pasif',
+  closed: 'Kapatıldı',
+  won: 'Kazanıldı',
+  lost: 'Kaybedildi',
+  settled: 'Uzlaşıldı',
+}
 
 const router = Router()
 router.use(authenticate)
@@ -130,7 +142,23 @@ router.get('/', async (req, res) => {
       .from(cases)
       .leftJoin(clients, eq(cases.clientId, clients.id))
       .where(where)
-      .orderBy(desc(cases.createdAt))
+      // 3-katmanlı sıralama: aktif (1) → istinaf/yargıtay (2) → biten (3) → pasif (4)
+      // Her grup içinde createdAt DESC. Avukatın talebi: en yeni aktif üstte,
+      // en eski biten en altta, istinaf/yargıtay aktiflerin altında.
+      .orderBy(
+        sql`CASE ${cases.status}
+          WHEN 'active' THEN 1
+          WHEN 'istinafta' THEN 2
+          WHEN 'yargıtayda' THEN 2
+          WHEN 'won' THEN 3
+          WHEN 'lost' THEN 3
+          WHEN 'settled' THEN 3
+          WHEN 'closed' THEN 3
+          WHEN 'passive' THEN 4
+          ELSE 5
+        END ASC`,
+        desc(cases.createdAt),
+      )
       .limit(pageSize)
       .offset(offset),
     db
@@ -266,8 +294,25 @@ router.get('/:id/detail', async (req, res) => {
         .orderBy(desc(documents.createdAt)),
     ])
 
+  const totalCollected = caseCollections.reduce(
+    (sum, row) => sum + Number(row.amount || 0),
+    0,
+  )
+  const totalSpent = caseExpenses.reduce(
+    (sum, row) => sum + Number(row.amount || 0),
+    0,
+  )
+  const contractedFee = Number(caseRow?.contractedFee || 0)
+  const remaining = contractedFee > 0 ? Math.max(0, contractedFee - totalCollected) : 0
+
   res.json({
     case: caseRow,
+    financials: {
+      contractedFee,
+      totalCollected,
+      totalSpent,
+      remaining,
+    },
     hearings,
     tasks: caseTasks,
     expenses: caseExpenses,
@@ -297,6 +342,13 @@ router.put('/:id', validate(updateCaseSchema), async (req, res) => {
     return
   }
 
+  // Status değişikliği takibi için eski hali al — diary log'a "X → Y" düşürürüz.
+  const [previous] = await db
+    .select({ status: cases.status })
+    .from(cases)
+    .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId), isNull(cases.archivedAt)))
+    .limit(1)
+
   const [updated] = await db
     .update(cases)
     .set({
@@ -309,6 +361,21 @@ router.put('/:id', validate(updateCaseSchema), async (req, res) => {
   if (!updated) {
     res.status(404).json({ error: 'Dava bulunamadi.' })
     return
+  }
+
+  // Durum değiştiyse günlüğe "X → Y" girdisi düşür
+  if (previous?.status && updated.status && previous.status !== updated.status) {
+    const fromLabel = CASE_STATUS_LABELS[previous.status] || previous.status
+    const toLabel = CASE_STATUS_LABELS[updated.status] || updated.status
+    void logDiaryEntry({
+      caseId: updated.id,
+      userId: req.user!.userId,
+      entryType: 'status_changed',
+      title: 'Dava durumu değişti',
+      content: `${fromLabel} → ${toLabel}`,
+      linkedEntityType: 'case',
+      linkedEntityId: updated.id,
+    })
   }
 
   res.json(updated)

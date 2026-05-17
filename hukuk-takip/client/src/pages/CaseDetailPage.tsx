@@ -4,13 +4,23 @@ import {
   AlertTriangle,
   ArrowLeft,
   Banknote,
+  Calendar as CalendarIcon,
   CalendarClock,
+  Check,
+  CheckCircle2,
+  CircleDashed,
   CreditCard,
   Edit,
   FileText,
+  FilePlus2,
+  Flag,
+  HandCoins,
+  History,
+  Hourglass,
   ListChecks,
   Loader2,
   Plus,
+  Sparkles,
   StickyNote,
   Trash2,
   User,
@@ -28,6 +38,15 @@ import {
 import { useCreateHearing, useDeleteHearing } from '@/hooks/useHearings'
 import { useCreateNote, useDeleteNote } from '@/hooks/useNotes'
 import { useCreateTask, useDeleteTask } from '@/hooks/useTasks'
+import {
+  useCaseDiary,
+  useCaseNextStep,
+  useCreateDiaryEntry,
+  useDeleteDiaryEntry,
+  useToggleNextStepDone,
+  type DiaryEntry,
+  type DiaryEntryType,
+} from '@/hooks/useCaseDiary'
 import {
   caseStatusLabels,
   caseTypeLabels,
@@ -65,6 +84,56 @@ const statusVariant: Record<string, 'default' | 'success' | 'danger' | 'warning'
   passive: 'secondary',
 }
 
+const diaryEntryTypeLabels: Record<DiaryEntryType, string> = {
+  manual: 'Elle',
+  hearing_added: 'Duruşma',
+  hearing_updated: 'Duruşma güncellendi',
+  hearing_completed: 'Duruşma sonucu',
+  task_added: 'Görev',
+  task_completed: 'Görev tamamlandı',
+  expense_added: 'Masraf',
+  collection_added: 'Tahsilat',
+  document_added: 'Belge',
+  status_changed: 'Durum değişti',
+  note_added: 'Not',
+}
+
+function diaryEntryIcon(type: DiaryEntryType) {
+  switch (type) {
+    case 'manual':
+      return Edit
+    case 'hearing_added':
+    case 'hearing_updated':
+    case 'hearing_completed':
+      return CalendarClock
+    case 'task_added':
+    case 'task_completed':
+      return ListChecks
+    case 'expense_added':
+      return CreditCard
+    case 'collection_added':
+      return Banknote
+    case 'document_added':
+      return FilePlus2
+    case 'status_changed':
+      return Flag
+    case 'note_added':
+      return StickyNote
+    default:
+      return Sparkles
+  }
+}
+
+function formatDateOnly(value: string | null | undefined) {
+  if (!value) return ''
+  // GG.AA.YYYY hızlı format
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  const dd = String(date.getDate()).padStart(2, '0')
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  return `${dd}.${mm}.${date.getFullYear()}`
+}
+
 export default function CaseDetailPage() {
   const navigate = useNavigate()
   const { id } = useParams()
@@ -77,6 +146,15 @@ export default function CaseDetailPage() {
   const [collectionAmount, setCollectionAmount] = useState('')
   const [documentDescription, setDocumentDescription] = useState('')
   const [documentFiles, setDocumentFiles] = useState<File[]>([])
+
+  // Dava Günlüğü state'i
+  const [diaryContent, setDiaryContent] = useState('')
+  const [diaryNextStep, setDiaryNextStep] = useState('')
+  const [diaryNextStepDate, setDiaryNextStepDate] = useState('')
+  const [diaryOccurredAt, setDiaryOccurredAt] = useState('')
+  const [diaryFilter, setDiaryFilter] = useState<'all' | 'manual' | 'auto' | 'open_next_step'>(
+    'all',
+  )
 
   // Tek roundtrip — 6 istek yerine tek endpoint detay verisini birleştirir
   const { data: detail, isLoading, isError } = useCaseDetail(id)
@@ -102,6 +180,12 @@ export default function CaseDetailPage() {
   const createNote = useCreateNote()
   const deleteNote = useDeleteNote()
 
+  const { data: diaryData } = useCaseDiary(id)
+  const { data: nextStepOpen } = useCaseNextStep(id)
+  const createDiaryEntry = useCreateDiaryEntry(id)
+  const deleteDiaryEntry = useDeleteDiaryEntry(id)
+  const toggleNextStepDone = useToggleNextStepDone(id)
+
   const hearings = hearingsData || []
   const tasks = tasksData || []
   const expenses = expensesData || []
@@ -111,6 +195,20 @@ export default function CaseDetailPage() {
 
   const totalExpenses = expenses.reduce((sum: number, item: any) => sum + Number.parseFloat(item.amount || '0'), 0)
   const totalCollections = collections.reduce((sum: number, item: any) => sum + Number.parseFloat(item.amount || '0'), 0)
+
+  // Bekleyen ücret görünürlüğü — server "financials" dönerse onu, yoksa client-side
+  // fallback hesabı kullan. contractedFee 0/boşsa "bekleyen" gösterilmez.
+  const contractedFee = detail?.financials?.contractedFee ?? Number.parseFloat(caseData?.contractedFee || '0')
+  const pendingFee = contractedFee > 0 ? Math.max(0, contractedFee - totalCollections) : 0
+
+  const diaryEntries: DiaryEntry[] = diaryData || []
+  const filteredDiary = diaryEntries.filter((entry) => {
+    if (diaryFilter === 'all') return true
+    if (diaryFilter === 'manual') return entry.entryType === 'manual'
+    if (diaryFilter === 'auto') return entry.entryType !== 'manual'
+    if (diaryFilter === 'open_next_step') return !!entry.nextStep && !entry.nextStepDone
+    return true
+  })
 
   function appendSelectedFiles(fileList: FileList | null) {
     if (!fileList) return
@@ -186,13 +284,13 @@ export default function CaseDetailPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Card className="border-0 shadow-sm">
           <CardContent className="flex items-center gap-3 p-4">
             <User className="h-5 w-5 text-law-accent" />
-            <div>
+            <div className="min-w-0">
               <p className="text-xs text-muted-foreground">Müvekkil</p>
-              <p className="text-sm font-medium">{caseData.clientName || '-'}</p>
+              <p className="truncate text-sm font-medium">{caseData.clientName || '-'}</p>
             </div>
           </CardContent>
         </Card>
@@ -202,6 +300,17 @@ export default function CaseDetailPage() {
             <div>
               <p className="text-xs text-muted-foreground">Baslangic</p>
               <p className="text-sm font-medium">{formatDate(caseData.startDate)}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-sm">
+          <CardContent className="flex items-center gap-3 p-4">
+            <HandCoins className="h-5 w-5 text-law-accent" />
+            <div>
+              <p className="text-xs text-muted-foreground">Anlaşılan Ücret</p>
+              <p className="text-sm font-medium text-law-primary">
+                {contractedFee > 0 ? formatCurrency(contractedFee, caseData.currency || 'TRY') : '—'}
+              </p>
             </div>
           </CardContent>
         </Card>
@@ -218,6 +327,19 @@ export default function CaseDetailPage() {
         </Card>
         <Card className="border-0 shadow-sm">
           <CardContent className="flex items-center gap-3 p-4">
+            <Hourglass className="h-5 w-5 text-amber-600" />
+            <div>
+              <p className="text-xs text-muted-foreground">Bekleyen Ücret</p>
+              <p className="text-sm font-medium text-amber-600">
+                {contractedFee > 0
+                  ? formatCurrency(pendingFee, caseData.currency || 'TRY')
+                  : '—'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="border-0 shadow-sm">
+          <CardContent className="flex items-center gap-3 p-4">
             <CreditCard className="h-5 w-5 text-law-accent" />
             <div>
               <p className="text-xs text-muted-foreground">Masraf</p>
@@ -228,6 +350,40 @@ export default function CaseDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {nextStepOpen?.nextStep ? (
+        <Card className="border-l-4 border-l-amber-500 bg-amber-50/50">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <Flag className="mt-0.5 h-5 w-5 text-amber-600" />
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-amber-700">
+                  Sonraki Adım
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-sm font-medium text-law-primary">
+                  {nextStepOpen.nextStep}
+                </p>
+                {nextStepOpen.nextStepDueDate ? (
+                  <p className="mt-1 text-xs text-amber-700">
+                    Hedef tarih: {formatDateOnly(nextStepOpen.nextStepDueDate)}
+                  </p>
+                ) : null}
+              </div>
+            </div>
+            <button
+              type="button"
+              disabled={toggleNextStepDone.isPending}
+              onClick={() =>
+                toggleNextStepDone.mutate({ entryId: nextStepOpen.id, done: true })
+              }
+              className="inline-flex items-center gap-2 self-start rounded-xl bg-emerald-600 px-3 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50 sm:self-auto"
+            >
+              <Check className="h-4 w-4" />
+              Tamamlandı
+            </button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {caseData.description && (
         <Card className="border-0 shadow-sm">
@@ -534,6 +690,246 @@ export default function CaseDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* ─── Dava Günlüğü — kronolojik aktivite + sonraki adım ───────────── */}
+      <Card className="border-0 shadow-sm">
+        <CardContent className="space-y-4 p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-base font-semibold">
+              <History className="h-4 w-4 text-law-accent" />
+              Dava Günlüğü
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              {diaryEntries.length} girdi
+            </span>
+          </div>
+
+          {/* Manuel giriş formu */}
+          <form
+            onSubmit={(event) => {
+              event.preventDefault()
+              if (!id || !diaryContent.trim()) return
+              createDiaryEntry.mutate(
+                {
+                  content: diaryContent.trim(),
+                  nextStep: diaryNextStep.trim() || '',
+                  nextStepDueDate: diaryNextStepDate || '',
+                  occurredAt: diaryOccurredAt ? localInputToISO(diaryOccurredAt) : '',
+                },
+                {
+                  onSuccess: () => {
+                    setDiaryContent('')
+                    setDiaryNextStep('')
+                    setDiaryNextStepDate('')
+                    setDiaryOccurredAt('')
+                  },
+                },
+              )
+            }}
+            className="space-y-2 rounded-xl border bg-muted/30 p-3"
+          >
+            <textarea
+              value={diaryContent}
+              onChange={(e) => setDiaryContent(e.target.value)}
+              rows={2}
+              placeholder="Ne yapıldı? (örn. Bugün duruşmaya gittim, bilirkişi raporu okundu...)"
+              className="w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent focus:ring-2 focus:ring-law-accent/20"
+            />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              <textarea
+                value={diaryNextStep}
+                onChange={(e) => setDiaryNextStep(e.target.value)}
+                rows={2}
+                placeholder="Sonraki adım (opsiyonel) — bundan sonra ne yapılacak?"
+                className="w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20"
+              />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Sonraki adım tarihi
+                  </label>
+                  <input
+                    type="date"
+                    value={diaryNextStepDate}
+                    onChange={(e) => setDiaryNextStepDate(e.target.value)}
+                    className="mt-1 w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-400/20"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Olay tarihi
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={diaryOccurredAt}
+                    onChange={(e) => setDiaryOccurredAt(e.target.value)}
+                    className="mt-1 w-full rounded-xl border bg-background px-3 py-2 text-sm outline-none focus:border-law-accent focus:ring-2 focus:ring-law-accent/20"
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-[11px] text-muted-foreground">
+                Olay tarihi boş bırakılırsa şimdi kabul edilir.
+              </p>
+              <button
+                type="submit"
+                disabled={createDiaryEntry.isPending || !diaryContent.trim()}
+                className="inline-flex items-center gap-2 rounded-xl bg-law-primary px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              >
+                {createDiaryEntry.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                <Plus className="h-4 w-4" />
+                Günlüğe Ekle
+              </button>
+            </div>
+          </form>
+
+          {/* Filtre pill'leri */}
+          <div className="flex flex-wrap gap-1.5">
+            {([
+              { key: 'all', label: 'Tümü' },
+              { key: 'manual', label: 'Elle' },
+              { key: 'auto', label: 'Otomatik' },
+              { key: 'open_next_step', label: 'Açık Sonraki Adım' },
+            ] as const).map((opt) => (
+              <button
+                key={opt.key}
+                type="button"
+                onClick={() => setDiaryFilter(opt.key)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                  diaryFilter === opt.key
+                    ? 'bg-law-primary text-white'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/70'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Timeline */}
+          {filteredDiary.length === 0 ? (
+            <p className="rounded-xl border border-dashed p-6 text-center text-sm text-muted-foreground">
+              {diaryEntries.length === 0
+                ? 'Henüz günlük girdisi yok. İlk girdiyi ekleyerek başla.'
+                : 'Bu filtreyle eşleşen girdi yok.'}
+            </p>
+          ) : (
+            <ol className="space-y-2">
+              {filteredDiary.map((entry) => {
+                const Icon = diaryEntryIcon(entry.entryType)
+                const isManual = entry.entryType === 'manual'
+                return (
+                  <li
+                    key={entry.id}
+                    className="flex gap-3 rounded-xl border bg-card p-3"
+                  >
+                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-law-accent/10 text-law-accent">
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-wider text-law-accent">
+                          {diaryEntryTypeLabels[entry.entryType] || entry.entryType}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {formatDateTime(entry.occurredAt)}
+                        </span>
+                      </div>
+                      {entry.title ? (
+                        <p className="text-sm font-medium">{entry.title}</p>
+                      ) : null}
+                      {entry.content ? (
+                        <p className="whitespace-pre-wrap text-sm text-foreground/80">
+                          {entry.content}
+                        </p>
+                      ) : null}
+                      {entry.nextStep ? (
+                        <div
+                          className={`mt-1 flex items-start gap-2 rounded-lg border px-3 py-2 ${
+                            entry.nextStepDone
+                              ? 'border-emerald-200 bg-emerald-50/50'
+                              : 'border-amber-200 bg-amber-50/60'
+                          }`}
+                        >
+                          <Flag
+                            className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${
+                              entry.nextStepDone ? 'text-emerald-600' : 'text-amber-600'
+                            }`}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className={`text-xs font-semibold uppercase tracking-wider ${
+                                entry.nextStepDone ? 'text-emerald-700' : 'text-amber-700'
+                              }`}
+                            >
+                              Sonraki adım
+                              {entry.nextStepDone ? ' • Tamamlandı' : ''}
+                            </p>
+                            <p
+                              className={`mt-0.5 whitespace-pre-wrap text-sm ${
+                                entry.nextStepDone
+                                  ? 'text-muted-foreground line-through'
+                                  : 'text-foreground'
+                              }`}
+                            >
+                              {entry.nextStep}
+                            </p>
+                            {entry.nextStepDueDate ? (
+                              <p className="mt-0.5 inline-flex items-center gap-1 text-xs text-amber-700">
+                                <CalendarIcon className="h-3 w-3" />
+                                {formatDateOnly(entry.nextStepDueDate)}
+                              </p>
+                            ) : null}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              toggleNextStepDone.mutate({
+                                entryId: entry.id,
+                                done: !entry.nextStepDone,
+                              })
+                            }
+                            disabled={toggleNextStepDone.isPending}
+                            className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${
+                              entry.nextStepDone
+                                ? 'bg-muted text-muted-foreground hover:bg-muted/70'
+                                : 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            }`}
+                          >
+                            {entry.nextStepDone ? (
+                              <>
+                                <CircleDashed className="h-3 w-3" />
+                                Geri al
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="h-3 w-3" />
+                                Tamamlandı
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
+                    {isManual ? (
+                      <button
+                        type="button"
+                        onClick={() => deleteDiaryEntry.mutate(entry.id)}
+                        disabled={deleteDiaryEntry.isPending}
+                        className="self-start rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600"
+                        title="Girdiyi arşivle"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    ) : null}
+                  </li>
+                )
+              })}
+            </ol>
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
 }

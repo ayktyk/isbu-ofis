@@ -7,6 +7,7 @@ import { authenticate } from '../middleware/auth.js'
 import { createNoteSchema, updateNoteSchema } from '../../../shared/dist/index.js'
 import { getOwnedCase, getOwnedClient } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
+import { logDiaryEntry } from '../utils/diaryLog.js'
 
 const router = Router()
 router.use(authenticate)
@@ -39,6 +40,19 @@ router.post('/', validate(createNoteSchema), async (req, res) => {
       content,
     })
     .returning()
+
+  if (note.caseId) {
+    void logDiaryEntry({
+      caseId: note.caseId,
+      userId: req.user!.userId,
+      entryType: 'note_added',
+      title: 'Not eklendi',
+      content: content.length > 200 ? content.slice(0, 197) + '...' : content,
+      linkedEntityType: 'note',
+      linkedEntityId: note.id,
+      occurredAt: note.createdAt ?? new Date(),
+    })
+  }
 
   res.status(201).json(note)
 })

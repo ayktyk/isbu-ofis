@@ -12,6 +12,7 @@ import {
   getOwnedMediationFile,
 } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
+import { logDiaryEntry } from '../utils/diaryLog.js'
 
 const router = Router()
 router.use(authenticate)
@@ -113,6 +114,20 @@ router.post('/', validate(createCollectionSchema), async (req, res) => {
       userId: req.user!.userId,
     })
     .returning()
+
+  // Dava bağlı tahsilatlarda günlüğe düş (arabuluculuk tahsilatları için günlük tutmuyoruz).
+  if (collection.caseId) {
+    void logDiaryEntry({
+      caseId: collection.caseId,
+      userId: req.user!.userId,
+      entryType: 'collection_added',
+      title: 'Tahsilat alındı',
+      content: `${collection.amount} ${collection.currency || 'TRY'}${collection.description ? ` • ${collection.description}` : ''}`,
+      linkedEntityType: 'collection',
+      linkedEntityId: collection.id,
+      occurredAt: collection.createdAt ?? new Date(),
+    })
+  }
 
   res.status(201).json(collection)
 })

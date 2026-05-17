@@ -41,6 +41,12 @@ export function useCaseDetail(id: string | undefined) {
       const res = await api.get(`/cases/${id}/detail`)
       return res.data as {
         case: any
+        financials?: {
+          contractedFee: number
+          totalCollected: number
+          totalSpent: number
+          remaining: number
+        }
         hearings: any[]
         tasks: any[]
         expenses: any[]

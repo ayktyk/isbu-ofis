@@ -8,6 +8,7 @@ import { createHearingSchema, updateHearingSchema } from '../../../shared/dist/i
 import { getOwnedCase, getOwnedHearing } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
 import { syncHearingToGoogleCalendar } from '../utils/googleCalendar.js'
+import { logDiaryEntry } from '../utils/diaryLog.js'
 
 const router = Router()
 router.use(authenticate)
@@ -97,6 +98,19 @@ router.post('/', validate(createHearingSchema), async (req: Request, res: Respon
     })
     .returning()
 
+  void logDiaryEntry({
+    caseId,
+    userId: req.user!.userId,
+    entryType: 'hearing_added',
+    title: 'Duruşma eklendi',
+    content: hearing.hearingDate
+      ? `Tarih: ${new Date(hearing.hearingDate).toLocaleString('tr-TR')}${hearing.courtRoom ? ` • Salon: ${hearing.courtRoom}` : ''}`
+      : 'Duruşma kaydı eklendi',
+    linkedEntityType: 'hearing',
+    linkedEntityId: hearing.id,
+    occurredAt: hearing.createdAt ?? new Date(),
+  })
+
   try {
     const hearingContext = await getHearingCalendarContext(req.user!.userId, hearing.id)
     if (hearingContext) {
@@ -142,6 +156,13 @@ router.put('/:id', validate(updateHearingSchema), async (req: Request, res: Resp
     }
   }
 
+  // Eski hali — diary log için "result önceden boş muydu?" kontrolü
+  const [previous] = await db
+    .select({ result: caseHearings.result, caseId: caseHearings.caseId })
+    .from(caseHearings)
+    .where(eq(caseHearings.id, hearingId))
+    .limit(1)
+
   const updateData: Record<string, unknown> = { ...req.body, updatedAt: new Date() }
 
   if (req.body.hearingDate) {
@@ -160,6 +181,20 @@ router.put('/:id', validate(updateHearingSchema), async (req: Request, res: Resp
   if (!updated) {
     res.status(404).json({ error: 'Duruşma bulunamadı.' })
     return
+  }
+
+  // Result değişti veya yeni girildi ise → günlüğe "duruşma sonucu" girdisi düşür
+  const newResult = (req.body.result ?? updated.result) as string | null | undefined
+  if (newResult && newResult !== previous?.result) {
+    void logDiaryEntry({
+      caseId: updated.caseId,
+      userId: req.user!.userId,
+      entryType: 'hearing_completed',
+      title: 'Duruşma sonucu',
+      content: newResult,
+      linkedEntityType: 'hearing',
+      linkedEntityId: updated.id,
+    })
   }
 
   try {

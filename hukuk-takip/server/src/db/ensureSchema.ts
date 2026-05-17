@@ -199,6 +199,50 @@ CREATE INDEX IF NOT EXISTS "mediation_parties_archived_idx" ON "mediation_partie
 CREATE INDEX IF NOT EXISTS "consultations_archived_idx" ON "consultations" ("archived_at");
 `
 
+// rev8 (2026-05): Dava günlüğü — manuel girdiler + otomatik aktivite olayları.
+// Her girdi (manuel veya otomatik) içinde "sonraki adım" alanı tutulabilir.
+// TAM ADDITIVE: hiçbir mevcut tablo değişmez. Sadece yeni enum + tablo + indeks.
+const REV8_CASE_DIARY_SQL = `
+DO $$ BEGIN
+  CREATE TYPE "diary_entry_type" AS ENUM (
+    'manual',
+    'hearing_added',
+    'hearing_updated',
+    'hearing_completed',
+    'task_added',
+    'task_completed',
+    'expense_added',
+    'collection_added',
+    'document_added',
+    'status_changed',
+    'note_added'
+  );
+EXCEPTION WHEN duplicate_object THEN null;
+END $$;
+
+CREATE TABLE IF NOT EXISTS "case_diary_entries" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "case_id" uuid NOT NULL REFERENCES "cases"("id") ON DELETE CASCADE,
+  "user_id" uuid NOT NULL REFERENCES "users"("id") ON DELETE RESTRICT,
+  "entry_type" "diary_entry_type" NOT NULL DEFAULT 'manual',
+  "title" varchar(255),
+  "content" text,
+  "next_step" text,
+  "next_step_due_date" date,
+  "next_step_done" boolean NOT NULL DEFAULT false,
+  "occurred_at" timestamp NOT NULL DEFAULT now(),
+  "linked_entity_type" varchar(32),
+  "linked_entity_id" uuid,
+  "archived_at" timestamp,
+  "created_at" timestamp NOT NULL DEFAULT now(),
+  "updated_at" timestamp NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS "case_diary_case_idx" ON "case_diary_entries" ("case_id");
+CREATE INDEX IF NOT EXISTS "case_diary_occurred_idx" ON "case_diary_entries" ("occurred_at");
+CREATE INDEX IF NOT EXISTS "case_diary_next_step_open_idx" ON "case_diary_entries" ("case_id", "next_step_done");
+`
+
 export async function ensureSchema() {
   if (!process.env.DATABASE_URL) {
     console.warn('ensureSchema: DATABASE_URL yok, atlaniyor.')
@@ -220,6 +264,8 @@ export async function ensureSchema() {
     console.log('Schema guard: notification_type legal_deadline_critical hazir.')
     await sql.unsafe(REV7_ARCHIVE_COLUMNS_SQL)
     console.log('Schema guard: arsivleme kolonlari hazir.')
+    await sql.unsafe(REV8_CASE_DIARY_SQL)
+    console.log('Schema guard: dava gunlugu (case_diary_entries) hazir.')
   } catch (err) {
     console.error('Schema guard hatasi:', err)
   } finally {

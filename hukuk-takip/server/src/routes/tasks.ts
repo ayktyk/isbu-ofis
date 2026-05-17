@@ -15,6 +15,7 @@ import {
 import { getOwnedCase } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
 import { syncTaskToGoogleCalendar } from '../utils/googleCalendar.js'
+import { logDiaryEntry } from '../utils/diaryLog.js'
 
 const router = Router()
 router.use(authenticate)
@@ -252,6 +253,19 @@ router.post('/', validate(createTaskSchema), async (req: Request, res: Response)
     console.error('[GoogleCalendar] Task create sync failed', task.id, error)
   }
 
+  if (task.caseId) {
+    void logDiaryEntry({
+      caseId: task.caseId,
+      userId: req.user!.userId,
+      entryType: 'task_added',
+      title: 'Görev eklendi',
+      content: task.title,
+      linkedEntityType: 'task',
+      linkedEntityId: task.id,
+      occurredAt: task.createdAt ?? new Date(),
+    })
+  }
+
   res.status(201).json(task)
 })
 
@@ -407,6 +421,19 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     })
   } catch (error) {
     console.error('[GoogleCalendar] Task status sync failed', updated.id, error)
+  }
+
+  if (status === 'completed' && updated.caseId) {
+    void logDiaryEntry({
+      caseId: updated.caseId,
+      userId: req.user!.userId,
+      entryType: 'task_completed',
+      title: 'Görev tamamlandı',
+      content: updated.title,
+      linkedEntityType: 'task',
+      linkedEntityId: updated.id,
+      occurredAt: updated.completedAt ?? new Date(),
+    })
   }
 
   res.json(updated)

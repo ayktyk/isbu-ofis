@@ -26,6 +26,7 @@ import calendarRouter from './routes/calendar.js'
 import statisticsRouter from './routes/statistics.js'
 import searchRouter from './routes/search.js'
 import consultationsRouter from './routes/consultations.js'
+import caseDiaryRouter from './routes/caseDiary.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -119,6 +120,9 @@ app.use('/api/mediation-files', mediationFilesRouter)
 app.use('/api/statistics', statisticsRouter)
 app.use('/api/search', searchRouter)
 app.use('/api/consultations', consultationsRouter)
+// Dava günlüğü — /cases/:caseId/diary, /cases/:caseId/next-step, /diary/:entryId
+// Tek router iki path prefix'inden de cevap verir; route'lar tam yolu içeriyor.
+app.use('/api', caseDiaryRouter)
 
 if (process.env.NODE_ENV === 'production') {
   const publicPath = path.join(__dirname, 'public')

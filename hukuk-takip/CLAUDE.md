@@ -6,6 +6,82 @@
 
 ---
 
+## ⛔ KRITIK: VERI KORUMA — KIRMIZI CIZGI (EN UST ONCELIK)
+
+> **Sistem 2026-04-16 itibariyla canli uretimde.** Avukat muvekkil, dava, durusma,
+> masraf, tahsilat verilerini elle giriyor. Veri kaybi geri alinamaz ve mesleki
+> sorumluluk dogurur. Bu kural diger tum kurallarin USTUNDEDIR.
+
+### Mutlak Yasak Komutlar (Acik Yazili Onay Olmadan ASLA)
+
+| Yasak Komut / Pattern | Neden |
+|----------------------|-------|
+| `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE` | Tabloyu/semayi yok eder |
+| `DROP COLUMN` | Kolondaki tum veri silinir |
+| `TRUNCATE` | Tum satirlari siler |
+| `DELETE FROM <tablo>` (toplu, WHERE'siz veya genis WHERE'li) | Toplu kayit silme |
+| `drizzle-kit drop`, `drizzle-kit reset` | Semayi sifirlar |
+| `npm run db:push -- --force`, `db:push --force` | Migration onayini atlatir |
+| `db:reset`, `db:seed --reset`, `db:drop` | Veritabanini sifirlar |
+| `docker compose down -v` | PostgreSQL volume'unu siler |
+| `docker volume rm` (hukuk-pg volume) | Volume'u dogrudan siler |
+| `rm -rf` (DB volume, migration dosyalari, backups klasoru) | Disk seviyesi yikim |
+| `git checkout`, `git reset --hard`, `git clean -fd` (migration dosyalari uzerinde) | Migration gecmisini bozar |
+
+### Migration Kurallari — Sadece Additive
+
+| Izinli | YASAK |
+|--------|-------|
+| `ADD COLUMN` (nullable veya default'lu) | `DROP COLUMN` |
+| `CREATE TABLE` (yeni) | `DROP TABLE` |
+| `CREATE INDEX` | `DROP INDEX` (canli tabloda) |
+| `NOT NULL` -> `NULL` (gevsetme) | `NULL` -> `NOT NULL` (verisiz satir varsa) |
+| Yeni `CHECK` constraint (eski veriyle uyumluysa) | Tip daraltma (varchar(255) -> varchar(50)) |
+| Rename icin: yeni kolon ekle + backfill + (sonra ayri onayla eski sil) | Tek adimda `RENAME COLUMN` |
+
+### Soft Delete Kurali
+
+- `clients`, `cases` ve kritik tablolarda `is_active = false` ile mantiksal silme yapilir.
+- `DELETE FROM` ile fiziksel silme **kod yolu eklenmeyecek**.
+- Endpoint'lerde `is_active = false` ile filtrele, satiri yok etme.
+- Muvekkil silinse bile bagli davalar gorunur kalir (Kritik Is Kurallari madde 4).
+
+### Yedek Stratejisi
+
+- **Neon PITR:** Son 7 gun otomatik (Neon dashboard -> Branches -> Restore to point before...).
+- **Manuel `pg_dump`:** Schema degisikligi ONCESI zorunlu, `backups/` klasorune tarih damgali + not dus.
+- **Migration uygulanmadan once:** `backups/README.md`'ye o migration icin yedek/strateji notu ekle.
+
+### Destructive Islem Protokolu (Sapma Gerekirse)
+
+1. **DURDUR** — komutu calistirma, plan moduna gec.
+2. Kullaniciya tam komutu, etkilenecek tablolari/satir sayisini yaz.
+3. Yedek planini belirt (Neon snapshot tarihi veya pg_dump dosya yolu).
+4. **Acik onay bekle** — generic "tamam" yetmez, kullanicinin komutu veya etkilenen tabloyu tekrarlamasi beklenir.
+5. Destructive olmayan alternatif (ADD COLUMN + backfill, soft delete, yeni tablo + view) once sunulur.
+6. Onaylanirsa: once yedek al -> sonra calistir -> sonra dogrula -> sonra rapor ver.
+
+### Audit / Refactor / Cleanup Sirasinda
+
+- Hiz, UI, code-quality fix'leri guvenli — uygula (audit-fix kriterleri).
+- Schema, repository, migration degisikligi — ONCE yedek + ONCE onay.
+- "Bu kolon kullanilmiyor gorunuyor, silelim mi?" -> **SORMA, BIRAK.** Veri orada, gelecekte gerekebilir.
+- "Eski rev1 tablosu artik kullanilmiyor" -> Sadece kullanici acikca "su tabloyu sil" derse silinir.
+- Drizzle schema dosyasindan kolon/tablo cikarma da yasak — koddan silinen tablo migration uretirken DROP'a donusur.
+
+### CI/CD ve Deploy Sirasinda
+
+- `render.yaml`, `vercel.json` uzerinde migration tetikleyici komut eklenmez (orn. `db:push` build adimi yasak).
+- Production'a cikmadan once migration manuel + onayli calistirilir.
+
+### Bu Bolumun Bagli Oldugu Memory Kayitlari
+
+- `~/.claude/projects/.../memory/feedback_no_data_deletion.md` — feedback memory
+- `~/.claude/projects/.../memory/project_live_data_start.md` — canli veri context
+- `~/.claude/projects/.../memory/feedback_audit_fix_preferences.md` — audit filtresi
+
+---
+
 ## Projenin Amaci
 
 Kucuk bir hukuk burosu (2-5 kisi) icin, hem telefon hem bilgisayardan kullanilabilen,

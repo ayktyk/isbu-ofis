@@ -6,6 +6,82 @@
 
 ---
 
+## ⛔ KRİTİK: VERİ KORUMA — KIRMIZI ÇİZGİ (EN ÜST ÖNCELİK)
+
+> **Sistem 2026-04-16 itibarıyla canlı üretimde.** Avukat müvekkil, dava, duruşma,
+> masraf, tahsilat verilerini elle giriyor. Veri kaybı geri alınamaz ve mesleki
+> sorumluluk doğurur. Bu kural diğer tüm kuralların ÜSTÜNDEDİR.
+
+### Mutlak Yasak Komutlar (Açık Yazılı Onay Olmadan ASLA)
+
+| Yasak Komut / Pattern | Neden |
+|----------------------|-------|
+| `DROP TABLE`, `DROP SCHEMA`, `DROP DATABASE` | Tabloyu/şemayı yok eder |
+| `DROP COLUMN` | Kolondaki tüm veri silinir |
+| `TRUNCATE` | Tüm satırları siler |
+| `DELETE FROM <tablo>` (toplu, WHERE'siz veya geniş WHERE'li) | Toplu kayıt silme |
+| `drizzle-kit drop`, `drizzle-kit reset` | Şemayı sıfırlar |
+| `npm run db:push -- --force`, `db:push --force` | Migration onayını atlatır |
+| `db:reset`, `db:seed --reset`, `db:drop` | Veritabanını sıfırlar |
+| `docker compose down -v` | PostgreSQL volume'unu siler |
+| `docker volume rm` (hukuk-pg / hukuk-takip volume) | Volume'u doğrudan siler |
+| `rm -rf` (DB volume, migration dosyaları, backups klasörü) | Disk seviyesi yıkım |
+| `git checkout`, `git reset --hard`, `git clean -fd` (migration dosyaları üzerinde) | Migration geçmişini bozar |
+
+### Migration Kuralları — Sadece Additive
+
+| ✓ İzinli | ✗ YASAK |
+|---------|---------|
+| `ADD COLUMN` (nullable veya default'lu) | `DROP COLUMN` |
+| `CREATE TABLE` (yeni) | `DROP TABLE` |
+| `CREATE INDEX` | `DROP INDEX` (canlı tabloda) |
+| `NOT NULL` → `NULL` (gevşetme) | `NULL` → `NOT NULL` (verisiz satır varsa) |
+| Yeni `CHECK` constraint (eski veriyle uyumluysa) | Tip daraltma (varchar(255) → varchar(50)) |
+| Rename için: yeni kolon ekle + backfill + (sonra ayrı onayla eski sil) | Tek adımda `RENAME COLUMN` |
+
+### Soft Delete Kuralı
+
+- `clients`, `cases` ve kritik tablolarda `is_active = false` ile mantıksal silme yapılır.
+- `DELETE FROM` ile fiziksel silme **kod yolu eklenmeyecek**.
+- Endpoint'lerde `is_active = false` ile filtrele, satırı yok etme.
+- Müvekkil silinse bile bağlı davalar görünür kalır (CLAUDE.md madde 4).
+
+### Yedek Stratejisi
+
+- **Neon PITR:** Son 7 gün otomatik (Neon dashboard → Branches → Restore to point before...).
+- **Manuel `pg_dump`:** Schema değişikliği ÖNCESİ zorunlu, `backups/` klasörüne tarih damgalı + not düş.
+- **Migration uygulanmadan önce:** `backups/README.md`'ye o migration için yedek/strateji notu ekle.
+
+### Destructive İşlem Protokolü (Sapma Gerekirse)
+
+1. **DURDUR** — komutu çalıştırma, plan moduna geç.
+2. Kullanıcıya tam komutu, etkilenecek tabloları/satır sayısını yaz.
+3. Yedek planını belirt (Neon snapshot tarihi veya pg_dump dosya yolu).
+4. **Açık onay bekle** — generic "tamam" yetmez, kullanıcının komutu veya etkilenen tabloyu tekrarlaması beklenir.
+5. Destructive olmayan alternatif (ADD COLUMN + backfill, soft delete, yeni tablo + view) önce sunulur.
+6. Onaylanırsa: önce yedek al → sonra çalıştır → sonra doğrula → sonra rapor ver.
+
+### Audit / Refactor / Cleanup Sırasında
+
+- Hız, UI, code-quality fix'leri güvenli — uygula (`feedback_audit_fix_preferences.md` kriteri).
+- Schema, repository, migration değişikliği — ÖNCE yedek + ÖNCE onay.
+- "Bu kolon kullanılmıyor görünüyor, silelim mi?" → **SORMA, BIRAK.** Veri orada, gelecekte gerekebilir.
+- "Eski rev1 tablosu artık kullanılmıyor" → Sadece kullanıcı açıkça "şu tabloyu sil" derse silinir.
+- Drizzle schema dosyasından kolon/tablo çıkarma da yasak — koddan silinen tablo migration üretirken DROP'a dönüşür.
+
+### CI/CD ve Deploy Sırasında
+
+- `render.yaml`, `vercel.json` üzerinde migration tetikleyici komut eklenmez (örn. `db:push` build adımı yasak).
+- Production'a çıkmadan önce migration manuel + onaylı çalıştırılır.
+
+### Bu Bölümün Bağlı Olduğu Memory Kayıtları
+
+- `~/.claude/projects/.../memory/feedback_no_data_deletion.md` — feedback memory
+- `~/.claude/projects/.../memory/project_live_data_start.md` — canlı veri context
+- `~/.claude/projects/.../memory/feedback_audit_fix_preferences.md` — audit filtresi
+
+---
+
 ## Projenin Amacı
 
 Küçük bir hukuk bürosu (2-5 kişi) için, hem telefon hem bilgisayardan
