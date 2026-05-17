@@ -501,7 +501,7 @@ export default function StatisticsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto max-w-full">
+            <div className="table-mobile-scroll max-w-full">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">

@@ -260,7 +260,7 @@ export default function CasesPage() {
           ) : (
             <Card className="overflow-hidden border-0 shadow-sm">
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
+                <div className="table-mobile-scroll">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-[0.18em] text-muted-foreground">

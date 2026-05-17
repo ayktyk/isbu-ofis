@@ -223,7 +223,7 @@ export default function ClientDetailPage() {
                 <p className="text-sm text-muted-foreground">Bu müvekkile ait dava bulunmuyor.</p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="table-mobile-scroll">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">

@@ -195,7 +195,7 @@ export default function CmkAssignmentsPage() {
               </p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="table-mobile-scroll">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b text-left text-xs uppercase tracking-wider text-muted-foreground">

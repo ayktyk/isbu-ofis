@@ -39,6 +39,13 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
+          // Yeni SW kontrolü hemen alsın — autoUpdate ile birlikte. Bu kalktığında
+          // eski SW eski cache'lenmiş asset'leri sunarken yeni HTML yeni hash'li JS
+          // chunk'ı istiyor → 404 / boş tepkili scroll-takılma yaşanıyor. skipWaiting +
+          // clientsClaim, dağıtım sonrası kullanıcıyı tek refresh'le güncel sürüme
+          // taşır, scroll/event çakışmasını önler.
+          skipWaiting: true,
+          clientsClaim: true,
           // Tum build ciktisi (JS, CSS, HTML, assets) precache'lenir.
           // Hashed asset'ler 1 yil immutable cache'de kalir — Workbox zaten cache-busting'i
           // filename hash'i ile yapar, revision: null guvenli.

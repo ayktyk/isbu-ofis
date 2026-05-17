@@ -689,7 +689,7 @@ export default function DashboardPage() {
                 <p className="text-sm text-muted-foreground">Beklenen tahsilat bulunmuyor.</p>
               </div>
             ) : (
-              <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+              <div className="nested-scroll max-h-[420px] space-y-2 pr-1">
                 {outstandingFees.map((fee: any) => {
                   const isMediation = fee.source === 'mediation'
                   return (

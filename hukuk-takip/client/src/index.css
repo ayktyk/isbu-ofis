@@ -298,6 +298,36 @@ html.theme-chamber {
     overflow-x: hidden;
   }
 
+  /* Ana scroll konteyneri — iOS Safari momentum scroll + overscroll bounce'u
+     içerde tutar. Aksi halde mobil drawer ve nested scroll'lar parmak takıyor. */
+  #app-scroll-main {
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-y: contain;
+    /* Scroll thread'i ana render'dan ayır — yumuşak kaydırma + paint ucuzlatır */
+    transform: translateZ(0);
+    will-change: scroll-position;
+  }
+
+  /* Yatay scroll'lu tablolar (CasesPage, CMK, vb) — parmak yatay/dikey arası
+     kararsız kalırken yatay scroll dikeyi bloklamasın. Dikey kaydırma her
+     zaman önce çalışır. */
+  .table-mobile-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
+  }
+
+  /* Widget içi nested scroll (Dashboard bekleyen tahsilat vb) — parmak içeride
+     scroll yapınca dışa propagate olmasın. iOS Safari'de en sık scroll-stuck
+     sebebidir. */
+  .nested-scroll {
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+  }
+
   h1, h2, h3, h4, h5, h6 {
     font-family: var(--font-serif);
     letter-spacing: -0.01em;

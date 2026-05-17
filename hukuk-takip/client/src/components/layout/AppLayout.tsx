@@ -97,7 +97,10 @@ function useBackendKeepWarm() {
 function useSidebarSwipe(open: boolean, onOpen: () => void, onClose: () => void) {
   const startX = useRef<number | null>(null)
   const startY = useRef<number | null>(null)
-  const moved = useRef(false)
+  // touchmove tetiklenme oranını düşürmek için tracking flag — sadece kenar/açık
+  // swipe başladığında dinler. Aksi halde her parmak hareketinde JS callback
+  // çağrısı yapılıyor, mobilde scroll thread'ini meşgul ediyordu.
+  const tracking = useRef(false)
 
   useEffect(() => {
     const EDGE_THRESHOLD = 24
@@ -107,25 +110,30 @@ function useSidebarSwipe(open: boolean, onOpen: () => void, onClose: () => void)
 
     const onTouchStart = (e: TouchEvent) => {
       const t = e.touches[0]
-      if (!t) return
-      moved.current = false
+      if (!t) {
+        tracking.current = false
+        return
+      }
       // Sidebar açıkken her yerden swipe close kabul et
       if (open) {
         startX.current = t.clientX
         startY.current = t.clientY
+        tracking.current = true
         return
       }
       // Sidebar kapalıyken sadece sol kenardan başlayan swipe sayılır
       if (t.clientX <= EDGE_THRESHOLD) {
         startX.current = t.clientX
         startY.current = t.clientY
+        tracking.current = true
       } else {
-        startX.current = null
-        startY.current = null
+        tracking.current = false
       }
     }
 
     const onTouchMove = (e: TouchEvent) => {
+      // Fast-path: parmak normal scroll yapıyorsa hiç hesap yapma
+      if (!tracking.current) return
       if (startX.current === null || startY.current === null) return
       const t = e.touches[0]
       if (!t) return
@@ -133,27 +141,28 @@ function useSidebarSwipe(open: boolean, onOpen: () => void, onClose: () => void)
       const dy = Math.abs(t.clientY - startY.current)
       // Dikey hareket baskın → kullanıcı scroll'luyor, swipe iptal
       if (dy > MAX_VERTICAL_DRIFT && Math.abs(dx) < dy) {
+        tracking.current = false
         startX.current = null
         startY.current = null
         return
       }
       if (!open && dx >= OPEN_THRESHOLD) {
-        moved.current = true
         onOpen()
+        tracking.current = false
         startX.current = null
         startY.current = null
       } else if (open && dx <= -CLOSE_THRESHOLD) {
-        moved.current = true
         onClose()
+        tracking.current = false
         startX.current = null
         startY.current = null
       }
     }
 
     const onTouchEnd = () => {
+      tracking.current = false
       startX.current = null
       startY.current = null
-      moved.current = false
     }
 
     document.addEventListener('touchstart', onTouchStart, { passive: true })
