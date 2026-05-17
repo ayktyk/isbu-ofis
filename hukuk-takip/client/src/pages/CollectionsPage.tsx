@@ -14,10 +14,11 @@ import {
   Receipt,
   TrendingUp,
   Inbox,
+  Shield,
 } from 'lucide-react'
 
-// Kaynak filtresi: tum | sadece dava | sadece arabuluculuk
-type SourceFilter = 'all' | 'case' | 'mediation'
+// Kaynak filtresi: tum | sadece dava | sadece arabuluculuk | sadece CMK
+type SourceFilter = 'all' | 'case' | 'mediation' | 'cmk'
 
 const paymentMethodLabels: Record<string, string> = {
   cash: 'Nakit',
@@ -164,10 +165,13 @@ export default function CollectionsPage() {
       {/* Filtreler */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex rounded-xl border bg-card p-1 text-sm">
-          {(['all', 'case', 'mediation'] as SourceFilter[]).map((key) => {
+          {(['all', 'case', 'mediation', 'cmk'] as SourceFilter[]).map((key) => {
             const active = source === key
             const label =
-              key === 'all' ? 'Tümü' : key === 'case' ? 'Davalar' : 'Arabuluculuk'
+              key === 'all' ? 'Tümü'
+              : key === 'case' ? 'Davalar'
+              : key === 'mediation' ? 'Arabuluculuk'
+              : 'CMK'
             return (
               <button
                 key={key}
@@ -258,6 +262,7 @@ export default function CollectionsPage() {
                 <tbody className="divide-y">
                   {filtered.map((c) => {
                     const isMediation = !!c.mediationFileId
+                    const isCmk = !isMediation && !!c.caseIsCmk
                     const sourceTitle = isMediation
                       ? c.mediationFileNo
                         ? `Arabuluculuk · ${c.mediationFileNo}`
@@ -266,7 +271,12 @@ export default function CollectionsPage() {
                     const sourceSub = isMediation
                       ? c.mediationDisputeType || ''
                       : c.caseNumber || ''
-                    const SourceIcon = isMediation ? Handshake : Scale
+                    const SourceIcon = isMediation ? Handshake : isCmk ? Shield : Scale
+                    const sourceIconColor = isMediation
+                      ? 'text-orange-500'
+                      : isCmk
+                      ? 'text-indigo-600'
+                      : 'text-law-accent'
                     const clickable = !!c.caseId || !!c.mediationFileId
 
                     return (
@@ -283,12 +293,17 @@ export default function CollectionsPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-start gap-2">
                             <SourceIcon
-                              className={`mt-0.5 h-4 w-4 flex-shrink-0 ${
-                                isMediation ? 'text-orange-500' : 'text-law-accent'
-                              }`}
+                              className={`mt-0.5 h-4 w-4 flex-shrink-0 ${sourceIconColor}`}
                             />
                             <div className="min-w-0">
-                              <p className="truncate font-medium">{sourceTitle}</p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="truncate font-medium">{sourceTitle}</p>
+                                {isCmk && (
+                                  <span className="rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-indigo-700">
+                                    CMK
+                                  </span>
+                                )}
+                              </div>
                               {sourceSub && (
                                 <p className="truncate text-xs text-muted-foreground">
                                   {sourceSub}

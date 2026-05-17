@@ -6,7 +6,7 @@ import { api } from '@/lib/axios'
 // hook tum listeyi cekmek icindir; dava/dosya ici detay icin zaten useCases
 // ve useMediationFiles altinda daralt filtrli hook'lar var.
 export function useAllCollections(params?: {
-  source?: 'case' | 'mediation'
+  source?: 'case' | 'mediation' | 'cmk'
 }) {
   return useQuery({
     queryKey: ['collections', 'all', params],

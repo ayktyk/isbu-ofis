@@ -94,6 +94,7 @@ router.get('/', async (req, res) => {
     allTimeCmkIncomeRaw,
     monthlyCmkCollectionsRaw,
     cmkActiveCountRaw,
+    monthlyCmkCasesRaw,
     cmkExpectedRaw,
   ] = await Promise.all([
     // monthlyCases
@@ -234,6 +235,23 @@ router.get('/', async (req, res) => {
         sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.isCmkAssignment} = true`
       ),
 
+    // monthlyCmkCases — son 12 ay her ay açılan CMK görevlendirme sayısı.
+    // İstatistikler sayfasındaki "Aylık Dosya Sayısı" grafiğinde CMK
+    // serisini ayrı bar olarak çizmek için kullanılır. monthlyCases zaten
+    // tüm davaları (CMK dahil) içerdiği için burada sadece CMK alt kümesi
+    // sayılır.
+    db
+      .select({
+        month: sql<string>`TO_CHAR(${cases.createdAt}, 'YYYY-MM')`,
+        count: sql<number>`COUNT(*)::int`,
+      })
+      .from(cases)
+      .where(
+        sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.isCmkAssignment} = true AND ${cases.createdAt} >= NOW() - INTERVAL '12 months'`
+      )
+      .groupBy(sql`TO_CHAR(${cases.createdAt}, 'YYYY-MM')`)
+      .orderBy(sql`TO_CHAR(${cases.createdAt}, 'YYYY-MM')`),
+
     // cmkExpected — tek kaynak: helper'dan CMK'ya filtrelenmiş bekleyen liste.
     // Toplam burada sum edilir; Dashboard'daki bekleyen widget toplamıyla
     // tutarlı çalışsın diye aynı sorgu üzerinden gelir.
@@ -356,6 +374,18 @@ router.get('/', async (req, res) => {
     amount: parseFloat(cmkMap.get(m) || '0').toFixed(2),
   }))
 
+  // CMK aylık dosya sayısı — "Aylık Dosya Sayısı" grafiğinde Davalar /
+  // Arabuluculuk / CMK üç ayrı bar olarak çizilebilsin diye 12 aylık seri.
+  // monthlyCases zaten CMK dahil toplamı verdiği için burada sadece CMK
+  // alt kümesi sayılıyor; istemcide kullanıcı dilerse Davalar - CMK
+  // farkını alır ya da olduğu gibi gösterir.
+  const cmkCaseCountMap = new Map(monthlyCmkCasesRaw.map((r) => [r.month, r.count]))
+  const monthlyCmkCases = monthKeys.map((m) => ({
+    month: m,
+    label: monthLabel(m),
+    count: cmkCaseCountMap.get(m) ?? 0,
+  }))
+
   res.json({
     monthlyCases,
     monthlyCollections, // backward compat
@@ -382,6 +412,7 @@ router.get('/', async (req, res) => {
       cmkExpected: cmkExpected.toFixed(2),
     },
     monthlyCmkIncome,
+    monthlyCmkCases,
   })
 })
 

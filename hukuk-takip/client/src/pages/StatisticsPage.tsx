@@ -185,25 +185,46 @@ export default function StatisticsPage() {
     monthlyCollections,
     monthlyIncome,
     monthlyMediations,
+    monthlyCmkCases,
+    monthlyCmkIncome,
     casesByType,
     casesByStatus,
     expectedCollections,
     totals,
   } = data
 
-  // Prepare bar chart data: merge cases + mediations per month
-  const monthlyBarData = (monthlyCases || []).map((mc: any, i: number) => ({
-    name: shortMonth(mc.label),
-    Davalar: mc.count,
-    Arabuluculuk: monthlyMediations?.[i]?.count ?? 0,
-  }))
+  // Prepare bar chart data: dava (CMK hariç) + arabuluculuk + CMK üç ayrı bar.
+  // monthlyCases zaten CMK dahil toplamı verdiği için bağımsız CMK serisini
+  // çıkararak çift sayımı önlüyoruz; sütunların toplamı toplam dosya sayısına
+  // eşit kalır.
+  const monthlyBarData = (monthlyCases || []).map((mc: any, i: number) => {
+    const cmkCount = monthlyCmkCases?.[i]?.count ?? 0
+    const davaCount = Math.max(0, (mc.count ?? 0) - cmkCount)
+    return {
+      name: shortMonth(mc.label),
+      Davalar: davaCount,
+      Arabuluculuk: monthlyMediations?.[i]?.count ?? 0,
+      CMK: cmkCount,
+    }
+  })
 
-  // Gelir — stacked bar (dava + arabuluculuk kırılımı)
-  const incomeBarData = (monthlyIncome || monthlyCollections || []).map((mc: any) => ({
-    name: shortMonth(mc.label),
-    Dava: parseFloat(mc.caseAmount ?? mc.amount ?? '0') || 0,
-    Arabuluculuk: parseFloat(mc.mediationAmount ?? '0') || 0,
-  }))
+  // Gelir — stacked bar (dava + CMK + arabuluculuk kırılımı). CMK geliri
+  // backend tarafında dava tahsilatlarının alt kümesi; çift sayım olmaması
+  // için "Dava" serisinden CMK çıkarılıyor.
+  const cmkIncomeMap = new Map<string, number>(
+    (monthlyCmkIncome || []).map((r: any) => [r.month, parseFloat(r.amount ?? '0') || 0])
+  )
+  const incomeBarData = (monthlyIncome || monthlyCollections || []).map((mc: any) => {
+    const caseTotal = parseFloat(mc.caseAmount ?? mc.amount ?? '0') || 0
+    const cmk = cmkIncomeMap.get(mc.month) ?? 0
+    const davaPuru = Math.max(0, caseTotal - cmk)
+    return {
+      name: shortMonth(mc.label),
+      Dava: davaPuru,
+      CMK: cmk,
+      Arabuluculuk: parseFloat(mc.mediationAmount ?? '0') || 0,
+    }
+  })
 
   // Pie chart data
   const typeData = (casesByType || [])
@@ -331,8 +352,9 @@ export default function StatisticsPage() {
                     tickLine={false}
                   />
                   <Tooltip content={<ChartTooltip />} />
-                  <Bar dataKey="Davalar" fill={CHART_COLORS[0]} radius={[4, 4, 0, 0]} maxBarSize={32} />
-                  <Bar dataKey="Arabuluculuk" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]} maxBarSize={32} />
+                  <Bar dataKey="Davalar" fill={CHART_COLORS[0]} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="Arabuluculuk" fill={CHART_COLORS[1]} radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Bar dataKey="CMK" fill={CHART_COLORS[4]} radius={[4, 4, 0, 0]} maxBarSize={28} />
                   <Legend
                     wrapperStyle={{ fontSize: 12, paddingTop: 8 }}
                     iconType="circle"
@@ -359,7 +381,11 @@ export default function StatisticsPage() {
               <div className="flex flex-wrap gap-3 text-[11px]">
                 <span className="flex items-center gap-1">
                   <span className="h-2 w-2 rounded-full" style={{ background: CHART_COLORS[0] }} />
-                  Dava: <span className="font-semibold text-foreground">{formatCurrency(totals?.totalCaseIncome)}</span>
+                  Dava: <span className="font-semibold text-foreground">{formatCurrency(Math.max(0, parseFloat(totals?.totalCaseIncome ?? '0') - parseFloat(totals?.totalCmkIncome ?? '0')))}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-full" style={{ background: CHART_COLORS[4] }} />
+                  CMK: <span className="font-semibold text-foreground">{formatCurrency(totals?.totalCmkIncome)}</span>
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="h-2 w-2 rounded-full" style={{ background: CHART_COLORS[1] }} />
@@ -387,6 +413,7 @@ export default function StatisticsPage() {
                   />
                   <Tooltip content={<ChartTooltip isCurrency />} />
                   <Bar dataKey="Dava" stackId="inc" fill={CHART_COLORS[0]} maxBarSize={40} />
+                  <Bar dataKey="CMK" stackId="inc" fill={CHART_COLORS[4]} maxBarSize={40} />
                   <Bar dataKey="Arabuluculuk" stackId="inc" fill={CHART_COLORS[1]} maxBarSize={40} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>

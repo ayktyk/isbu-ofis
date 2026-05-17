@@ -42,6 +42,7 @@ interface CalcResult {
   bihakkinTarih: Date
   kapaliCezaeviGun: number
   acikCezaeviTarih: Date | null
+  yariAcikTarih: Date | null
   uygulananMevzuat: string[]
   penaltyType: PenaltyType
   uyarilar: string[]
@@ -219,6 +220,17 @@ function calculate(form: FormState): CalcResult | null {
       )
     }
 
+    // Müebbette açık cezaevine ayrılma: koşullu salıverilmeye 6 ay kala
+    // (5275 SK m.14/2-d). Yarı açık (yarı açık → açık 1 yıl + açıkta DS
+    // süresi) detayı pratikte savcılık kararına bağlı; biz iyi hal varsa
+    // koşullu salıverilmeden 6 ay öncesini "açık" başlangıcı kabul ediyoruz.
+    const acikCezaeviTarih = form.iyiHal && kapaliGun > 0
+      ? addDays(kosulluTarih, -Math.min(180, kapaliGun))
+      : null
+    const yariAcikTarih = form.iyiHal && kapaliGun > 365
+      ? addDays(kosulluTarih, -Math.min(365, kapaliGun))
+      : null
+
     return {
       toplamCezaGun: baseYil * 365,
       mahsupGun: form.detentionDays,
@@ -229,12 +241,10 @@ function calculate(form: FormState): CalcResult | null {
       kosulluTarih,
       denetimliSerbestlikGun: dsGun,
       denetimliSerbestlikBaslangic: dsBaslangic,
-      bihakkinTarih: addDays(executionStart, 99 * 365), // symbolic
+      bihakkinTarih: addDays(executionStart, 99 * 365), // symbolic — müebbette cezanın tamamı
       kapaliCezaeviGun: kapaliGun,
-      acikCezaeviTarih:
-        kapaliGun > 0
-          ? addDays(executionStart, Math.ceil(kapaliGun / 2))
-          : null,
+      acikCezaeviTarih,
+      yariAcikTarih,
       uygulananMevzuat: [...new Set(mevzuat)],
       penaltyType: form.penaltyType,
       uyarilar,
@@ -328,15 +338,26 @@ function calculate(form: FormState): CalcResult | null {
   const dsBaslangic = addDays(kosulluTarih, -dsGun)
   const bihakkinTarih = addDays(executionStart, netGun)
 
-  // Step 8: Kapali cezaevi
+  // Step 8: Kapalı / Yarı Açık / Açık geçişler
+  // ─ Kapalı süre = koşullu süresi − denetimli serbestlik süresi.
+  // ─ Yarı açık: 5275 SK m.14/2 ve Yön. m.32 — iyi hâlli hükümlü, koşullu
+  //   salıverilme süresine en fazla 1 yıl kala yarı açığa ayrılabilir.
+  // ─ Açık: yarı açıkta kalan iyi hâlli, koşullu salıverilme süresine
+  //   6 ay kala açığa ayrılabilir (uyuşturucu/cinsel/terör için farklı
+  //   süreler ve şartlar mevzuatta detaylandırılır).
   const kapaliGun = Math.max(0, kosulluGun - dsGun)
-  const acikCezaeviTarih =
-    kapaliGun > 0 && form.iyiHal
-      ? addDays(executionStart, Math.ceil(kapaliGun / 2))
-      : null
+  const acikCezaeviTarih = form.iyiHal && kapaliGun > 0
+    ? addDays(kosulluTarih, -Math.min(180, kapaliGun))
+    : null
+  const yariAcikTarih = form.iyiHal && kapaliGun > 365
+    ? addDays(kosulluTarih, -Math.min(365, kapaliGun))
+    : null
 
   if (form.detentionDays > 0) {
     uyarilar.push(`${form.detentionDays} gun tutukluluk/gozalti suresi mahsup edildi.`)
+  }
+  if (form.iyiHal) {
+    mevzuat.push('5275 SK m.14, İnfaz Tüzüğü m.32')
   }
 
   return {
@@ -352,6 +373,7 @@ function calculate(form: FormState): CalcResult | null {
     bihakkinTarih,
     kapaliCezaeviGun: kapaliGun,
     acikCezaeviTarih,
+    yariAcikTarih,
     uygulananMevzuat: [...new Set(mevzuat)],
     penaltyType: form.penaltyType,
     uyarilar,
@@ -507,8 +529,10 @@ export default function SentenceCalcPage() {
         </svg>
         <p>
           Bu hesaplama bilgilendirme amaçlıdır, kesin sonuç için infaz savcılığına
-          başvurunuz. Hesaplama 5275 SK, 7242 SK ve 7456 SK hükümlerine
-          dayanmaktadır.
+          başvurunuz. Hesaplama 5275 SK (İnfaz K.), 7242 SK (2020) ve 7456 SK (01.08.2023)
+          ile İnfaz Kanunu Tüzüğü hükümlerine göre yapılır. Suç tarihi hangi kanunun
+          uygulanacağını belirler; özellikle 01.08.2023 sonrası işlenen suçlarda
+          denetimli serbestlik süresi koşullu salıverilme süresinin yarısıdır.
         </p>
       </div>
 
@@ -851,16 +875,24 @@ export default function SentenceCalcPage() {
               />
 
               <ResultCard
-                label="Yatar Süresi (Kapalı Cezaevi)"
+                label="Yatar Süresi (Kapalı + Yarı Açık)"
                 value={daysToYMD(result.kapaliCezaeviGun)}
-                sublabel={`${result.kapaliCezaeviGun} gün`}
+                sublabel={`${result.kapaliCezaeviGun} gün — DS hariç fiilen yatılacak süre`}
               />
+
+              {result.yariAcikTarih && (
+                <ResultCard
+                  label="Yarı Açığa Ayrılma (tahmini)"
+                  value={formatDate(result.yariAcikTarih)}
+                  sublabel="Koşullu salıverilmeye 1 yıl kala (5275 SK m.14)"
+                />
+              )}
 
               {result.acikCezaeviTarih && (
                 <ResultCard
-                  label="Açık Cezaevine Ayrılma (tahmini)"
+                  label="Açığa Ayrılma (tahmini)"
                   value={formatDate(result.acikCezaeviTarih)}
-                  sublabel="İyi halli hükümlü için tahmini"
+                  sublabel="Koşullu salıverilmeye 6 ay kala (İnfaz Tüzüğü m.32)"
                 />
               )}
             </div>

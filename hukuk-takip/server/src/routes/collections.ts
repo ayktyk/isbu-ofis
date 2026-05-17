@@ -22,7 +22,7 @@ router.use(authenticate)
 router.get('/', async (req, res) => {
   const caseId = getSingleValue(req.query.caseId)
   const mediationFileId = getSingleValue(req.query.mediationFileId)
-  const source = getSingleValue(req.query.source) // 'case' | 'mediation'
+  const source = getSingleValue(req.query.source) // 'case' | 'mediation' | 'cmk'
 
   // Polimorfik owner check: collections.user_id direkt ya da case.user_id üzerinden
   const ownerCondition = or(
@@ -41,6 +41,9 @@ router.get('/', async (req, res) => {
   if (mediationFileId) conditions.push(eq(collections.mediationFileId, mediationFileId))
   if (source === 'case') conditions.push(isNull(collections.mediationFileId))
   if (source === 'mediation') conditions.push(isNull(collections.caseId))
+  // CMK filtresi: yalnız CMK görevlendirmesi atanmış davalara bağlı tahsilatlar.
+  // mediation tahsilatları zaten CMK olamayacağı için hariçtir.
+  if (source === 'cmk') conditions.push(eq(cases.isCmkAssignment, true))
 
   const data = await db
     .select({
@@ -57,6 +60,7 @@ router.get('/', async (req, res) => {
       receiptNo: collections.receiptNo,
       caseTitle: cases.title,
       caseNumber: cases.caseNumber,
+      caseIsCmk: cases.isCmkAssignment,
       mediationFileNo: mediationFiles.fileNo,
       mediationDisputeType: mediationFiles.disputeType,
       clientName: clients.fullName,

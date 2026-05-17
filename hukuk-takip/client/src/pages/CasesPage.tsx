@@ -264,6 +264,7 @@ export default function CasesPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                        <th className="w-12 px-3 py-3 text-center">#</th>
                         <th className="px-4 py-3">Dava</th>
                         <th className="hidden px-4 py-3 sm:table-cell">Müvekkil</th>
                         <th className="hidden px-4 py-3 md:table-cell">Tur</th>
@@ -276,13 +277,18 @@ export default function CasesPage() {
                     <tbody className="divide-y">
                       {/* Potansiyel görüşmeler — sadece "Potansiyel Davalar" sekmesinde
                           ve filtre yokken üstte gösterilir. Tıklanınca Görüşmeler
-                          sayfasına yönlendirir; cases gibi düzenle/sil eylemi yok. */}
-                      {consultationRows.map((cons: any) => (
+                          sayfasına yönlendirir; cases gibi düzenle/sil eylemi yok.
+                          Sıra numarası, görüşmeler ile dava sayımı için ortak bir
+                          sayaç kullanılır. */}
+                      {consultationRows.map((cons: any, consIdx: number) => (
                         <tr
                           key={`cons-${cons.id}`}
                           onClick={() => navigate('/consultations')}
                           className="cursor-pointer bg-amber-50/40 transition hover:bg-amber-100/60"
                         >
+                          <td className="w-12 px-3 py-3 text-center text-xs font-semibold tabular-nums text-muted-foreground">
+                            {consIdx + 1}
+                          </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <PhoneCall className="h-3.5 w-3.5 flex-shrink-0 text-amber-600" />
@@ -324,12 +330,15 @@ export default function CasesPage() {
                           </td>
                         </tr>
                       ))}
-                      {cases.map((item: any) => (
+                      {cases.map((item: any, idx: number) => (
                         <tr
                           key={item.id}
                           onClick={() => navigate(`/cases/${item.id}`)}
                           className="cursor-pointer transition hover:bg-muted/50"
                         >
+                          <td className="w-12 px-3 py-3 text-center text-xs font-semibold tabular-nums text-muted-foreground">
+                            {consultationRows.length + (page - 1) * pageSize + idx + 1}
+                          </td>
                           <td className="px-4 py-3">
                             <p className="font-medium">{item.title}</p>
                             {item.caseNumber && (

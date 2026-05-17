@@ -144,6 +144,7 @@ export default function ClientsPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b bg-muted/30 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <th className="w-12 px-3 py-3 text-center">#</th>
                     <th className="px-4 py-3">Müvekkil</th>
                     <th className="hidden px-4 py-3 md:table-cell">TC No</th>
                     <th className="hidden px-4 py-3 sm:table-cell">Telefon</th>
@@ -153,12 +154,15 @@ export default function ClientsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {clients.map((client: any) => (
+                  {clients.map((client: any, idx: number) => (
                     <tr
                       key={client.id}
                       onClick={() => navigate(`/clients/${client.id}`)}
                       className="cursor-pointer transition-colors hover:bg-muted/50 even:bg-muted/20"
                     >
+                      <td className="w-12 px-3 py-3 text-center text-xs font-semibold tabular-nums text-muted-foreground">
+                        {(page - 1) * pageSize + idx + 1}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-law-primary text-xs font-semibold text-white">
