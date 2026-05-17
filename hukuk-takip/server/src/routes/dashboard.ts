@@ -194,6 +194,9 @@ router.get('/', async (req, res) => {
       .where(userOwnedCollectionsClause(userId)),
 
     // Bekleyen ücret — davalar
+    // Sıralama: önce en yeni eklenen, sonra en çok kalan. Avukatın az önce
+    // eklediği bir dava (örn. 10.000 TL ceza davası) widget'ın listesinde
+    // büyük tutarlı eski davaların ardına düşmesin diye createdAt DESC öncelikli.
     db
       .select({
         id: cases.id,
@@ -203,6 +206,7 @@ router.get('/', async (req, res) => {
         totalCollected: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
         remaining: sql<string>`(${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0))::text`,
         source: sql<string>`'case'`,
+        createdAt: cases.createdAt,
       })
       .from(cases)
       .leftJoin(clients, eq(cases.clientId, clients.id))
@@ -213,13 +217,23 @@ router.get('/', async (req, res) => {
           isNull(cases.archivedAt),
           sql`${cases.contractedFee} IS NOT NULL`,
           sql`${cases.contractedFee}::numeric > 0`,
-          or(eq(cases.status, 'active'), eq(cases.status, 'istinafta'), eq(cases.status, 'yargıtayda'))
+          // passive da dahil: avukat henüz başlanmamış ama ücret konuşulmuş
+          // davalardan da tahsilat bekliyor olabilir.
+          or(
+            eq(cases.status, 'active'),
+            eq(cases.status, 'istinafta'),
+            eq(cases.status, 'yargıtayda'),
+            eq(cases.status, 'passive'),
+          )
         )
       )
-      .groupBy(cases.id, cases.title, cases.contractedFee, clients.fullName)
+      .groupBy(cases.id, cases.title, cases.contractedFee, clients.fullName, cases.createdAt)
       .having(sql`${cases.contractedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`)
-      .orderBy(sql`${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`)
-      .limit(10),
+      .orderBy(
+        desc(cases.createdAt),
+        sql`${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`,
+      )
+      .limit(20),
 
     // Bekleyen ücret — arabuluculuklar
     db
@@ -231,6 +245,7 @@ router.get('/', async (req, res) => {
         totalCollected: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
         remaining: sql<string>`(${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0))::text`,
         source: sql<string>`'mediation'`,
+        createdAt: mediationFiles.createdAt,
       })
       .from(mediationFiles)
       .leftJoin(collections, and(eq(collections.mediationFileId, mediationFiles.id), isNull(collections.archivedAt)))
@@ -243,10 +258,13 @@ router.get('/', async (req, res) => {
           eq(mediationFiles.status, 'active')
         )
       )
-      .groupBy(mediationFiles.id, mediationFiles.fileNo, mediationFiles.disputeType, mediationFiles.agreedFee)
+      .groupBy(mediationFiles.id, mediationFiles.fileNo, mediationFiles.disputeType, mediationFiles.agreedFee, mediationFiles.createdAt)
       .having(sql`${mediationFiles.agreedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`)
-      .orderBy(sql`${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`)
-      .limit(10),
+      .orderBy(
+        desc(mediationFiles.createdAt),
+        sql`${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`,
+      )
+      .limit(20),
 
     db
       .select({ count: sql<number>`count(*)::int` })

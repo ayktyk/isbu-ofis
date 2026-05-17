@@ -689,8 +689,8 @@ export default function DashboardPage() {
                 <p className="text-sm text-muted-foreground">Beklenen tahsilat bulunmuyor.</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {outstandingFees.slice(0, 5).map((fee: any) => {
+              <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
+                {outstandingFees.map((fee: any) => {
                   const isMediation = fee.source === 'mediation'
                   return (
                     <button

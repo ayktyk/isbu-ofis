@@ -1,5 +1,5 @@
 import { Router } from 'express'
-import { and, eq, isNull, sql } from 'drizzle-orm'
+import { and, desc, eq, isNull, sql } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { cases, collections, clients, mediationFiles } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
@@ -164,6 +164,9 @@ router.get('/', async (req, res) => {
       .orderBy(sql`COUNT(*) DESC`),
 
     // expectedFromCases — davalardan bekleyen
+    // Sıralama: en yeni eklenen üstte, sonra en çok kalan. Avukatın az önce
+    // eklediği davalar (örn. ceza davaları) büyük tutarlı eski davaların
+    // altına düşüp gözden kaçmasın.
     db
       .select({
         caseId: cases.id,
@@ -173,6 +176,7 @@ router.get('/', async (req, res) => {
         collected: sql<string>`COALESCE(SUM(${collections.amount}::numeric), 0)::text`,
         remaining: sql<string>`(${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0))::text`,
         source: sql<string>`'case'`,
+        createdAt: cases.createdAt,
       })
       .from(cases)
       .leftJoin(clients, eq(cases.clientId, clients.id))
@@ -180,14 +184,15 @@ router.get('/', async (req, res) => {
       .where(
         sql`${cases.userId} = ${userId} AND ${cases.archivedAt} IS NULL AND ${cases.contractedFee} IS NOT NULL AND ${cases.contractedFee}::numeric > 0`
       )
-      .groupBy(cases.id, cases.title, clients.fullName, cases.contractedFee)
+      .groupBy(cases.id, cases.title, clients.fullName, cases.contractedFee, cases.createdAt)
       .having(
         sql`${cases.contractedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`
       )
       .orderBy(
-        sql`(${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0)) DESC`
+        desc(cases.createdAt),
+        sql`(${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0)) DESC`,
       )
-      .limit(20),
+      .limit(50),
 
     // expectedFromMediations — arabuluculuktan bekleyen
     db
@@ -291,9 +296,14 @@ router.get('/', async (req, res) => {
   const totalCollected = totalCaseIncome + totalMediationIncome
 
   // totalExpected: düzgün hesap — tüm bekleyen kalemlerin toplamı
-  const expectedCollections = [...expectedFromCases, ...expectedFromMediations].sort(
-    (a, b) => parseFloat(b.remaining || '0') - parseFloat(a.remaining || '0')
-  )
+  // Sıralama: en yeni eklenen üstte (avukatın yeni eklediği davalar büyük tutarlı
+  // eski davaların altına düşmesin). createdAt yoksa fallback olarak remaining DESC.
+  const expectedCollections = [...expectedFromCases, ...expectedFromMediations].sort((a, b) => {
+    const aDate = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0
+    const bDate = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0
+    if (aDate !== bDate) return bDate - aDate
+    return parseFloat(b.remaining || '0') - parseFloat(a.remaining || '0')
+  })
   const totalExpected = expectedCollections.reduce((s, r) => s + parseFloat(r.remaining || '0'), 0)
 
   const grossTarget = totalCollected + totalExpected
