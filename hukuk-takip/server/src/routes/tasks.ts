@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from 'express'
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { cases, notifications, tasks } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
@@ -13,7 +13,7 @@ import {
   computeLegalDeadline,
 } from '../../../shared/dist/index.js'
 import { getOwnedCase } from '../utils/ownership.js'
-import { getSingleValue } from '../utils/request.js'
+import { getPositiveInt, getSingleValue } from '../utils/request.js'
 import { syncTaskToGoogleCalendar } from '../utils/googleCalendar.js'
 import { logDiaryEntry } from '../utils/diaryLog.js'
 
@@ -82,7 +82,10 @@ function formatDateOnly(date: Date) {
 // ---------- Süreli iş yardımcı endpoint'leri (önce gelir, /:id ile çakışmaması için) ----------
 
 router.get('/deadlines/templates', (_req: Request, res: Response) => {
-  // Statik liste — frontend cache'leyebilir.
+  // Statik liste — kullanıcıya ve oturuma bağlı değil, tüm istemcilerde aynı.
+  // 24 saat immutable cache (deploy ile değişirse versiyonlu URL gerekir, şu an
+  // shared/dist import'undan geldiği için release ile değişir → bundle hash yenilenir).
+  res.set('Cache-Control', 'public, max-age=86400, immutable')
   res.json(LEGAL_DEADLINE_TEMPLATES)
 })
 
@@ -157,6 +160,13 @@ router.get('/', async (req: Request, res: Response) => {
       ? Number.parseInt(dueWithinRaw, 10)
       : null
 
+  // Opt-in pagination: page veya pageSize verilirse {data,total,page,pageSize,hasMore}
+  // formatında döner. Hiçbiri verilmezse eski davranış (düz array) korunur — CalendarPage
+  // gibi parametresiz çağıran tüketiciler bozulmadan çalışmaya devam eder.
+  const paginated = req.query.page !== undefined || req.query.pageSize !== undefined
+  const page = paginated ? getPositiveInt(req.query.page, 1) : 1
+  const pageSize = paginated ? Math.min(getPositiveInt(req.query.pageSize, 50), 200) : 0
+
   const conditions = [eq(tasks.userId, req.user!.userId), isNull(tasks.archivedAt)]
 
   if (status) {
@@ -184,14 +194,40 @@ router.get('/', async (req: Request, res: Response) => {
     conditions.push(lte(tasks.dueDate, end))
   }
 
-  const data = await db
-    .select(taskSelectColumns)
-    .from(tasks)
-    .leftJoin(cases, eq(tasks.caseId, cases.id))
-    .where(and(...conditions))
-    .orderBy(desc(tasks.createdAt))
+  const where = and(...conditions)
 
-  res.json(data)
+  if (!paginated) {
+    const data = await db
+      .select(taskSelectColumns)
+      .from(tasks)
+      .leftJoin(cases, eq(tasks.caseId, cases.id))
+      .where(where)
+      .orderBy(desc(tasks.createdAt))
+    res.json(data)
+    return
+  }
+
+  const offset = (page - 1) * pageSize
+  const [data, countResult] = await Promise.all([
+    db
+      .select(taskSelectColumns)
+      .from(tasks)
+      .leftJoin(cases, eq(tasks.caseId, cases.id))
+      .where(where)
+      .orderBy(desc(tasks.createdAt))
+      .limit(pageSize)
+      .offset(offset),
+    db.select({ count: sql<number>`count(*)::int` }).from(tasks).where(where),
+  ])
+
+  const total = countResult[0]?.count ?? 0
+  res.json({
+    data,
+    total,
+    page,
+    pageSize,
+    hasMore: offset + data.length < total,
+  })
 })
 
 router.post('/', validate(createTaskSchema), async (req: Request, res: Response) => {
