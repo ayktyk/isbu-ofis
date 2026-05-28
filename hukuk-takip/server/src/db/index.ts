@@ -11,7 +11,20 @@ export function getDb() {
     if (!process.env.DATABASE_URL) {
       throw new Error('DATABASE_URL environment variable is required')
     }
-    const queryClient = postgres(process.env.DATABASE_URL)
+    // Pool yapılandırması — Neon serverless için makul bir denge:
+    //   max=10 küçük bir büro için yeterli ve Neon pooler default'u ile uyumlu.
+    //   idle_timeout=30sn ile boşta kalan bağlantılar serbest bırakılır,
+    //     varsayılan (asla kapatma) Neon dashboard'da idle conn limit'ine
+    //     yaklaşıldıkça sorun olabilirdi.
+    //   connect_timeout=10sn ile cold start senaryosunda hızlı fail-fast.
+    // prepare default true; Neon pooler transaction mode kullanılıyorsa
+    //   PGBOUNCER_PREPARE=false env ile kapatılabilir (additive: env yoksa true).
+    const queryClient = postgres(process.env.DATABASE_URL, {
+      max: 10,
+      idle_timeout: 30,
+      connect_timeout: 10,
+      prepare: process.env.PGBOUNCER_PREPARE === 'false' ? false : true,
+    })
     _db = drizzle(queryClient, { schema })
   }
   return _db
