@@ -101,6 +101,11 @@ async function loadCriticalDeadlines(userId: string, withinDays = 7) {
 
 router.get('/', async (req, res) => {
   triggerReminderScanInBackground()
+  // Kısa vadeli cache (private — sadece bu kullanıcı için): kullanıcı tekrarlı
+  // refresh atarsa 30sn boyunca tarayıcı memory cache'inden dönsün, backend'e
+  // yük binmesin. React Query staleTime ile çakışmaz; React Query staleTime'a
+  // göre fetch eder, browser bu seviyede ikinci kez fetch'i bypass eder.
+  res.set('Cache-Control', 'private, max-age=30')
   const userId = req.user!.userId
   const now = new Date()
   const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
@@ -291,6 +296,7 @@ router.get('/', async (req, res) => {
 
 router.get('/summary', async (req, res) => {
   triggerReminderScanInBackground()
+  res.set('Cache-Control', 'private, max-age=30')
   const userId = req.user!.userId
   const now = new Date()
   const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
