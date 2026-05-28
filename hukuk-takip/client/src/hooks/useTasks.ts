@@ -130,10 +130,12 @@ export function useTasks(params?: {
       return res.data
     },
     placeholderData: keepPreviousData,
-    // Sayfa geçişlerinde anında render — 1 dk taze sayılır, mount'ta sadece
-    // stale ise refetch (default refetchOnMount: true). Invalidation sonrası
-    // (görev tamamlama, yeni görev) bir sonraki mount'ta otomatik tazelenir.
-    staleTime: 1000 * 60,
+    // Sayfa geçişlerinde anında render — 3 dk taze sayılır. Görev tamamlama /
+    // yeni görev gibi mutasyonlar invalidate ediyor (aşağıdaki onSettled), o
+    // yüzden uzun staleTime stale veri sorunu yaratmaz; sadece sayfaya tekrar
+    // dönülünce gereksiz refetch'i engeller. 1 dk → 3 dk: TasksPage / Calendar
+    // arası gezinmede /tasks ağa sürekli gitmiyor.
+    staleTime: 1000 * 60 * 3,
     gcTime: 1000 * 60 * 30,
   })
 }

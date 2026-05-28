@@ -147,7 +147,8 @@ export function useCreateDocument() {
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['cases', variables.caseId, 'documents'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      // Not: dashboard payload'unda documents alanı yok — invalidate gereksiz network
+      // ve 14-paralel sorgu yeniden tetiklemesine yol açıyordu.
       const uploadedCount = Number(data?.uploadedCount || variables.files.length || 0)
       toast.success(
         uploadedCount > 1 ? `${uploadedCount} belge yuklendi.` : 'Belge yuklendi.'
@@ -169,7 +170,7 @@ export function useDeleteDocument(caseId?: string) {
       if (caseId) {
         queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'documents'] })
       }
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      // Dashboard'da documents alanı yok — invalidate gereksiz.
       toast.success('Belge silindi.')
     },
     onError: (error: any) => {
