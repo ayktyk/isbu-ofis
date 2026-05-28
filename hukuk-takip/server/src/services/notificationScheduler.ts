@@ -87,11 +87,31 @@ function daysBetween(from: Date, to: Date) {
   return Math.round((startOfDay(to).getTime() - startOfDay(from).getTime()) / msPerDay)
 }
 
+// Batch existence check — daha önce bu type için bildirim üretilmiş (userId, relatedId)
+// çiftlerini tek query'de toplar. Per-iteration SELECT yerine bir kez 'inArray' ile çek.
+// candidateIds boşsa hiç query atma.
+async function fetchExistingNotificationIds(
+  type: 'hearing' | 'task',
+  candidateIds: string[],
+): Promise<Set<string>> {
+  if (candidateIds.length === 0) return new Set()
+  const rows = await db
+    .select({ userId: notifications.userId, relatedId: notifications.relatedId })
+    .from(notifications)
+    .where(and(eq(notifications.type, type), inArray(notifications.relatedId, candidateIds)))
+  const seen = new Set<string>()
+  for (const r of rows) {
+    if (r.relatedId) seen.add(`${r.userId}|${r.relatedId}`)
+  }
+  return seen
+}
+
 // Yaklasan (0-3 gun) ve gecikmis (son 14 gun) gorev/durusmalar icin bildirim ureticisi.
 // Gorev icin ek olarak tam saati gelen bildirim de uretilir ('task_due_now').
 // relatedType ayrimi: 'hearing' / 'hearing_overdue', 'task' (3 gun once uyari) /
 // 'task_due_now' (tam saatinde) / 'task_overdue' (gecikmis).
 export async function runReminderScan(): Promise<ScanResult> {
+  const scanStart = Date.now()
   const now = new Date()
   const todayStart = startOfDay(now)
   const upcomingEnd = endOfDay(new Date(todayStart.getTime() + 3 * 24 * 60 * 60 * 1000))
@@ -125,20 +145,14 @@ export async function runReminderScan(): Promise<ScanResult> {
       )
     )
 
-  for (const hearing of upcomingHearings) {
-    const existing = await db
-      .select({ id: notifications.id })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.userId, hearing.userId),
-          eq(notifications.type, 'hearing'),
-          eq(notifications.relatedId, hearing.id)
-        )
-      )
-      .limit(1)
+  const upcomingHearingExisting = await fetchExistingNotificationIds(
+    'hearing',
+    upcomingHearings.map((h) => h.id),
+  )
 
-    if (existing.length > 0) {
+  const upcomingHearingInserts: typeof notifications.$inferInsert[] = []
+  for (const hearing of upcomingHearings) {
+    if (upcomingHearingExisting.has(`${hearing.userId}|${hearing.id}`)) {
       skipped++
       continue
     }
@@ -148,7 +162,7 @@ export async function runReminderScan(): Promise<ScanResult> {
     const whenText =
       daysLeft <= 0 ? 'bugün' : daysLeft === 1 ? 'yarın' : `${daysLeft} gün sonra`
 
-    await db.insert(notifications).values({
+    upcomingHearingInserts.push({
       userId: hearing.userId,
       type: 'hearing',
       title: 'Duruşma Hatırlatması',
@@ -158,7 +172,10 @@ export async function runReminderScan(): Promise<ScanResult> {
       isRead: false,
       scheduledFor: hearingDate,
     })
-    upcomingHearingsCount++
+  }
+  if (upcomingHearingInserts.length > 0) {
+    await db.insert(notifications).values(upcomingHearingInserts)
+    upcomingHearingsCount = upcomingHearingInserts.length
   }
 
   // --- Gecikmis Durusmalar (son 14 gun, hala beklemede/ertelenmis) ---
@@ -181,20 +198,14 @@ export async function runReminderScan(): Promise<ScanResult> {
       )
     )
 
-  for (const hearing of overdueHearings) {
-    const existing = await db
-      .select({ id: notifications.id })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.userId, hearing.userId),
-          eq(notifications.type, 'hearing'),
-          eq(notifications.relatedId, hearing.id)
-        )
-      )
-      .limit(1)
+  const overdueHearingExisting = await fetchExistingNotificationIds(
+    'hearing',
+    overdueHearings.map((h) => h.id),
+  )
 
-    if (existing.length > 0) {
+  const overdueHearingInserts: typeof notifications.$inferInsert[] = []
+  for (const hearing of overdueHearings) {
+    if (overdueHearingExisting.has(`${hearing.userId}|${hearing.id}`)) {
       skipped++
       continue
     }
@@ -202,7 +213,7 @@ export async function runReminderScan(): Promise<ScanResult> {
     const hearingDate = new Date(hearing.hearingDate)
     const daysAgo = Math.max(1, daysBetween(hearingDate, now))
 
-    await db.insert(notifications).values({
+    overdueHearingInserts.push({
       userId: hearing.userId,
       type: 'hearing',
       title: 'Geciken Duruşma',
@@ -212,7 +223,10 @@ export async function runReminderScan(): Promise<ScanResult> {
       isRead: false,
       scheduledFor: hearingDate,
     })
-    overdueHearingsCount++
+  }
+  if (overdueHearingInserts.length > 0) {
+    await db.insert(notifications).values(overdueHearingInserts)
+    overdueHearingsCount = overdueHearingInserts.length
   }
 
   // --- Yaklasan Gorevler (bugun dahil, sonraki 3 gun) — sadece NORMAL gorevler.
@@ -231,20 +245,14 @@ export async function runReminderScan(): Promise<ScanResult> {
       )
     )
 
-  for (const task of upcomingTasks) {
-    const existing = await db
-      .select({ id: notifications.id })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.userId, task.userId),
-          eq(notifications.type, 'task'),
-          eq(notifications.relatedId, task.id)
-        )
-      )
-      .limit(1)
+  const upcomingTaskExisting = await fetchExistingNotificationIds(
+    'task',
+    upcomingTasks.map((t) => t.id),
+  )
 
-    if (existing.length > 0) {
+  const upcomingTaskInserts: typeof notifications.$inferInsert[] = []
+  for (const task of upcomingTasks) {
+    if (upcomingTaskExisting.has(`${task.userId}|${task.id}`)) {
       skipped++
       continue
     }
@@ -254,7 +262,7 @@ export async function runReminderScan(): Promise<ScanResult> {
     const whenText =
       daysLeft <= 0 ? 'bugün' : daysLeft === 1 ? 'yarın' : `${daysLeft} gün kaldı`
 
-    await db.insert(notifications).values({
+    upcomingTaskInserts.push({
       userId: task.userId,
       type: 'task',
       title: 'Görev Hatırlatması',
@@ -264,12 +272,18 @@ export async function runReminderScan(): Promise<ScanResult> {
       isRead: false,
       scheduledFor: dueDate,
     })
-    upcomingTasksCount++
+  }
+  if (upcomingTaskInserts.length > 0) {
+    await db.insert(notifications).values(upcomingTaskInserts)
+    upcomingTasksCount += upcomingTaskInserts.length
   }
 
   // --- Tam Saati Gelen Gorevler (bugun icinde vakti gelmis, hala pending/in_progress) ---
   // Scan en fazla 10 dk gecikme ile bu bildirimi uretir; her gorev icin tek sefer uretilir.
   // Sureli isler haricindeki gorevler — sureli isler kritik blokta isleniyor.
+  // Not: upcomingTasks ile aynı (userId, relatedId, type) çakışmasını upcomingTaskExisting
+  // örtüşür — bu bildirim de type='task' olduğundan aynı set'i kullanırız + yukarıdaki
+  // batch'te eklenenleri de zikr et.
   const dueNowTasks = await db
     .select()
     .from(tasks)
@@ -284,27 +298,25 @@ export async function runReminderScan(): Promise<ScanResult> {
       )
     )
 
-  for (const task of dueNowTasks) {
-    const existing = await db
-      .select({ id: notifications.id })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.userId, task.userId),
-          eq(notifications.type, 'task'),
-          eq(notifications.relatedId, task.id)
-        )
-      )
-      .limit(1)
+  // Yeni eklenenleri de "var" say — aynı taskId için iki kez insert atmamak için.
+  const dueNowExistingBase = await fetchExistingNotificationIds(
+    'task',
+    dueNowTasks.map((t) => t.id),
+  )
+  for (const ins of upcomingTaskInserts) {
+    if (ins.relatedId) dueNowExistingBase.add(`${ins.userId}|${ins.relatedId}`)
+  }
 
-    if (existing.length > 0) {
+  const dueNowInserts: typeof notifications.$inferInsert[] = []
+  for (const task of dueNowTasks) {
+    if (dueNowExistingBase.has(`${task.userId}|${task.id}`)) {
       skipped++
       continue
     }
 
     const dueDate = task.dueDate ? new Date(task.dueDate) : null
 
-    await db.insert(notifications).values({
+    dueNowInserts.push({
       userId: task.userId,
       type: 'task',
       title: 'Görev Vakti Geldi',
@@ -314,7 +326,10 @@ export async function runReminderScan(): Promise<ScanResult> {
       isRead: false,
       scheduledFor: dueDate,
     })
-    upcomingTasksCount++
+  }
+  if (dueNowInserts.length > 0) {
+    await db.insert(notifications).values(dueNowInserts)
+    upcomingTasksCount += dueNowInserts.length
   }
 
   // --- Gecikmis Gorevler (son 14 gun, hala pending/in_progress) — sadece NORMAL gorevler ---
@@ -332,20 +347,14 @@ export async function runReminderScan(): Promise<ScanResult> {
       )
     )
 
-  for (const task of overdueTasks) {
-    const existing = await db
-      .select({ id: notifications.id })
-      .from(notifications)
-      .where(
-        and(
-          eq(notifications.userId, task.userId),
-          eq(notifications.type, 'task'),
-          eq(notifications.relatedId, task.id)
-        )
-      )
-      .limit(1)
+  const overdueTaskExisting = await fetchExistingNotificationIds(
+    'task',
+    overdueTasks.map((t) => t.id),
+  )
 
-    if (existing.length > 0) {
+  const overdueTaskInserts: typeof notifications.$inferInsert[] = []
+  for (const task of overdueTasks) {
+    if (overdueTaskExisting.has(`${task.userId}|${task.id}`)) {
       skipped++
       continue
     }
@@ -353,7 +362,7 @@ export async function runReminderScan(): Promise<ScanResult> {
     const dueDate = task.dueDate ? new Date(task.dueDate) : null
     const daysAgo = dueDate ? Math.max(1, daysBetween(dueDate, now)) : 0
 
-    await db.insert(notifications).values({
+    overdueTaskInserts.push({
       userId: task.userId,
       type: 'task',
       title: 'Geciken Görev',
@@ -363,15 +372,31 @@ export async function runReminderScan(): Promise<ScanResult> {
       isRead: false,
       scheduledFor: dueDate,
     })
-    overdueTasksCount++
+  }
+  if (overdueTaskInserts.length > 0) {
+    await db.insert(notifications).values(overdueTaskInserts)
+    overdueTasksCount = overdueTaskInserts.length
   }
 
   // --- KRITIK SURELI ISLER ---
   // is_deadline=true olan gorevler icin 30/14/7/3/1/0 gun kala yeni bildirim
   // (legal_deadline_critical type) uretilir. relatedType='legal_deadline_<offset>'
   // alt etiketi sayesinde her offset icin tek sefer uretim olur.
+  //
+  // Batch stratejisi: tüm offset rotasyonlarını toplayıp, ardından TÜM relatedId'ler
+  // için TEK SELECT ile mevcut legal_deadline_critical satırlarını çek. JS tarafında
+  // her (userId, taskId, offset) için karar ver. Önceki davranış: kullanıcı bir offset'i
+  // dismiss ettiyse diğer offset'ler de yaratılmaz.
   const CRITICAL_OFFSETS = [30, 14, 7, 3, 1, 0]
   let criticalDeadlinesCount = 0
+
+  type CriticalCandidate = {
+    task: typeof tasks.$inferSelect
+    offset: number
+    target: Date
+    relatedType: string
+  }
+  const criticalCandidates: CriticalCandidate[] = []
 
   for (const offset of CRITICAL_OFFSETS) {
     const target = startOfDay(new Date(todayStart.getTime() + offset * 24 * 60 * 60 * 1000))
@@ -393,78 +418,102 @@ export async function runReminderScan(): Promise<ScanResult> {
       )
 
     for (const task of criticalRows) {
-      // Bu task'ın TÜM legal_deadline_critical satırlarını çek (her offset, dismiss
-      // dahil). İki kontrol:
-      //   - sameOffsetExists: bu offset için aktif/dismissed satır var mı?
-      //     (Var ise re-yaratma — duplicate önleme. Önceki davranış.)
-      //   - userDismissedAny: kullanıcı bu task için herhangi bir offset'i sildiyse
-      //     yeni offset'leri de yaratma. Önceki davranış 30→14→7→3→1→0 her offset'te
-      //     yeni satır yaratıyordu çünkü existence check relatedType'a kilitliydi —
-      //     bu da kullanıcının "tekrar çıkıyor" şikayetinin kaynağıydı.
-      // Tek round-trip; sınırı 20 (6 offset × 3 olası buffer).
-      const blockers = await db
-        .select({
-          id: notifications.id,
-          relatedType: notifications.relatedType,
-          dismissedAt: notifications.dismissedAt,
-        })
-        .from(notifications)
-        .where(
-          and(
-            eq(notifications.userId, task.userId),
-            eq(notifications.type, 'legal_deadline_critical'),
-            eq(notifications.relatedId, task.id)
-          )
-        )
-        .limit(20)
-
-      const userDismissedAny = blockers.some((b) => b.dismissedAt !== null)
-      const sameOffsetExists = blockers.some((b) => b.relatedType === relatedType)
-
-      if (userDismissedAny || sameOffsetExists) {
-        skipped++
-        continue
-      }
-
-      const dueDate = task.dueDate ? new Date(task.dueDate) : null
-      const severityText =
-        task.deadlineSeverity === 'hak_dusurucu'
-          ? 'HAK DÜŞÜRÜCÜ'
-          : task.deadlineSeverity === 'zamanasimi'
-            ? 'ZAMANAŞIMI'
-            : 'SÜRELİ İŞ'
-
-      const whenText =
-        offset === 0
-          ? 'BUGÜN SON GÜN'
-          : offset === 1
-            ? 'YARIN SON GÜN'
-            : `${offset} gün kaldı`
-
-      const titleText =
-        offset <= 1 ? `🔴 ${severityText} — ${whenText}` : `⚠ ${severityText} — ${whenText}`
-
-      const messageText =
-        `"${task.title}" süreli işi için ${whenText.toLowerCase()}` +
-        (dueDate ? ` (${formatDateTR(dueDate)})` : '') +
-        (task.legalBasis ? ` — Dayanak: ${task.legalBasis}` : '') +
-        '. Bu süre KAÇIRILMAMALIDIR.'
-
-      await db.insert(notifications).values({
-        userId: task.userId,
-        type: 'legal_deadline_critical',
-        title: titleText,
-        message: messageText,
-        relatedId: task.id,
-        relatedType,
-        isRead: false,
-        scheduledFor: dueDate,
-      })
-      criticalDeadlinesCount++
+      criticalCandidates.push({ task, offset, target, relatedType })
     }
   }
 
-  return {
+  // Tüm aday taskId'ler için legal_deadline_critical bildirimlerini tek seferde çek.
+  // (userId, relatedId) bazında grupla; sameOffsetExists ve userDismissedAny kontrolü
+  // JS tarafında yapılır. Önceki kod her offset × her task için ayrı SELECT atıyordu.
+  const criticalRelatedIds = Array.from(new Set(criticalCandidates.map((c) => c.task.id)))
+  const blockersByKey = new Map<string, Array<{ relatedType: string | null; dismissedAt: Date | null }>>()
+
+  if (criticalRelatedIds.length > 0) {
+    const blockerRows = await db
+      .select({
+        userId: notifications.userId,
+        relatedId: notifications.relatedId,
+        relatedType: notifications.relatedType,
+        dismissedAt: notifications.dismissedAt,
+      })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.type, 'legal_deadline_critical'),
+          inArray(notifications.relatedId, criticalRelatedIds),
+        ),
+      )
+
+    for (const row of blockerRows) {
+      if (!row.relatedId) continue
+      const key = `${row.userId}|${row.relatedId}`
+      const list = blockersByKey.get(key) ?? []
+      list.push({ relatedType: row.relatedType, dismissedAt: row.dismissedAt })
+      blockersByKey.set(key, list)
+    }
+  }
+
+  // Aynı runReminderScan içinde aynı (userId, relatedId, relatedType) için iki kez
+  // insert atmamak için lokal set — sameOffsetExists kontrolü hem DB'den hem de
+  // bu run'da daha önce planlanmış insert'lerden gelir.
+  const sessionPlanned = new Set<string>()
+  const criticalInserts: typeof notifications.$inferInsert[] = []
+
+  for (const { task, offset, relatedType } of criticalCandidates) {
+    const key = `${task.userId}|${task.id}`
+    const blockers = blockersByKey.get(key) ?? []
+    const userDismissedAny = blockers.some((b) => b.dismissedAt !== null)
+    const sameOffsetExistsDb = blockers.some((b) => b.relatedType === relatedType)
+    const sameOffsetExistsSession = sessionPlanned.has(`${key}|${relatedType}`)
+
+    if (userDismissedAny || sameOffsetExistsDb || sameOffsetExistsSession) {
+      skipped++
+      continue
+    }
+
+    const dueDate = task.dueDate ? new Date(task.dueDate) : null
+    const severityText =
+      task.deadlineSeverity === 'hak_dusurucu'
+        ? 'HAK DÜŞÜRÜCÜ'
+        : task.deadlineSeverity === 'zamanasimi'
+          ? 'ZAMANAŞIMI'
+          : 'SÜRELİ İŞ'
+
+    const whenText =
+      offset === 0
+        ? 'BUGÜN SON GÜN'
+        : offset === 1
+          ? 'YARIN SON GÜN'
+          : `${offset} gün kaldı`
+
+    const titleText =
+      offset <= 1 ? `🔴 ${severityText} — ${whenText}` : `⚠ ${severityText} — ${whenText}`
+
+    const messageText =
+      `"${task.title}" süreli işi için ${whenText.toLowerCase()}` +
+      (dueDate ? ` (${formatDateTR(dueDate)})` : '') +
+      (task.legalBasis ? ` — Dayanak: ${task.legalBasis}` : '') +
+      '. Bu süre KAÇIRILMAMALIDIR.'
+
+    criticalInserts.push({
+      userId: task.userId,
+      type: 'legal_deadline_critical',
+      title: titleText,
+      message: messageText,
+      relatedId: task.id,
+      relatedType,
+      isRead: false,
+      scheduledFor: dueDate,
+    })
+    sessionPlanned.add(`${key}|${relatedType}`)
+  }
+
+  if (criticalInserts.length > 0) {
+    await db.insert(notifications).values(criticalInserts)
+    criticalDeadlinesCount = criticalInserts.length
+  }
+
+  const result: ScanResult = {
     upcomingHearings: upcomingHearingsCount,
     upcomingTasks: upcomingTasksCount,
     overdueHearings: overdueHearingsCount,
@@ -472,4 +521,16 @@ export async function runReminderScan(): Promise<ScanResult> {
     criticalDeadlines: criticalDeadlinesCount,
     skipped,
   }
+
+  // Performans izleme: cron yükünü doğrulamak için süre ve insert sayısını logla.
+  // Sentry/pino eklenince yapısal log'a çevrilir; şimdilik plain console.
+  const elapsedMs = Date.now() - scanStart
+  const insertedTotal =
+    upcomingHearingsCount + overdueHearingsCount + upcomingTasksCount + overdueTasksCount + criticalDeadlinesCount
+  console.log(
+    `[reminderScan] ${elapsedMs}ms — inserts=${insertedTotal} skipped=${skipped} ` +
+      `(uH=${upcomingHearingsCount} oH=${overdueHearingsCount} uT=${upcomingTasksCount} oT=${overdueTasksCount} cD=${criticalDeadlinesCount})`,
+  )
+
+  return result
 }
