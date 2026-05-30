@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef, Suspense } from 'react'
-import { Outlet } from 'react-router-dom'
+import { Outlet, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import Sidebar from './Sidebar'
 import Header from './Header'
@@ -180,6 +180,7 @@ function useSidebarSwipe(open: boolean, onOpen: () => void, onClose: () => void)
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const location = useLocation()
 
   const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), [])
   const closeSidebar = useCallback(() => setSidebarOpen(false), [])
@@ -198,7 +199,12 @@ export default function AppLayout() {
           {/* Ic Suspense: sekme degistiginde layout kalir, yalnizca icerik
               alani skeleton gosterir — bos/titrek ekran olmaz. */}
           <Suspense fallback={<InlinePageLoader />}>
-            <Outlet />
+            {/* Sayfa geçişinde ince fade (0.2s) — premium akıcılık, yeni paket yok.
+                pathname key'i her gezinmede animasyonu yeniden tetikler.
+                Hareket azaltma tercihinde (prefers-reduced-motion) animasyon kapanır. */}
+            <div key={location.pathname} className="animate-fade-in motion-reduce:animate-none">
+              <Outlet />
+            </div>
           </Suspense>
         </main>
       </div>
