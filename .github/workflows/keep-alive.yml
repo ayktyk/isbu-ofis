@@ -1,0 +1,39 @@
+name: Keep Alive
+
+# Render Free plan 15 dk hareketsizlikten sonra uykuya dalar; uyandıktan sonraki
+# ilk istek 30-50 sn sürer. Bu workflow her 10 dakikada bir /api/health'i pingleyerek
+# servisi uyanık tutar → kullanıcının (özellikle sabah ilk açılışta) "yavaşlık" hissi
+# ortadan kalkar. Ücretsiz; Render planı değişmez; veritabanına dokunmaz.
+#
+# Kurulum: GitHub repo → Settings → Secrets and variables → Actions → New secret
+#   Name:  RENDER_HEALTH_URL
+#   Value: https://<render-uygulama-adi>.onrender.com/api/health
+#
+# Not: Zamanlanmış (schedule) workflow'lar yalnızca varsayılan branch'te (main) çalışır.
+# Bu dosya main'e merge edildiğinde etkinleşir.
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+# Eşzamanlı/birikmiş çalışmaları engelle (gecikmeli tetiklemelerde yığılmasın).
+concurrency:
+  group: keep-alive
+  cancel-in-progress: true
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Ping health endpoint
+        env:
+          HEALTH_URL: ${{ secrets.RENDER_HEALTH_URL }}
+        run: |
+          if [ -z "$HEALTH_URL" ]; then
+            echo "RENDER_HEALTH_URL secret tanımlı değil — atlanıyor."
+            exit 0
+          fi
+          # Best-effort: geçici hata workflow'u kırmızıya boyamasın.
+          curl -fsS --max-time 30 "$HEALTH_URL" || echo "Ping başarısız (geçici olabilir), sessiz geçiliyor."

@@ -251,6 +251,20 @@ ALTER TABLE "cases" ADD COLUMN IF NOT EXISTS "is_cmk_assignment" boolean NOT NUL
 CREATE INDEX IF NOT EXISTS "cases_cmk_idx" ON "cases" ("user_id", "is_cmk_assignment");
 `
 
+// rev10 (2026-05): Performans indeksleri. SADECE OKUMA HIZLANDIRMA — hiçbir veri
+// silinmez/değişmez. notes tablosu daha önce tamamen indekssizdi (caseId/clientId/
+// userId sorguları tam tablo taraması yapıyordu); 3 indeks eklenir. case_hearings'e
+// hatırlatma taramasını (her 15 dk) hızlandıran (result, hearing_date) bileşik
+// indeksi eklenir. Hepsi CREATE INDEX IF NOT EXISTS — idempotent, additive, rev7/rev9
+// ile aynı kanıtlanmış desen. Büro ölçeğinde (yüzlerce satır) kilit milisaniyeler sürer.
+// NOT: Bu blok ilk üretim boot'unda (deploy) çalışır → deploy ÖNCESİ Neon PITR snapshot al.
+const REV10_PERF_INDEXES_SQL = `
+CREATE INDEX IF NOT EXISTS "notes_case_idx" ON "notes" ("case_id");
+CREATE INDEX IF NOT EXISTS "notes_client_idx" ON "notes" ("client_id");
+CREATE INDEX IF NOT EXISTS "notes_user_idx" ON "notes" ("user_id");
+CREATE INDEX IF NOT EXISTS "hearings_result_date_idx" ON "case_hearings" ("result", "hearing_date");
+`
+
 export async function ensureSchema() {
   if (!process.env.DATABASE_URL) {
     console.warn('ensureSchema: DATABASE_URL yok, atlaniyor.')
@@ -276,6 +290,8 @@ export async function ensureSchema() {
     console.log('Schema guard: dava gunlugu (case_diary_entries) hazir.')
     await sql.unsafe(REV9_CMK_ASSIGNMENT_SQL)
     console.log('Schema guard: cases.is_cmk_assignment hazir.')
+    await sql.unsafe(REV10_PERF_INDEXES_SQL)
+    console.log('Schema guard: performans indeksleri (notes + hearings result/date) hazir.')
   } catch (err) {
     console.error('Schema guard hatasi:', err)
   } finally {

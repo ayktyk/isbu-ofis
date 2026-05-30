@@ -239,6 +239,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
         queryFn: async () => (await api.get('/notifications', { params: { unread: true } })).data,
         staleTime: 1000 * 60 * 5,
       })
+      // En sık gezilen sayfaların lazy JS chunk'larını idle'da ısıt: ilk gezinme
+      // anında (chunk beklemeden) açılır, "premium" akıcılık. Vite aynı modülü
+      // dedupe eder — ek chunk üretmez, login bundle'ı büyümez. Hata sessiz geçilir.
+      void import('./pages/DashboardPage').catch(() => {})
+      void import('./pages/ClientsPage').catch(() => {})
+      void import('./pages/CasesPage').catch(() => {})
+      void import('./pages/TasksPage').catch(() => {})
     }
     const requestIdle = (window as any).requestIdleCallback as
       | ((callback: () => void, options?: { timeout: number }) => number)

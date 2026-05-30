@@ -3,6 +3,7 @@ import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import helmet from 'helmet'
+import compression from 'compression'
 import rateLimit from 'express-rate-limit'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -63,6 +64,11 @@ app.use(
     contentSecurityPolicy: false,
   })
 )
+
+// gzip/brotli sıkıştırma — JSON yanıtlarını ~%60-80 küçültür (özellikle mobil/yavaş
+// ağda hissedilir). 1KB altı yanıtlar sıkıştırılmaz (overhead'e değmez). İstemci
+// `Accept-Encoding` göndermezse otomatik atlanır; davranış değişmez, veri etkilenmez.
+app.use(compression({ threshold: 1024 }))
 
 app.use(
   rateLimit({

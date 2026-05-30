@@ -1,0 +1,39 @@
+name: CI
+
+# Tip kontrolü + build doğrulaması. PR ve main push'larında çalışır.
+#
+# ⛔ VERİ GÜVENLİĞİ: CI'da HİÇBİR veritabanı komutu çalıştırılmaz
+# (db:migrate / db:push / db:seed / drizzle-kit YASAK). Yalnızca derleme yeşil mi
+# kontrol edilir. Migration'lar her zaman manuel + onaylı + yedekli uygulanır.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: hukuk-takip
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: hukuk-takip/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      # npm run build = shared (tsc) → server (tsc) → client (tsc && vite build)
+      # Tüm workspace'lerde tip kontrolü + üretim derlemesini kapsar.
+      - name: Build (type-check + bundle, DB komutu yok)
+        run: npm run build

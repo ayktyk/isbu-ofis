@@ -202,6 +202,9 @@ export const caseHearings = pgTable(
   (table) => ({
     caseIdx: index('hearings_case_idx').on(table.caseId),
     dateIdx: index('hearings_date_idx').on(table.hearingDate),
+    // Hatırlatma taraması (her 15 dk) result + hearing_date aralığıyla filtreler;
+    // bu bileşik indeks o taramayı hızlandırır. Additive (ensureSchema rev10).
+    resultDateIdx: index('hearings_result_date_idx').on(table.result, table.hearingDate),
   })
 )
 
@@ -341,18 +344,29 @@ export const documents = pgTable(
   })
 )
 
-export const notes = pgTable('notes', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  caseId: uuid('case_id').references(() => cases.id, { onDelete: 'cascade' }),
-  clientId: uuid('client_id').references(() => clients.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id')
-    .references(() => users.id, { onDelete: 'cascade' })
-    .notNull(),
-  content: text('content').notNull(),
-  archivedAt: timestamp('archived_at'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  updatedAt: timestamp('updated_at').defaultNow().notNull(),
-})
+export const notes = pgTable(
+  'notes',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    caseId: uuid('case_id').references(() => cases.id, { onDelete: 'cascade' }),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .references(() => users.id, { onDelete: 'cascade' })
+      .notNull(),
+    content: text('content').notNull(),
+    archivedAt: timestamp('archived_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  // notes daha önce indekssizdi → caseId/clientId/userId ile yapılan her sorgu
+  // tam tablo taramasıydı. Bu indeksler ensureSchema rev10 ile (CREATE INDEX
+  // IF NOT EXISTS) eklenir; tamamen additive, veri etkilenmez.
+  (table) => ({
+    caseIdx: index('notes_case_idx').on(table.caseId),
+    clientIdx: index('notes_client_idx').on(table.clientId),
+    userIdx: index('notes_user_idx').on(table.userId),
+  })
+)
 
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
