@@ -53,7 +53,9 @@ export function useCaseDiary(caseId: string | undefined) {
       return res.data
     },
     enabled: !!caseId,
-    staleTime: 1000 * 30,
+    // Dava detayıyla (2 dk) hizalı: detaya her dönüşte gereksiz refetch olmasın.
+    // Yazma işlemleri invalidateDiary ile zaten anında tazeliyor.
+    staleTime: 1000 * 60 * 2,
   })
 }
 
@@ -65,7 +67,8 @@ export function useCaseNextStep(caseId: string | undefined) {
       return res.data
     },
     enabled: !!caseId,
-    staleTime: 1000 * 30,
+    // Dava detayıyla (2 dk) hizalı — bkz. useCaseDiary yorumu.
+    staleTime: 1000 * 60 * 2,
   })
 }
 

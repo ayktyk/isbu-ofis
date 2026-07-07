@@ -10,6 +10,16 @@ import { ThemeProvider } from './lib/theme'
 import App from './App'
 import './index.css'
 
+// Render Free plan 15 dk sonra uykuya dalar; ilk istek 20-50 sn boot bekler.
+// Uygulama daha chunk'lari indirirken / kullanici login ekranindayken sunucuya
+// sessiz bir health ping at ki uyanma sureci kullanici ilk veriyi istemeden
+// once baslasin. Basarisizlik onemsiz — yalnizca isinma amacli, veri tasimaz.
+const rawWakeBase = import.meta.env.VITE_API_BASE_URL?.trim()
+const wakeApiBase = rawWakeBase && rawWakeBase.length > 0 ? rawWakeBase.replace(/\/+$/, '') : '/api'
+if (typeof window !== 'undefined') {
+  void fetch(`${wakeApiBase}/health`, { cache: 'no-store' }).catch(() => {})
+}
+
 // React Query cache'i localStorage'a persist et.
 // Amac: PWA mobilde RAM'den atilip tekrar acildiginda son veriyi aninda
 // gosterip arka planda yenilemek — bos ekran/spinner yok.

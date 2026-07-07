@@ -342,14 +342,16 @@ export function useDeleteTask() {
       toast.error('Görev silinemedi.')
     },
     onSettled: () => {
-      // refetchType: 'all' — sadece aktif değil, INACTIVE (mounted ama görünür
-      // olmayan) query'leri de refetch eder. Görev silindiğinde takvim
-      // sekmesine geçildiğinde stale cache görünmesin diye gerekli.
-      queryClient.invalidateQueries({ queryKey: ['tasks'], refetchType: 'all' })
-      queryClient.invalidateQueries({ queryKey: ['deadlines'], refetchType: 'all' })
-      queryClient.invalidateQueries({ queryKey: ['cases'], refetchType: 'all' })
-      queryClient.invalidateQueries({ queryKey: ['dashboard'], refetchType: 'all' })
-      queryClient.invalidateQueries({ queryKey: ['calendar'], refetchType: 'all' })
+      // Varsayılan invalidation yeterli: aktif (görünür) query'ler hemen
+      // yenilenir, pasif olanlar stale işaretlenir ve sekmeye geçildiğinde
+      // mount'ta otomatik refetch olur. refetchType: 'all' burada tek görev
+      // silmede 5 alanı birden anlık refetch ederek gereksiz ağ/CPU
+      // patlaması yaratıyordu; optimistic update zaten listeden düşürüyor.
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      queryClient.invalidateQueries({ queryKey: ['deadlines'] })
+      queryClient.invalidateQueries({ queryKey: ['cases'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['calendar'] })
     },
     onSuccess: () => {
       toast.success('Görev silindi.')
