@@ -20,6 +20,7 @@ import {
   Cell,
   Legend,
 } from 'recharts'
+import { useMemo } from 'react'
 import { useStatistics } from '@/hooks/useStatistics'
 import { formatCurrency } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -157,6 +158,67 @@ function StatisticsSkeleton() {
 export default function StatisticsPage() {
   const { data, isLoading, isError } = useStatistics()
 
+  // Grafik dönüşümleri memo'lu: ResponsiveContainer resize gibi yeniden
+  // render'larda diziler yeni kimlik almasın — yeni kimlik Recharts'a
+  // grafikleri gereksiz yere yeniden çizdirir (animasyon/flicker).
+  const chartData = useMemo(() => {
+    if (!data) return null
+    const {
+      monthlyCases,
+      monthlyCollections,
+      monthlyIncome,
+      monthlyMediations,
+      monthlyCmkCases,
+      monthlyCmkIncome,
+      casesByType,
+      casesByStatus,
+    } = data
+
+    // Prepare bar chart data: dava (CMK hariç) + arabuluculuk + CMK üç ayrı bar.
+    // monthlyCases zaten CMK dahil toplamı verdiği için bağımsız CMK serisini
+    // çıkararak çift sayımı önlüyoruz; sütunların toplamı toplam dosya sayısına
+    // eşit kalır.
+    const monthlyBarData = (monthlyCases || []).map((mc: any, i: number) => {
+      const cmkCount = monthlyCmkCases?.[i]?.count ?? 0
+      const davaCount = Math.max(0, (mc.count ?? 0) - cmkCount)
+      return {
+        name: shortMonth(mc.label),
+        Davalar: davaCount,
+        Arabuluculuk: monthlyMediations?.[i]?.count ?? 0,
+        CMK: cmkCount,
+      }
+    })
+
+    // Gelir — stacked bar (dava + CMK + arabuluculuk kırılımı). CMK geliri
+    // backend tarafında dava tahsilatlarının alt kümesi; çift sayım olmaması
+    // için "Dava" serisinden CMK çıkarılıyor.
+    const cmkIncomeMap = new Map<string, number>(
+      (monthlyCmkIncome || []).map((r: any) => [r.month, parseFloat(r.amount ?? '0') || 0])
+    )
+    const incomeBarData = (monthlyIncome || monthlyCollections || []).map((mc: any) => {
+      const caseTotal = parseFloat(mc.caseAmount ?? mc.amount ?? '0') || 0
+      const cmk = cmkIncomeMap.get(mc.month) ?? 0
+      const davaPuru = Math.max(0, caseTotal - cmk)
+      return {
+        name: shortMonth(mc.label),
+        Dava: davaPuru,
+        CMK: cmk,
+        Arabuluculuk: parseFloat(mc.mediationAmount ?? '0') || 0,
+      }
+    })
+
+    // Pie chart data
+    const typeData = (casesByType || [])
+      .filter((t: any) => t.count > 0)
+      .map((t: any) => ({ name: t.label, value: t.count }))
+
+    const statusData = (casesByStatus || [])
+      .filter((s: any) => s.count > 0)
+      .map((s: any) => ({ name: s.label, value: s.count }))
+
+    return { monthlyBarData, incomeBarData, typeData, statusData }
+  }, [data])
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -169,7 +231,7 @@ export default function StatisticsPage() {
     )
   }
 
-  if (isError || !data) {
+  if (isError || !data || !chartData) {
     return (
       <div className="space-y-6">
         <div>
@@ -180,60 +242,8 @@ export default function StatisticsPage() {
     )
   }
 
-  const {
-    monthlyCases,
-    monthlyCollections,
-    monthlyIncome,
-    monthlyMediations,
-    monthlyCmkCases,
-    monthlyCmkIncome,
-    casesByType,
-    casesByStatus,
-    expectedCollections,
-    totals,
-  } = data
-
-  // Prepare bar chart data: dava (CMK hariç) + arabuluculuk + CMK üç ayrı bar.
-  // monthlyCases zaten CMK dahil toplamı verdiği için bağımsız CMK serisini
-  // çıkararak çift sayımı önlüyoruz; sütunların toplamı toplam dosya sayısına
-  // eşit kalır.
-  const monthlyBarData = (monthlyCases || []).map((mc: any, i: number) => {
-    const cmkCount = monthlyCmkCases?.[i]?.count ?? 0
-    const davaCount = Math.max(0, (mc.count ?? 0) - cmkCount)
-    return {
-      name: shortMonth(mc.label),
-      Davalar: davaCount,
-      Arabuluculuk: monthlyMediations?.[i]?.count ?? 0,
-      CMK: cmkCount,
-    }
-  })
-
-  // Gelir — stacked bar (dava + CMK + arabuluculuk kırılımı). CMK geliri
-  // backend tarafında dava tahsilatlarının alt kümesi; çift sayım olmaması
-  // için "Dava" serisinden CMK çıkarılıyor.
-  const cmkIncomeMap = new Map<string, number>(
-    (monthlyCmkIncome || []).map((r: any) => [r.month, parseFloat(r.amount ?? '0') || 0])
-  )
-  const incomeBarData = (monthlyIncome || monthlyCollections || []).map((mc: any) => {
-    const caseTotal = parseFloat(mc.caseAmount ?? mc.amount ?? '0') || 0
-    const cmk = cmkIncomeMap.get(mc.month) ?? 0
-    const davaPuru = Math.max(0, caseTotal - cmk)
-    return {
-      name: shortMonth(mc.label),
-      Dava: davaPuru,
-      CMK: cmk,
-      Arabuluculuk: parseFloat(mc.mediationAmount ?? '0') || 0,
-    }
-  })
-
-  // Pie chart data
-  const typeData = (casesByType || [])
-    .filter((t: any) => t.count > 0)
-    .map((t: any) => ({ name: t.label, value: t.count }))
-
-  const statusData = (casesByStatus || [])
-    .filter((s: any) => s.count > 0)
-    .map((s: any) => ({ name: s.label, value: s.count }))
+  const { expectedCollections, totals } = data
+  const { monthlyBarData, incomeBarData, typeData, statusData } = chartData
 
   return (
     <div className="space-y-6">

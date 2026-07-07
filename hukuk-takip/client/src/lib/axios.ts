@@ -15,20 +15,57 @@ function buildApiUrl(path: string) {
 export const api = axios.create({
   baseURL: apiBaseUrl,
   withCredentials: true,
+  // Render cold start en kötü ~50 sn; 90 sn tavan, istekler sonsuz asılı kalmasın.
+  timeout: 90_000,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
+// ── Yavaş istek geri bildirimi ────────────────────────────────────────────────
+// Render Free uykudan uyanırken ilk istek 20-50 sn sürebiliyor. Kullanıcı bu
+// sürede sessiz bir iskelet ekranına bakmasın: 4 sn'yi aşan istekte bir kez
+// "sunucu uyandırılıyor" bildirimi göster, sunucudan ilk yanıt gelince kapat.
+const SLOW_REQUEST_MS = 4000
+const WAKE_TOAST_ID = 'server-wake'
+let wakeToastActive = false
+
+function startSlowTimer(config: { _slowTimer?: ReturnType<typeof setTimeout> }) {
+  config._slowTimer = setTimeout(() => {
+    wakeToastActive = true
+    toast.loading('Sunucu uyandırılıyor, ilk açılış 30-50 saniye sürebilir…', {
+      id: WAKE_TOAST_ID,
+      duration: 60_000,
+    })
+  }, SLOW_REQUEST_MS)
+}
+
+function settleSlowTimer(
+  config?: { _slowTimer?: ReturnType<typeof setTimeout> },
+  serverResponded = true
+) {
+  if (config?._slowTimer) clearTimeout(config._slowTimer)
+  // Toast yalnızca sunucudan gerçek bir yanıt geldiğinde kapatılır; timeout /
+  // ağ hatasında açık kalır (60 sn sonra kendiliğinden düşer).
+  if (wakeToastActive && serverResponded) {
+    wakeToastActive = false
+    toast.dismiss(WAKE_TOAST_ID)
+  }
+}
+
 api.interceptors.request.use((config) => {
   if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
     delete config.headers['Content-Type']
+    // Dosya yükleme yavaş ağda 90 sn'yi aşabilir — üst sınırı kaldır.
+    config.timeout = 0
   }
 
   const accessToken = getAccessToken()
   if (accessToken) {
     config.headers.Authorization = `Bearer ${accessToken}`
   }
+
+  startSlowTimer(config as { _slowTimer?: ReturnType<typeof setTimeout> })
 
   return config
 })
@@ -48,9 +85,16 @@ function processQueue(error: unknown) {
 }
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    settleSlowTimer(response.config as { _slowTimer?: ReturnType<typeof setTimeout> })
+    return response
+  },
   async (error) => {
     const originalRequest = error.config
+    settleSlowTimer(
+      originalRequest as { _slowTimer?: ReturnType<typeof setTimeout> } | undefined,
+      Boolean(error.response)
+    )
 
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/refresh')) {
