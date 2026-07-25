@@ -268,8 +268,12 @@ router.get('/', async (req, res) => {
   const outstandingByMediations = sumOutstanding(outstandingMediationsAll)
   const outstandingTotal = outstandingByCases + outstandingByMediations
 
-  // Birleştirilmiş ve sıralanmış liste (en yeni eklenen üstte, sonra büyük bekleyen)
-  const outstandingFees = [...outstandingCases, ...outstandingMediations]
+  // Dava + arabuluculuk birleşik liste. Helper her iki sorguyu da kalan tutara
+  // göre büyükten küçüğe döndürür; birleştirmeden sonra tekrar sıralanır ki
+  // iki kaynak iç içe doğru sırayla dizilsin.
+  const outstandingFees = [...outstandingCases, ...outstandingMediations].sort(
+    (a, b) => parseFloat(b.remaining || '0') - parseFloat(a.remaining || '0'),
+  )
 
   res.json({
     cases: caseCount,
@@ -517,7 +521,10 @@ router.get('/summary', async (req, res) => {
   const outstandingByCases = sumOutstanding(outstandingCasesAll)
   const outstandingByMediations = sumOutstanding(outstandingMediationsAll)
   const outstandingTotal = outstandingByCases + outstandingByMediations
-  const outstandingFees = [...outstandingCases, ...outstandingMediations]
+  // Kalan tutara göre büyükten küçüğe — dava ve arabuluculuk iç içe sıralanır.
+  const outstandingFees = [...outstandingCases, ...outstandingMediations].sort(
+    (a, b) => parseFloat(b.remaining || '0') - parseFloat(a.remaining || '0'),
+  )
 
   const thisMonth = thisMonthIncome[0] || { caseAmount: '0', mediationAmount: '0' }
   const thisMonthCase = safeNumeric(thisMonth.caseAmount)

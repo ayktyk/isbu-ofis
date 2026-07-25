@@ -86,9 +86,16 @@ export async function getOutstandingCaseFees(
     .having(
       sql`${cases.contractedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`,
     )
+    // Sıralama: KALAN TUTAR büyükten küçüğe (avukat talebi 2026-07-26 —
+    // "hepsini büyükten küçüğe görmek istiyorum"). createdAt ikincil kriter,
+    // eşit tutarlarda yeni eklenen üstte kalır.
+    //
+    // ÖNEMLİ: Dashboard bu listeyi LIMIT 20 ile çekiyor. Sıralama burada
+    // (SQL'de) yapılmalı; istemcide yapılsaydı "en büyük borç" ilk 20'nin
+    // dışında kalıp hiç görünmeyebilirdi.
     .orderBy(
-      desc(cases.createdAt),
       sql`${cases.contractedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`,
+      desc(cases.createdAt),
     ) as any
 
   if (options.limit && options.limit > 0) {
@@ -152,9 +159,10 @@ export async function getOutstandingMediationFees(
     .having(
       sql`${mediationFiles.agreedFee}::numeric > COALESCE(SUM(${collections.amount}::numeric), 0)`,
     )
+    // Dava tarafıyla aynı kural: kalan tutar büyükten küçüğe.
     .orderBy(
-      desc(mediationFiles.createdAt),
       sql`${mediationFiles.agreedFee}::numeric - COALESCE(SUM(${collections.amount}::numeric), 0) DESC`,
+      desc(mediationFiles.createdAt),
     ) as any
 
   if (options.limit && options.limit > 0) {
