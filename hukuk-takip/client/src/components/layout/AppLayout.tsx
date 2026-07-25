@@ -5,6 +5,7 @@ import Sidebar from './Sidebar'
 import Header from './Header'
 import MobileBottomNav from './MobileBottomNav'
 import ActionSearchBar from '@/components/shared/ActionSearchBar'
+import RefreshBar from '@/components/shared/RefreshBar'
 import { InlinePageLoader } from '@/App'
 import { api } from '@/lib/axios'
 
@@ -192,6 +193,7 @@ export default function AppLayout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      <RefreshBar />
       <Sidebar open={sidebarOpen} onClose={closeSidebar} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onMenuToggle={toggleSidebar} />
