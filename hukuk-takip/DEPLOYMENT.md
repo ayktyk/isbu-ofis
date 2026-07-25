@@ -145,3 +145,52 @@ Notlar:
 - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` Render'a tek satir olarak girilmeli; satir sonlari `\n` seklinde kalmali.
 - Uygulama kayitlari once Neon'a yazilir. Google tarafinda hata olsa bile dava, gorev ve durusma verisi kaybolmaz.
 - Takvim sonradan baglanirsa `POST /api/calendar/resync` ile mevcut kayitlar tekrar esitlenebilir.
+
+## 8. Keep-alive (cold start cozumu)
+
+Render Free plani 15 dakika hareketsizlikten sonra uyur; uyandiktan sonraki ilk
+istek ~22 saniye surer. Avukat uygulamayi sabah ilk actiginda bu bekleme
+yasanir.
+
+**GitHub Actions cron'u bu is icin yeterli DEGILDIR.** 2026-07-25 olcumu:
+`*/10` yazilmasina ragmen workflow gunde 12-16 kez calisiyor (beklenen 144),
+gece 01:04 -> 04:24 gibi 3 saatlik bosluklar oluyor. GitHub public repolarda
+sik zamanlanmis workflow'lari kisitliyor. Birincil mekanizma harici bir cron
+servisi olmalidir.
+
+### cron-job.org kurulumu (ucretsiz)
+
+1. https://cron-job.org adresinde hesap ac.
+2. "Create cronjob" -> Title: `isbu-ofis keep-alive`
+3. URL: `https://isbu-ofis-api.onrender.com/api/health`
+4. Schedule: "Every 5 minutes"
+5. Gelismis ayarlar -> calisma penceresi:
+   - Gunler: Pazartesi - Cumartesi
+   - Saatler: 06:00 - 21:00 (Europe/Istanbul)
+6. Kaydet.
+
+### Neden 7/24 degil, mesai penceresi?
+
+Render Free ayda 750 instance-saat verir. 7/24 ping ~730 saat eder — kotaya pay
+birakmaz ve ikinci bir free servis eklenirse kota asilir. 06:00-21:00 x 26 gun
+~= 390 saat: kota rahat kalir, avukatin fiili kullanim saatleri tam kapsanir.
+
+Mesai disinda (gece / Pazar) ilk acilista cold start yine yasanabilir; bu
+durumda istemcideki "Sunucu uyandiriliyor..." bildirimi devreye girer.
+
+### Dogrulama
+
+Kurulumdan 30 dakika sonra:
+
+```bash
+curl -s -o /dev/null -w "%{time_total}s\n" https://isbu-ofis-api.onrender.com/api/health
+```
+
+Beklenen: 1 saniyenin altinda. 20+ saniye cikiyorsa cron calismiyor demektir.
+
+### Neden `/api/health` (deep degil)
+
+Sade `/api/health` veritabanina dokunmaz — yalnizca Render'i uyanik tutar.
+Neon'un compute saatini 5 dakikada bir yakmamak icin bilincli tercih.
+Veritabanini uyandiran `deep=1` varyantini yalnizca uygulama acilisinda
+tarayici cagirir.
