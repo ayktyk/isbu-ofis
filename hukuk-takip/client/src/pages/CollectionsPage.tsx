@@ -48,9 +48,18 @@ export default function CollectionsPage() {
   // ── Bekleyen tahsilatlar ──────────────────────────────────────────────────
   const { data: outstandingData, isLoading: outstandingLoading } = useOutstandingCollections()
 
+  // Kalan tutara gore BUYUKTEN KUCUGE siralanir — en cok alacagi olan dosya
+  // en ustte. Siralama burada (istemcide) yapiliyor, sunucudaki paylasilan
+  // outstandingFees.ts helper'inda DEGIL: Dashboard widget'i bilerek "en yeni
+  // eklenen dava en ustte" sirasini kullaniyor (bkz. commit c7f799c — kucuk
+  // tutarli yeni davalar buyuklerin altinda kaybolmasin diye). Helper'i
+  // degistirmek o davranisi bozardi.
   const outstandingRows = useMemo(() => {
     if (!outstandingData) return []
-    return [...(outstandingData.cases || []), ...(outstandingData.mediations || [])]
+    const merged = [...(outstandingData.cases || []), ...(outstandingData.mediations || [])]
+    return merged.sort(
+      (a, b) => Number.parseFloat(b.remaining || '0') - Number.parseFloat(a.remaining || '0')
+    )
   }, [outstandingData])
 
   const outstandingTotal = useMemo(
