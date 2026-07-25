@@ -17,7 +17,9 @@ import './index.css'
 const rawWakeBase = import.meta.env.VITE_API_BASE_URL?.trim()
 const wakeApiBase = rawWakeBase && rawWakeBase.length > 0 ? rawWakeBase.replace(/\/+$/, '') : '/api'
 if (typeof window !== 'undefined') {
-  void fetch(`${wakeApiBase}/health`, { cache: 'no-store' }).catch(() => {})
+  // deep=1: sunucuyla birlikte Neon'u da uyandirir (tek SELECT 1). Kullanici
+  // ilk gercek sorguyu yaptiginda veritabani da hazir olsun diye.
+  void fetch(`${wakeApiBase}/health?deep=1`, { cache: 'no-store' }).catch(() => {})
 }
 
 // React Query cache'i IndexedDB'ye persist edilir (bkz. lib/queryPersister.ts).

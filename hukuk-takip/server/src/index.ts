@@ -8,7 +8,10 @@ import rateLimit from 'express-rate-limit'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import cron from 'node-cron'
+import { sql } from 'drizzle-orm'
+import { db } from './db/index.js'
 import { ensureSchema } from './db/ensureSchema.js'
+import { requestTiming } from './middleware/requestTiming.js'
 import { runReminderScan } from './services/notificationScheduler.js'
 import authRouter from './routes/auth.js'
 import clientsRouter from './routes/clients.js'
@@ -70,6 +73,9 @@ app.use(
 // `Accept-Encoding` göndermezse otomatik atlanır; davranış değişmez, veri etkilenmez.
 app.use(compression({ threshold: 1024 }))
 
+// Yavas istek olcumu — compression'dan hemen sonra, route'lardan once.
+app.use(requestTiming)
+
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -105,8 +111,27 @@ app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use(cookieParser(process.env.COOKIE_SECRET))
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+// /api/health          -> sade, DB'ye dokunmaz. Render healthCheck ve harici
+//                         keep-alive cron'u bunu kullanir (Neon compute saatini
+//                         5 dakikada bir yakmamak icin bilincli tercih).
+// /api/health?deep=1   -> tek SELECT 1 ile Neon'u da uyandirir. YALNIZCA
+//                         istemcinin acilis ping'i cagirir; boylece kullanici
+//                         ilk gercek sorguyu yaptiginda veritabani da uyanik olur.
+app.get('/api/health', async (req, res) => {
+  const timestamp = new Date().toISOString()
+
+  if (req.query.deep !== '1') {
+    res.json({ status: 'ok', timestamp })
+    return
+  }
+
+  try {
+    await db.execute(sql`select 1`)
+    res.json({ status: 'ok', db: 'ok', timestamp })
+  } catch {
+    // Isinma amacli bir istek; DB hatasi saglik kontrolunu dusurmemeli.
+    res.json({ status: 'ok', db: 'error', timestamp })
+  }
 })
 
 app.use('/api', mediationRouter)
