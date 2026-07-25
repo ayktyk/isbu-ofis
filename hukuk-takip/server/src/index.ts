@@ -8,7 +8,10 @@ import rateLimit from 'express-rate-limit'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import cron from 'node-cron'
+import { sql } from 'drizzle-orm'
+import { db } from './db/index.js'
 import { ensureSchema } from './db/ensureSchema.js'
+import { requestTiming } from './middleware/requestTiming.js'
 import { runReminderScan } from './services/notificationScheduler.js'
 import authRouter from './routes/auth.js'
 import clientsRouter from './routes/clients.js'
@@ -28,6 +31,7 @@ import statisticsRouter from './routes/statistics.js'
 import searchRouter from './routes/search.js'
 import consultationsRouter from './routes/consultations.js'
 import caseDiaryRouter from './routes/caseDiary.js'
+import feeInstallmentsRouter from './routes/feeInstallments.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -70,6 +74,9 @@ app.use(
 // `Accept-Encoding` göndermezse otomatik atlanır; davranış değişmez, veri etkilenmez.
 app.use(compression({ threshold: 1024 }))
 
+// Yavas istek olcumu — compression'dan hemen sonra, route'lardan once.
+app.use(requestTiming)
+
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -105,8 +112,27 @@ app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
 app.use(cookieParser(process.env.COOKIE_SECRET))
 
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() })
+// /api/health          -> sade, DB'ye dokunmaz. Render healthCheck ve harici
+//                         keep-alive cron'u bunu kullanir (Neon compute saatini
+//                         5 dakikada bir yakmamak icin bilincli tercih).
+// /api/health?deep=1   -> tek SELECT 1 ile Neon'u da uyandirir. YALNIZCA
+//                         istemcinin acilis ping'i cagirir; boylece kullanici
+//                         ilk gercek sorguyu yaptiginda veritabani da uyanik olur.
+app.get('/api/health', async (req, res) => {
+  const timestamp = new Date().toISOString()
+
+  if (req.query.deep !== '1') {
+    res.json({ status: 'ok', timestamp })
+    return
+  }
+
+  try {
+    await db.execute(sql`select 1`)
+    res.json({ status: 'ok', db: 'ok', timestamp })
+  } catch {
+    // Isinma amacli bir istek; DB hatasi saglik kontrolunu dusurmemeli.
+    res.json({ status: 'ok', db: 'error', timestamp })
+  }
 })
 
 app.use('/api', mediationRouter)
@@ -129,6 +155,9 @@ app.use('/api/consultations', consultationsRouter)
 // Dava günlüğü — /cases/:caseId/diary, /cases/:caseId/next-step, /diary/:entryId
 // Tek router iki path prefix'inden de cevap verir; route'lar tam yolu içeriyor.
 app.use('/api', caseDiaryRouter)
+// Ücret taksitleri — /cases/:caseId/fee-installments ve /fee-installments/:id
+// Router tam yolları içerdiği için caseDiary ile aynı desende bağlanır.
+app.use('/api', feeInstallmentsRouter)
 
 if (process.env.NODE_ENV === 'production') {
   const publicPath = path.join(__dirname, 'public')

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAllCollections } from '@/hooks/useCollections'
+import { useAllCollections, useOutstandingCollections } from '@/hooks/useCollections'
+import { useCases } from '@/hooks/useCases'
 import { formatCurrency, formatDate } from '@/lib/utils'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -8,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   Wallet,
   AlertTriangle,
+  Clock,
   Search,
   Scale,
   Handshake,
@@ -39,8 +41,31 @@ function labelPaymentMethod(method?: string | null) {
 
 export default function CollectionsPage() {
   const navigate = useNavigate()
+  const [tab, setTab] = useState<'done' | 'outstanding'>('done')
   const [source, setSource] = useState<SourceFilter>('all')
   const [query, setQuery] = useState('')
+
+  // ── Bekleyen tahsilatlar ──────────────────────────────────────────────────
+  const { data: outstandingData, isLoading: outstandingLoading } = useOutstandingCollections()
+
+  const outstandingRows = useMemo(() => {
+    if (!outstandingData) return []
+    return [...(outstandingData.cases || []), ...(outstandingData.mediations || [])]
+  }, [outstandingData])
+
+  const outstandingTotal = useMemo(
+    () => outstandingRows.reduce((sum, row) => sum + Number.parseFloat(row.remaining || '0'), 0),
+    [outstandingRows]
+  )
+
+  // Yalnizca yuzdelik anlasilan davalarda hesaplanabilir bir tutar yoktur —
+  // bekleyen TOPLAMA girmezler (uydurma rakam uretmeyiz) ama gozden kacmasin
+  // diye ayri bir blokta listelenirler.
+  const { data: allCasesData } = useCases({ pageSize: 200 })
+  const percentageOnlyCases = useMemo(
+    () => (allCasesData?.data || []).filter((c: any) => c.feeType === 'percentage'),
+    [allCasesData]
+  )
 
   const { data, isLoading, isError } = useAllCollections(
     source === 'all' ? undefined : { source }
@@ -105,6 +130,34 @@ export default function CollectionsPage() {
         </div>
       </div>
 
+      {/* Sekmeler: yapilan tahsilatlar | bekleyenler */}
+      <div className="flex w-fit rounded-xl border bg-card p-1 text-sm">
+        <button
+          type="button"
+          onClick={() => setTab('done')}
+          className={`rounded-lg px-4 py-1.5 text-xs font-medium transition ${
+            tab === 'done'
+              ? 'bg-law-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Tahsilatlar
+        </button>
+        <button
+          type="button"
+          onClick={() => setTab('outstanding')}
+          className={`rounded-lg px-4 py-1.5 text-xs font-medium transition ${
+            tab === 'outstanding'
+              ? 'bg-law-primary text-primary-foreground shadow-sm'
+              : 'text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          Bekleyen{outstandingRows.length > 0 ? ` (${outstandingRows.length})` : ''}
+        </button>
+      </div>
+
+      {tab === 'done' && (
+      <>
       {/* Ozet kartlari */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Card className="border-0 shadow-sm">
@@ -343,6 +396,128 @@ export default function CollectionsPage() {
                         <td className="px-4 py-3 text-right">
                           <span className="font-semibold tabular-nums">
                             {formatCurrency(c.amount, c.currency || 'TRY')}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+      </>
+      )}
+
+      {tab === 'outstanding' && (
+        <>
+          <Card className="border-0 shadow-sm">
+            <CardContent className="flex items-start gap-3 p-4">
+              <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+                <Clock className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">
+                  Bekleyen Toplam · {outstandingRows.length} dosya
+                </p>
+                <p className="mt-0.5 truncate text-lg font-semibold">
+                  {formatCurrency(outstandingTotal, 'TRY')}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {percentageOnlyCases.length > 0 && (
+            <div className="rounded-xl border border-dashed bg-muted/20 p-4">
+              <p className="text-xs font-medium text-muted-foreground">
+                Yüzdelik anlaşmalı dosyalar — tutar dava sonunda belli olur, bekleyen
+                toplama dâhil edilmez
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {percentageOnlyCases.map((c: any) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => navigate(`/cases/${c.id}`)}
+                    className="rounded-full bg-card px-3 py-1.5 text-xs font-medium shadow-sm transition hover:bg-muted"
+                  >
+                    {c.title}
+                    {c.feePercentage ? ` · %${c.feePercentage}` : ''}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {outstandingLoading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Skeleton key={i} className="h-16 rounded-xl" />
+              ))}
+            </div>
+          ) : outstandingRows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <Inbox className="mb-3 h-12 w-12 text-muted-foreground/30" />
+              <h3 className="text-lg font-medium text-muted-foreground">Bekleyen tahsilat yok</h3>
+              <p className="mt-1 text-sm text-muted-foreground/70">
+                Anlaşılan ücreti girilmiş tüm dosyalar tam tahsil edilmiş görünüyor.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/30 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <th className="px-4 py-3">Dosya</th>
+                    <th className="hidden px-4 py-3 md:table-cell">Müvekkil</th>
+                    <th className="hidden px-4 py-3 text-right sm:table-cell">Anlaşılan</th>
+                    <th className="hidden px-4 py-3 text-right sm:table-cell">Tahsil Edilen</th>
+                    <th className="px-4 py-3 text-right">Kalan</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {outstandingRows.map((row) => {
+                    const isMediation = row.source === 'mediation'
+                    const SourceIcon = isMediation
+                      ? Handshake
+                      : row.isCmkAssignment
+                      ? Shield
+                      : Scale
+                    const iconColor = isMediation
+                      ? 'text-orange-500'
+                      : row.isCmkAssignment
+                      ? 'text-indigo-600'
+                      : 'text-law-accent'
+
+                    return (
+                      <tr
+                        key={`${row.source}-${row.id}`}
+                        onClick={
+                          isMediation
+                            ? () => navigate('/tools/mediation-files')
+                            : () => navigate(`/cases/${row.id}`)
+                        }
+                        className="cursor-pointer transition-colors even:bg-muted/20 hover:bg-muted/50"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-start gap-2">
+                            <SourceIcon className={`mt-0.5 h-4 w-4 flex-shrink-0 ${iconColor}`} />
+                            <p className="truncate font-medium">{row.title}</p>
+                          </div>
+                        </td>
+                        <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
+                          {row.clientName || '—'}
+                        </td>
+                        <td className="hidden px-4 py-3 text-right tabular-nums sm:table-cell">
+                          {row.contractedFee ? formatCurrency(row.contractedFee, 'TRY') : '—'}
+                        </td>
+                        <td className="hidden px-4 py-3 text-right tabular-nums text-muted-foreground sm:table-cell">
+                          {formatCurrency(row.totalCollected, 'TRY')}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+                            {formatCurrency(row.remaining, 'TRY')}
                           </span>
                         </td>
                       </tr>

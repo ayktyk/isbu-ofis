@@ -86,6 +86,11 @@ export default function MediationFilesPage() {
   const { data: files, isLoading, isError } = useMediationFiles({
     status: statusFilter || undefined,
   })
+  // Endpoint dizi doner (pagination yok), sayi istemcide hesaplanir.
+  // Durum filtresi aktifken gosterilen sayi filtrelenmis sonuctur — basliktaki
+  // ifade de buna gore degisir, yaniltici "toplam" yazmaz.
+  const totalFiles = Array.isArray(files) ? files.length : 0
+
   const createFile = useCreateMediationFile()
   const deleteFile = useDeleteMediationFile()
 
@@ -133,9 +138,13 @@ export default function MediationFilesPage() {
       {/* Baslik */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="page-title">Arabuluculuk Dosyalari</h1>
+          <h1 className="page-title">Arabuluculuk Dosyaları</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Arabuluculuk dosya takibi ve taraf kayitlari
+            {totalFiles === 0
+              ? 'Arabuluculuk dosya takibi ve taraf kayıtları'
+              : statusFilter
+              ? `${totalFiles} dosya gösteriliyor`
+              : `${totalFiles} arabuluculuk dosyası kayıtlı`}
           </p>
         </div>
         <button

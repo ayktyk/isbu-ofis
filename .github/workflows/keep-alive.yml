@@ -11,10 +11,20 @@ name: Keep Alive
 #
 # Not: Zamanlanmış (schedule) workflow'lar yalnızca varsayılan branch'te (main) çalışır.
 # Bu dosya main'e merge edildiğinde etkinleşir.
+#
+# ⚠ ÖNEMLİ (2026-07-25 ölçümü): GitHub, public repolarda sık zamanlanmış
+# workflow'ları agresif şekilde kısıtlıyor. '*/10' yazılmasına rağmen GERÇEK
+# çalışma aralığı ~1 saat, gece 3 saate kadar çıkıyor (günde 144 yerine 12-16
+# ping). Render 15 dk'da uyuduğu için bu, cold start'ı önlemeye yetmiyor.
+#
+# Bu nedenle BİRİNCİL keep-alive mekanizması cron-job.org'dur; bu workflow
+# yalnızca YEDEK katmandır. Kurulum adımları: hukuk-takip/DEPLOYMENT.md § 8.
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    # GitHub bunu kısıtlayarak uygulayacak; yine de sık istemek daha çok
+    # gerçekleşen ping demek. Asıl güvence harici cron.
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 # Eşzamanlı/birikmiş çalışmaları engelle (gecikmeli tetiklemelerde yığılmasın).

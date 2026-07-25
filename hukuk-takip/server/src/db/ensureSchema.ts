@@ -265,6 +265,50 @@ CREATE INDEX IF NOT EXISTS "notes_user_idx" ON "notes" ("user_id");
 CREATE INDEX IF NOT EXISTS "hearings_result_date_idx" ON "case_hearings" ("result", "hearing_date");
 `
 
+// rev11 (2026-07): Görev kategorisi. Görevler artık "Dava / CMK / Arabuluculuk /
+// Genel" olarak etiketlenebilir; listede renkli rozet ve filtre olarak görünür.
+// TAM ADDITIVE: nullable kolon eklenir, hiçbir satır güncellenmez. Mevcut
+// görevler category=NULL kalır; rozet gerekiyorsa bağlı davadan türetilir.
+// Backfill YAPILMAZ.
+const REV11_TASK_CATEGORY_SQL = `
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "category" varchar(20);
+CREATE INDEX IF NOT EXISTS "tasks_user_category_idx" ON "tasks" ("user_id", "category");
+`
+
+// rev12 (2026-07): Esnek ücret anlaşması. Avukat bazen sadece maktu tutara,
+// bazen sadece yüzdeye, bazen ikisine birden anlaşıyor; maktu tutar sık sık
+// taksitli oluyor (ör. 90.000 TL / 3 taksit).
+//
+// TAM ADDITIVE:
+//  - contracted_fee DEĞİŞMEZ ve maktu tutarı ifade etmeye devam eder.
+//  - fee_type NULL olan mevcut davalar bugünkü davranışla birebir aynı çalışır.
+//  - Hiçbir satır güncellenmez (backfill YOK), hiçbir kolon drop edilmez.
+//  - Taksit "silme" fiziksel DELETE değil, archived_at ile arşivlemedir.
+const REV12_FEE_AGREEMENT_SQL = `
+ALTER TABLE "cases" ADD COLUMN IF NOT EXISTS "fee_type" varchar(20);
+ALTER TABLE "cases" ADD COLUMN IF NOT EXISTS "fee_percentage" numeric(5,2);
+ALTER TABLE "cases" ADD COLUMN IF NOT EXISTS "fee_percentage_base" varchar(20);
+ALTER TABLE "cases" ADD COLUMN IF NOT EXISTS "fee_percentage_note" varchar(500);
+ALTER TABLE "cases" ADD COLUMN IF NOT EXISTS "fee_payment_plan" varchar(20);
+
+CREATE TABLE IF NOT EXISTS "case_fee_installments" (
+  "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  "case_id" uuid NOT NULL REFERENCES "cases"("id") ON DELETE CASCADE,
+  "seq" integer NOT NULL DEFAULT 1,
+  "amount" numeric(12,2) NOT NULL,
+  "due_date" date NOT NULL,
+  "status" varchar(20) NOT NULL DEFAULT 'pending',
+  "collection_id" uuid REFERENCES "collections"("id") ON DELETE SET NULL,
+  "note" varchar(300),
+  "archived_at" timestamp,
+  "created_at" timestamp NOT NULL DEFAULT now(),
+  "updated_at" timestamp NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS "case_fee_installments_case_idx" ON "case_fee_installments" ("case_id");
+CREATE INDEX IF NOT EXISTS "case_fee_installments_due_idx" ON "case_fee_installments" ("due_date", "status");
+`
+
 export async function ensureSchema() {
   if (!process.env.DATABASE_URL) {
     console.warn('ensureSchema: DATABASE_URL yok, atlaniyor.')
@@ -292,6 +336,10 @@ export async function ensureSchema() {
     console.log('Schema guard: cases.is_cmk_assignment hazir.')
     await sql.unsafe(REV10_PERF_INDEXES_SQL)
     console.log('Schema guard: performans indeksleri (notes + hearings result/date) hazir.')
+    await sql.unsafe(REV11_TASK_CATEGORY_SQL)
+    console.log('Schema guard: tasks.category hazir.')
+    await sql.unsafe(REV12_FEE_AGREEMENT_SQL)
+    console.log('Schema guard: esnek ucret anlasmasi (cases fee_* + case_fee_installments) hazir.')
   } catch (err) {
     console.error('Schema guard hatasi:', err)
   } finally {

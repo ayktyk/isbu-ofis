@@ -1,5 +1,53 @@
 # DB Backup Notes
 
+## 2026-07-25 — pre-rev11 + pre-rev12 (9 maddelik iyileştirme paketi)
+
+**Yedek:** `pg_dump` bu makinede kurulu değil. Yerine salt-okunur JSON anlık
+görüntüsü alındı:
+
+```bash
+cd hukuk-takip/server
+node --env-file=../.env scripts/snapshot.mjs faz3-oncesi
+```
+
+Çıktı: `hukuk-takip/.local-backups/2026-07-25-19-55-37-faz3-oncesi.json`
+(gitignore'da — müvekkil verisi içerir, repoya girmez.)
+
+**Anlık görüntü satır sayıları (doğrulama referansı):**
+
+| Tablo | Satır |
+|---|---|
+| cases | 84 |
+| clients | 90 |
+| tasks | 67 |
+| collections | 18 |
+| mediation_files | 9 |
+| mediation_parties | 18 |
+| consultations | 21 |
+| case_hearings | 14 |
+| case_diary_entries | 23 |
+| notifications | 54 |
+| notes | 4 |
+| users | 2 |
+
+Migration sonrası bu sayılar **birebir aynı** olmalıdır.
+
+**REV11 (Faz 3) — görev kategorisi:**
+- `ALTER TABLE tasks ADD COLUMN IF NOT EXISTS category varchar(20)` (nullable)
+- `CREATE INDEX IF NOT EXISTS tasks_user_category_idx`
+- Backfill YOK. Mevcut 67 görev `category = NULL` kalır.
+
+**REV12 (Faz 5) — esnek ücret anlaşması:**
+- `cases` tablosuna 5 nullable kolon: `fee_type`, `fee_percentage`,
+  `fee_percentage_base`, `fee_percentage_note`, `fee_payment_plan`
+- Yeni tablo: `case_fee_installments` (+ 2 indeks)
+- `contracted_fee` **DEĞİŞMEDİ** — maktu tutarı ifade etmeye devam ediyor.
+- Rename YOK, DROP YOK, backfill YOK. `fee_type IS NULL` olan 84 dava
+  bugünküyle birebir aynı davranır.
+
+**Geri alma:** Neon dashboard → Branches → Restore to point before 2026-07-25.
+PITR penceresi 7 gün.
+
 ## 2026-05-17 — pre-rev9 (CMK görevlendirme ayrımı) migration
 
 **Migration:** `0014_add_cmk_assignment.sql` + `ensureSchema.ts` REV9 bloğu

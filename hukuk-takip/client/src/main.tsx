@@ -3,9 +3,9 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client'
-import { createSyncStoragePersister } from '@tanstack/query-sync-storage-persister'
 import { Toaster } from 'sonner'
 import { queryClient } from './lib/queryClient'
+import { queryPersister, shouldPersistQuery } from './lib/queryPersister'
 import { ThemeProvider } from './lib/theme'
 import App from './App'
 import './index.css'
@@ -17,17 +17,19 @@ import './index.css'
 const rawWakeBase = import.meta.env.VITE_API_BASE_URL?.trim()
 const wakeApiBase = rawWakeBase && rawWakeBase.length > 0 ? rawWakeBase.replace(/\/+$/, '') : '/api'
 if (typeof window !== 'undefined') {
-  void fetch(`${wakeApiBase}/health`, { cache: 'no-store' }).catch(() => {})
+  // deep=1: sunucuyla birlikte Neon'u da uyandirir (tek SELECT 1). Kullanici
+  // ilk gercek sorguyu yaptiginda veritabani da hazir olsun diye.
+  void fetch(`${wakeApiBase}/health?deep=1`, { cache: 'no-store' }).catch(() => {})
 }
 
-// React Query cache'i localStorage'a persist et.
-// Amac: PWA mobilde RAM'den atilip tekrar acildiginda son veriyi aninda
-// gosterip arka planda yenilemek — bos ekran/spinner yok.
-const persister = createSyncStoragePersister({
-  storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-  key: 'hz-query-cache',
-  throttleTime: 1000,
-})
+// React Query cache'i IndexedDB'ye persist edilir (bkz. lib/queryPersister.ts).
+// Eski localStorage tabanli cache artik kullanilmiyor; yer kaplamasin diye bir
+// kez temizlenir. Bu yalnizca istemci onbellegidir — kullanici verisi degildir.
+if (typeof window !== 'undefined') {
+  try {
+    window.localStorage.removeItem('hz-query-cache')
+  } catch {}
+}
 
 // Bundle versiyonu degistiginde persisted cache'i invalide et.
 // Yeni build'te (yeni hash'li asset'ler) eski cache anlamsizdir.
@@ -63,18 +65,13 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <PersistQueryClientProvider
         client={queryClient}
         persistOptions={{
-          persister,
+          persister: queryPersister,
           maxAge: 1000 * 60 * 60 * 24, // 24 saat sonra at
           buster: CACHE_BUSTER,
           dehydrateOptions: {
-            // Büyük liste query'lerini localStorage'a senkron yazmak mobilde takılma yaratır.
-            // Kullanıcı cache'i authCache ile ayrıca tutuluyor; burada yalnızca küçük auth query'si saklanır.
-            shouldDehydrateQuery: (query) => {
-              const key = query.queryKey?.[0]
-              if (typeof key !== 'string') return false
-              const persisted = ['auth']
-              return persisted.includes(key) && query.state.status === 'success'
-            },
+            // Hangi query'lerin diske yazilacagi queryPersister.ts'te tanimli.
+            // IndexedDB asenkron oldugu icin liste query'leri de guvenle saklanir.
+            shouldDehydrateQuery: shouldPersistQuery,
           },
         }}
       >
