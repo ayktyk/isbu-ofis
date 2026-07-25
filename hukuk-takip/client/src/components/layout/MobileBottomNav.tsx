@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Briefcase, Calendar, CheckSquare, LayoutDashboard, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/axios'
+import { prefetchRouteChunk } from '@/lib/routeChunks'
 
 // Prefetch için kullanılan queryKey'ler ilgili hook'lardakilerle BIRE BIR aynı
 // olmalı, aksi halde cache hit olmaz ve sayfa yine boş yüklenir.
@@ -76,6 +77,8 @@ export default function MobileBottomNav() {
             key={to}
             to={to}
             onTouchStart={() => {
+              // Once sayfanin JS chunk'i, sonra verisi isitilir.
+              prefetchRouteChunk(to)
               if (prefetchInfo) prefetch(prefetchInfo.queryKey, prefetchInfo.url)
             }}
             onClick={(event) => handleClick(event, to)}

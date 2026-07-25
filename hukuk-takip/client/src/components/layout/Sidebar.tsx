@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/axios'
+import { prefetchRouteChunk } from '@/lib/routeChunks'
 
 // Her menu ogesi icin: route + opsiyonel prefetch meta (hangi query + URL on yuklenecek).
 // Hover/touch aninda veri on cekilerek sekme gecisinde beklemeyi sifira yaklastiririz.
@@ -168,7 +169,11 @@ export default function Sidebar({
               label={item.label}
               Icon={item.icon}
               onClick={onClose}
-              onPrefetch={item.prefetch ? () => prefetch(item.prefetch) : undefined}
+              onPrefetch={() => {
+                // Once sayfanin JS chunk'i, sonra verisi isitilir.
+                prefetchRouteChunk(item.to)
+                if (item.prefetch) prefetch(item.prefetch)
+              }}
             />
           ))}
 
@@ -178,7 +183,14 @@ export default function Sidebar({
               Araçlar
             </p>
             {toolItems.map(({ to, label, icon: Icon }) => (
-              <SidebarLink key={to} to={to} label={label} Icon={Icon} onClick={onClose} />
+              <SidebarLink
+                key={to}
+                to={to}
+                label={label}
+                Icon={Icon}
+                onClick={onClose}
+                onPrefetch={() => prefetchRouteChunk(to)}
+              />
             ))}
           </div>
         </nav>
