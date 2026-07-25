@@ -16,3 +16,31 @@ export function useAllCollections(params?: {
     },
   })
 }
+
+export interface OutstandingRow {
+  id: string
+  title: string
+  clientName: string | null
+  contractedFee: string | null
+  totalCollected: string
+  remaining: string
+  source: 'case' | 'mediation'
+  isCmkAssignment?: boolean
+  status?: string
+}
+
+// Bekleyen tahsilatlar — anlasilan ucreti girilmis ama henuz tam tahsil
+// edilmemis dava ve arabuluculuk dosyalari.
+//
+// Sunucu tarafinda Dashboard ve Istatistikler ile AYNI yardimci fonksiyonlari
+// kullanir; uc ekran arasinda rakam farki olmaz.
+export function useOutstandingCollections() {
+  return useQuery({
+    queryKey: ['collections', 'outstanding'],
+    queryFn: async () => {
+      const res = await api.get('/collections/outstanding')
+      return res.data as { cases: OutstandingRow[]; mediations: OutstandingRow[] }
+    },
+    staleTime: 1000 * 60 * 2,
+  })
+}
