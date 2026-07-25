@@ -9,3 +9,8 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+// vite.config.ts `define` ile her derlemede enjekte edilir (Vercel commit SHA
+// veya derleme zamani). Kalici React Query onbelleginin buster'i olarak
+// kullanilir — degeri degisince eski onbellek atilir.
+declare const __BUILD_ID__: string

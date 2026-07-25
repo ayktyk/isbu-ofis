@@ -118,20 +118,26 @@ app.use(cookieParser(process.env.COOKIE_SECRET))
 // /api/health?deep=1   -> tek SELECT 1 ile Neon'u da uyandirir. YALNIZCA
 //                         istemcinin acilis ping'i cagirir; boylece kullanici
 //                         ilk gercek sorguyu yaptiginda veritabani da uyanik olur.
+// Calisan surumun commit kimligi. Render deploy sirasinda RENDER_GIT_COMMIT'i
+// otomatik saglar. Amac: "degisiklik canliya cikti mi?" sorusunu disaridan tek
+// istekle cevaplayabilmek — onceden bu ancak uygulamaya girip gozle bakarak
+// anlasilabiliyordu.
+const BUILD_COMMIT = (process.env.RENDER_GIT_COMMIT || 'local').slice(0, 7)
+
 app.get('/api/health', async (req, res) => {
   const timestamp = new Date().toISOString()
 
   if (req.query.deep !== '1') {
-    res.json({ status: 'ok', timestamp })
+    res.json({ status: 'ok', commit: BUILD_COMMIT, timestamp })
     return
   }
 
   try {
     await db.execute(sql`select 1`)
-    res.json({ status: 'ok', db: 'ok', timestamp })
+    res.json({ status: 'ok', db: 'ok', commit: BUILD_COMMIT, timestamp })
   } catch {
     // Isinma amacli bir istek; DB hatasi saglik kontrolunu dusurmemeli.
-    res.json({ status: 'ok', db: 'error', timestamp })
+    res.json({ status: 'ok', db: 'error', commit: BUILD_COMMIT, timestamp })
   }
 })
 

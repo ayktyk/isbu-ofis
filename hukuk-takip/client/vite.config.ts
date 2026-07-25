@@ -6,7 +6,22 @@ import path from 'path'
 export default defineConfig(({ mode }) => {
   const outDir = mode === 'standalone' ? './dist' : '../server/dist/public'
 
+  // Her derlemede DEĞİŞEN bir kimlik. React Query'nin kalıcı önbelleği bunu
+  // "buster" olarak kullanır: değer değişince eski önbellek atılır.
+  //
+  // Neden gerekli: main.tsx'te sabit bir metin yazılıydı ve VITE_BUILD_ID
+  // hiçbir ortamda tanımlı değildi → yeni sürüm çıksa bile telefonda 24 saate
+  // kadar eski veri gösteriliyordu. Vercel commit SHA'sı varsa onu, yoksa
+  // derleme zamanını kullanırız.
+  const buildId =
+    process.env.VERCEL_GIT_COMMIT_SHA ||
+    process.env.RENDER_GIT_COMMIT ||
+    String(Date.now())
+
   return {
+    define: {
+      __BUILD_ID__: JSON.stringify(buildId),
+    },
     plugins: [
       react(),
       VitePWA({

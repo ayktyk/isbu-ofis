@@ -32,8 +32,11 @@ if (typeof window !== 'undefined') {
 }
 
 // Bundle versiyonu degistiginde persisted cache'i invalide et.
-// Yeni build'te (yeni hash'li asset'ler) eski cache anlamsizdir.
-const CACHE_BUSTER = import.meta.env.VITE_BUILD_ID || '2026-05-02-deadlines-v1'
+// __BUILD_ID__ vite.config.ts'te her derlemede yeniden uretilir (Vercel commit
+// SHA'si veya derleme zamani). ONCEDEN burada sabit bir metin vardi ve
+// VITE_BUILD_ID hicbir ortamda tanimli degildi → yeni surum ciksa bile eski
+// veri 24 saate kadar ekranda kaliyordu.
+const CACHE_BUSTER = __BUILD_ID__
 
 // PWA Service Worker update detection: yeni versiyon hazir oldugunda
 // kullaniciya soylesin, kabul ederse hemen yeniden yukle. Mobilde "manuel ekle"
