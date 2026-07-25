@@ -13,11 +13,11 @@ import {
 import { ArrowLeft, Loader2, Plus, Save, Scale } from 'lucide-react'
 import { useCase, useCreateCase, useUpdateCase } from '@/hooks/useCases'
 import { useMobileKeyboardFix } from '@/hooks/useMobileKeyboardFix'
-import { useClients, useCreateClient } from '@/hooks/useClients'
+import { useClients } from '@/hooks/useClients'
 import { caseStatusLabels, caseTypeLabels } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import QuickAddClientDialog from '@/components/shared/QuickAddClientDialog'
 
 type CaseFormValues = CreateCaseInput & Pick<UpdateCaseInput, 'status' | 'closeDate'>
 
@@ -33,12 +33,8 @@ export default function CaseFormPage() {
   const createCase = useCreateCase()
   const updateCase = useUpdateCase(id || '')
   const { data: clientsData } = useClients({ pageSize: 100 })
-  const createClient = useCreateClient()
 
   const [clientDialogOpen, setClientDialogOpen] = useState(false)
-  const [newClientName, setNewClientName] = useState('')
-  const [newClientPhone, setNewClientPhone] = useState('')
-  const [newClientEmail, setNewClientEmail] = useState('')
 
   const clients = clientsData?.data || []
 
@@ -91,31 +87,6 @@ export default function CaseFormPage() {
   const selectedCaseType = watch('caseType')
   const selectedStatus = watch('status')
   const isPending = createCase.isPending || updateCase.isPending
-
-  function handleCreateClient() {
-    if (!newClientName.trim()) return
-
-    createClient.mutate(
-      {
-        fullName: newClientName.trim(),
-        phone: newClientPhone.trim() || undefined,
-        email: newClientEmail.trim() || undefined,
-      },
-      {
-        onSuccess: (response: any) => {
-          const newId = response?.data?.id
-          if (newId) {
-            setValue('clientId', newId)
-          }
-
-          setClientDialogOpen(false)
-          setNewClientName('')
-          setNewClientPhone('')
-          setNewClientEmail('')
-        },
-      }
-    )
-  }
 
   function onSubmit(values: CaseFormValues) {
     if (isEdit) {
@@ -360,62 +331,11 @@ export default function CaseFormPage() {
         </div>
       </form>
 
-      <Dialog open={clientDialogOpen} onOpenChange={setClientDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Yeni Muvekkil Ekle</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">
-                Ad Soyad <span className="text-red-500">*</span>
-              </label>
-              <input
-                value={newClientName}
-                onChange={(event) => setNewClientName(event.target.value)}
-                className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent focus:ring-2 focus:ring-law-accent/20"
-                placeholder="Ad Soyad"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">Telefon</label>
-              <input
-                value={newClientPhone}
-                onChange={(event) => setNewClientPhone(event.target.value)}
-                className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent focus:ring-2 focus:ring-law-accent/20"
-                placeholder="05xx xxx xx xx"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium">E-posta</label>
-              <input
-                value={newClientEmail}
-                onChange={(event) => setNewClientEmail(event.target.value)}
-                className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent focus:ring-2 focus:ring-law-accent/20"
-                placeholder="ornek@mail.com"
-              />
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setClientDialogOpen(false)}
-                className="rounded-xl border px-4 py-2.5 text-sm font-medium text-muted-foreground transition hover:bg-muted"
-              >
-                Iptal
-              </button>
-              <button
-                type="button"
-                onClick={handleCreateClient}
-                disabled={!newClientName.trim() || createClient.isPending}
-                className="inline-flex items-center gap-2 rounded-xl bg-law-accent px-4 py-2.5 text-sm font-medium text-white shadow-sm transition hover:opacity-90 disabled:opacity-50"
-              >
-                {createClient.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-                Olustur
-              </button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <QuickAddClientDialog
+        open={clientDialogOpen}
+        onOpenChange={setClientDialogOpen}
+        onCreated={(clientId) => setValue('clientId', clientId)}
+      />
     </div>
   )
 }
