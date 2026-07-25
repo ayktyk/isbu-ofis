@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 import { api } from '@/lib/axios'
 import { useCases } from '@/hooks/useCases'
-import { caseStatusLabels, formatCurrency } from '@/lib/utils'
+import { caseStatusLabels, formatCurrency, formatDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -202,6 +202,7 @@ export default function CmkAssignmentsPage() {
                     <th className="pb-2 pr-3">Dosya</th>
                     <th className="hidden pb-2 pr-3 sm:table-cell">Müvekkil</th>
                     <th className="hidden pb-2 pr-3 md:table-cell">Esas No</th>
+                    <th className="hidden pb-2 pr-3 lg:table-cell">Eklenme</th>
                     <th className="pb-2 pr-3 text-right">Anlaşılan Ücret</th>
                     <th className="pb-2 pr-3">Durum</th>
                     <th className="pb-2 pr-3 text-right">Aç</th>
@@ -219,6 +220,7 @@ export default function CmkAssignmentsPage() {
                           <span className="truncate">{row.title}</span>
                           <span className="text-xs text-muted-foreground sm:hidden">
                             {row.clientName || '-'}
+                            {row.createdAt ? ` · ${formatDate(row.createdAt)}` : ''}
                           </span>
                         </div>
                       </td>
@@ -227,6 +229,9 @@ export default function CmkAssignmentsPage() {
                       </td>
                       <td className="hidden py-3 pr-3 text-muted-foreground md:table-cell">
                         {row.caseNumber || '-'}
+                      </td>
+                      <td className="hidden py-3 pr-3 text-muted-foreground lg:table-cell">
+                        {row.createdAt ? formatDate(row.createdAt) : '-'}
                       </td>
                       <td className="py-3 pr-3 text-right">
                         {row.contractedFee

@@ -71,7 +71,11 @@ router.get('/', async (req, res) => {
     .leftJoin(mediationFiles, eq(collections.mediationFileId, mediationFiles.id))
     .leftJoin(clients, eq(collections.clientId, clients.id))
     .where(and(...conditions))
-    .orderBy(desc(collections.createdAt))
+    // Avukatin bekledigi sira: tahsilatin YAPILDIGI tarih (collection_date).
+    // createdAt yalnizca kaydin sisteme girildigi an — gecmis tarihli bir
+    // tahsilat bugun girildiginde listenin basina cikiyordu. createdAt ikincil
+    // kriter olarak ayni gune ait kayitlarin girilis sirasini korur.
+    .orderBy(desc(collections.collectionDate), desc(collections.createdAt))
 
   res.json(data)
 })
