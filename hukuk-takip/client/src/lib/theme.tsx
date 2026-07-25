@@ -1,6 +1,14 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react'
 
-export type ThemeId = 'parchment' | 'chamber' | 'light' | 'dark' | 'navy' | 'warm' | 'forest'
+export type ThemeId =
+  | 'parchment'
+  | 'chamber'
+  | 'light'
+  | 'dark'
+  | 'navy'
+  | 'warm'
+  | 'forest'
+  | 'ink'
 
 export interface ThemeOption {
   id: ThemeId
@@ -58,6 +66,12 @@ export const themes: ThemeOption[] = [
     description: 'Doğal yeşil tonlarıyla huzurlu',
     preview: { bg: '#F2F7F4', sidebar: '#0F1F15', accent: '#2D7A4F', card: '#FFFFFF', text: '#1A3326' },
   },
+  {
+    id: 'ink',
+    label: 'Mürekkep',
+    description: 'Petrol mavisi + pirinç — akşam çalışması için sakin koyu tema',
+    preview: { bg: '#0E1418', sidebar: '#090F12', accent: '#2CB2BE', card: '#141E22', text: '#DFE8EB' },
+  },
 ]
 
 const STORAGE_KEY = 'hukuk-takip-theme'
@@ -92,7 +106,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Add current
     root.classList.add(`theme-${theme}`)
     // Toggle dark class for tailwind darkMode
-    if (theme === 'dark' || theme === 'navy') {
+    if (theme === 'dark' || theme === 'navy' || theme === 'ink') {
       root.classList.add('dark')
     } else {
       root.classList.remove('dark')

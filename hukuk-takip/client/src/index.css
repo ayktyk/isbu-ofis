@@ -81,6 +81,47 @@ html.theme-dark {
   --law-accent: 38 60% 55%;
 }
 
+/* Mürekkep — Hallmark · bileşen: tema paleti · tür: editorial · vurgu: petrol (187°)
+ * pre-emit kritik: P4 H4 E5 S5 R5 V4
+ * Çeşitlendirme: mevcut 7 temanın vurguları altın/mavi/yeşil; petrol tonu boştu.
+ * İki renkli semantik: PIRINÇ (--gold) = para/değer, PETROL (--accent) = aksiyon.
+ * Kontrast: metin 15:1 · sönük metin 7:1 · vurgu 5.5:1 · odak halkası 5.5:1 (hepsi AA üstü)
+ */
+html.theme-ink {
+  --background: 200 24% 7%;            /* #0E1418 — derin arduvaz, hafif petrole çalan */
+  --foreground: 195 20% 90%;           /* #DFE8EB */
+  --card: 200 20% 10%;                 /* #141E22 — kağıttan bir kademe açık */
+  --card-foreground: 195 20% 90%;
+  --popover: 200 20% 10%;
+  --popover-foreground: 195 20% 90%;
+  --primary: 187 62% 46%;              /* #2CB2BE — petrol; butonlar, aktif durumlar */
+  --primary-foreground: 200 24% 7%;    /* koyu metin — petrol üstünde 5.5:1 */
+  --secondary: 200 18% 15%;
+  --secondary-foreground: 195 18% 85%;
+  --muted: 200 18% 15%;
+  --muted-foreground: 197 14% 58%;     /* sönük metin — arka planda 7:1 */
+  --accent: 187 62% 46%;
+  --accent-foreground: 200 24% 7%;
+  --destructive: 4 65% 56%;            /* kırmızı — petrolden uzak, uyarı sinyali net kalır */
+  --destructive-foreground: 0 0% 100%;
+  --border: 200 18% 17%;
+  --input: 200 18% 17%;
+  --ring: 187 62% 46%;
+  /* Pirinç petrolden ayrı tutuldu: para/değer sıcak, aksiyon soğuk okunur. */
+  --gold: 38 48% 56%;
+  --gold-light: 40 55% 72%;
+  --sidebar-bg: 200 26% 5%;            /* sayfadan koyu — derinlik */
+  --sidebar-fg: 195 18% 88%;
+  --sidebar-muted: 197 12% 52%;
+  --sidebar-accent: 187 62% 52%;
+  --sidebar-border: 200 18% 14%;
+  --sidebar-active: 187 62% 52% / 0.14;
+  --law-bg: 200 24% 7%;
+  --law-surface: 200 20% 10%;
+  --law-primary: 187 62% 46%;
+  --law-accent: 187 62% 46%;
+}
+
 /* Navy */
 html.theme-navy {
   --background: 222 40% 8%;
@@ -438,16 +479,22 @@ html.theme-chamber {
 
 /* Dark theme overrides for status badges (outside @layer for proper specificity) */
 html.theme-dark .status-active,
+html.theme-ink .status-active,
 html.theme-navy .status-active { background: rgb(8 47 73 / 0.4); color: #7dd3fc; border-color: #075985; }
 html.theme-dark .status-won,
+html.theme-ink .status-won,
 html.theme-navy .status-won { background: rgb(6 78 59 / 0.4); color: #6ee7b7; border-color: #065f46; }
 html.theme-dark .status-lost,
+html.theme-ink .status-lost,
 html.theme-navy .status-lost { background: rgb(69 10 10 / 0.4); color: #fca5a5; border-color: #7f1d1d; }
 html.theme-dark .status-settled,
+html.theme-ink .status-settled,
 html.theme-navy .status-settled { background: rgb(69 26 3 / 0.4); color: #fcd34d; border-color: #78350f; }
 html.theme-dark .status-closed,
+html.theme-ink .status-closed,
 html.theme-navy .status-closed { background: rgb(30 41 59 / 0.4); color: #cbd5e1; border-color: #334155; }
 html.theme-dark .status-passive,
+html.theme-ink .status-passive,
 html.theme-navy .status-passive { background: rgb(31 41 55 / 0.4); color: #9ca3af; border-color: #374151; }
 
 /* Arka plan yenilemesi sirasinda ustte kayan ince cizgi (RefreshBar).
