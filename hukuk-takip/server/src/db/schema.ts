@@ -166,6 +166,16 @@ export const cases = pgTable(
     closeDate: date('close_date'),
     contractedFee: decimal('contracted_fee', { precision: 12, scale: 2 }),
     currency: varchar('currency', { length: 3 }).default('TRY').notNull(),
+    // Esnek ücret anlaşması (rev12). contractedFee = MAKTU tutar (anlamı değişmedi).
+    // feeType NULL = eski davranış (yalnızca maktu tutar).
+    // 'fixed' | 'percentage' | 'fixed_plus_percentage'
+    feeType: varchar('fee_type', { length: 20 }),
+    feePercentage: decimal('fee_percentage', { precision: 5, scale: 2 }),
+    // 'collected' (tahsil edilen üzerinden) | 'awarded' (hükmedilen üzerinden)
+    feePercentageBase: varchar('fee_percentage_base', { length: 20 }),
+    feePercentageNote: varchar('fee_percentage_note', { length: 500 }),
+    // 'single' | 'installment'
+    feePaymentPlan: varchar('fee_payment_plan', { length: 20 }),
     // CMK görevlendirmesi (Ceza Muhakemesi Kanunu — baro üzerinden gelen zorunlu müdafilik).
     // Bu davalar UI'da ayrı "CMK Görevlendirmeleri" sayfasında listelenir, normal davalar
     // listesinde gizlenir. Tahsilat raporlamasında "CMK'dan kazanılan" olarak ayrı sayılır.
@@ -300,6 +310,36 @@ export const collections = pgTable(
     caseIdx: index('collections_case_idx').on(table.caseId),
     mediationIdx: index('collections_mediation_idx').on(table.mediationFileId),
     userIdx: index('collections_user_idx').on(table.userId),
+  })
+)
+
+// Ücret anlaşmasının taksit planı (rev12).
+// Kullanıcı bir taksiti "silince" satır yok edilmez, archived_at set edilir —
+// veri koruma kuralı gereği fiziksel DELETE kod yolu yoktur.
+export const caseFeeInstallments = pgTable(
+  'case_fee_installments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    caseId: uuid('case_id')
+      .references(() => cases.id, { onDelete: 'cascade' })
+      .notNull(),
+    seq: integer('seq').default(1).notNull(),
+    amount: decimal('amount', { precision: 12, scale: 2 }).notNull(),
+    dueDate: date('due_date').notNull(),
+    // 'pending' | 'paid' | 'partial'
+    status: varchar('status', { length: 20 }).default('pending').notNull(),
+    // Taksit tahsilat olarak işlendiğinde oluşan collections kaydına bağlanır.
+    collectionId: uuid('collection_id').references(() => collections.id, {
+      onDelete: 'set null',
+    }),
+    note: varchar('note', { length: 300 }),
+    archivedAt: timestamp('archived_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    caseIdx: index('case_fee_installments_case_idx').on(table.caseId),
+    dueIdx: index('case_fee_installments_due_idx').on(table.dueDate, table.status),
   })
 )
 

@@ -31,6 +31,7 @@ import statisticsRouter from './routes/statistics.js'
 import searchRouter from './routes/search.js'
 import consultationsRouter from './routes/consultations.js'
 import caseDiaryRouter from './routes/caseDiary.js'
+import feeInstallmentsRouter from './routes/feeInstallments.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -154,6 +155,9 @@ app.use('/api/consultations', consultationsRouter)
 // Dava günlüğü — /cases/:caseId/diary, /cases/:caseId/next-step, /diary/:entryId
 // Tek router iki path prefix'inden de cevap verir; route'lar tam yolu içeriyor.
 app.use('/api', caseDiaryRouter)
+// Ücret taksitleri — /cases/:caseId/fee-installments ve /fee-installments/:id
+// Router tam yolları içerdiği için caseDiary ile aynı desende bağlanır.
+app.use('/api', feeInstallmentsRouter)
 
 if (process.env.NODE_ENV === 'production') {
   const publicPath = path.join(__dirname, 'public')

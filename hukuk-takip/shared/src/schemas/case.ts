@@ -24,6 +24,28 @@ export const caseTypeValues = [
   'diger',
 ] as const
 
+// Esnek ücret anlaşması. Avukat bazen sadece maktu tutara, bazen sadece
+// yüzdeye, bazen ikisine birden anlaşıyor.
+export const feeTypeValues = ['fixed', 'percentage', 'fixed_plus_percentage'] as const
+// Yüzdenin neyin üzerinden hesaplanacağı: tahsil edilen mi, hükmedilen mi?
+export const feePercentageBaseValues = ['collected', 'awarded'] as const
+export const feePaymentPlanValues = ['single', 'installment'] as const
+
+export type FeeType = (typeof feeTypeValues)[number]
+export type FeePercentageBase = (typeof feePercentageBaseValues)[number]
+export type FeePaymentPlan = (typeof feePaymentPlanValues)[number]
+
+export const feeTypeLabels: Record<FeeType, string> = {
+  fixed: 'Maktu',
+  percentage: 'Yüzdelik',
+  fixed_plus_percentage: 'Maktu + Yüzdelik',
+}
+
+export const feePercentageBaseLabels: Record<FeePercentageBase, string> = {
+  collected: 'Tahsil edilen üzerinden',
+  awarded: 'Hükmedilen üzerinden',
+}
+
 export const createCaseSchema = z.object({
   clientId: z.string().uuid('Gecerli bir muvekkil secin'),
   caseNumber: z.string().max(100).optional().or(z.literal('')),
@@ -39,6 +61,17 @@ export const createCaseSchema = z.object({
     .optional()
     .or(z.literal('')),
   currency: z.string().length(3).default('TRY'),
+  // Esnek ücret alanları — hepsi opsiyonel, boş bırakılırsa mevcut davranış
+  // (yalnızca maktu contractedFee) aynen korunur.
+  feeType: z.enum(feeTypeValues).optional().or(z.literal('')),
+  feePercentage: z
+    .string()
+    .regex(/^\d{1,2}([.]\d{1,2})?$/, 'Oran 0-99 arası olmalıdır')
+    .optional()
+    .or(z.literal('')),
+  feePercentageBase: z.enum(feePercentageBaseValues).optional().or(z.literal('')),
+  feePercentageNote: z.string().max(500).optional().or(z.literal('')),
+  feePaymentPlan: z.enum(feePaymentPlanValues).optional().or(z.literal('')),
   // CMK (Ceza Muhakemesi Kanunu) zorunlu müdafilik görevlendirmesi mi?
   // True ise dava normal davalar listesinde değil "CMK Görevlendirmeleri" sayfasında görünür.
   isCmkAssignment: z.boolean().optional(),

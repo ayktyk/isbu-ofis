@@ -51,6 +51,13 @@ function normalizeCasePayload(payload: any): any {
     caseNumber: normalizeNullableString(payload.caseNumber),
     courtName: normalizeNullableString(payload.courtName),
     description: normalizeNullableString(payload.description),
+    // Esnek ücret anlaşması alanları — boş string yerine null yazılır ki
+    // "seçilmedi" ile "boş metin" karışmasın.
+    feeType: normalizeNullableString(payload.feeType),
+    feePercentage: normalizeNullableString(payload.feePercentage),
+    feePercentageBase: normalizeNullableString(payload.feePercentageBase),
+    feePercentageNote: normalizeNullableString(payload.feePercentageNote),
+    feePaymentPlan: normalizeNullableString(payload.feePaymentPlan),
   }
   // isCmkAssignment kullanıcı boolean olarak gönderir; undefined ise dokunma.
   if (payload.isCmkAssignment !== undefined) {
@@ -198,6 +205,9 @@ router.get('/', async (req, res) => {
         title: cases.title,
         startDate: cases.startDate,
         contractedFee: cases.contractedFee,
+        // Listede ücret rozeti gösterebilmek için (ör. "%15 · dava sonu")
+        feeType: cases.feeType,
+        feePercentage: cases.feePercentage,
         clientId: cases.clientId,
         clientName: clients.fullName,
         isCmkAssignment: cases.isCmkAssignment,
@@ -264,6 +274,12 @@ router.get('/:id', async (req, res) => {
       closeDate: cases.closeDate,
       contractedFee: cases.contractedFee,
       currency: cases.currency,
+      // Esnek ücret anlaşması
+      feeType: cases.feeType,
+      feePercentage: cases.feePercentage,
+      feePercentageBase: cases.feePercentageBase,
+      feePercentageNote: cases.feePercentageNote,
+      feePaymentPlan: cases.feePaymentPlan,
       customCaseType: cases.customCaseType,
       isCmkAssignment: cases.isCmkAssignment,
       clientId: cases.clientId,
@@ -313,6 +329,12 @@ router.get('/:id/detail', async (req, res) => {
       closeDate: cases.closeDate,
       contractedFee: cases.contractedFee,
       currency: cases.currency,
+      // Esnek ücret anlaşması
+      feeType: cases.feeType,
+      feePercentage: cases.feePercentage,
+      feePercentageBase: cases.feePercentageBase,
+      feePercentageNote: cases.feePercentageNote,
+      feePaymentPlan: cases.feePaymentPlan,
       customCaseType: cases.customCaseType,
       isCmkAssignment: cases.isCmkAssignment,
       clientId: cases.clientId,
