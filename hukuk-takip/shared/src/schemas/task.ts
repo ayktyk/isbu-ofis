@@ -4,6 +4,12 @@ import { deadlineCategoryValues, deadlineSeverityValues } from '../legalDeadline
 export const taskStatusValues = ['pending', 'in_progress', 'completed', 'cancelled'] as const
 export const taskPriorityValues = ['low', 'medium', 'high', 'urgent'] as const
 
+// Görev kategorisi — listede renkli rozet, formda seçim, filtrede kriter.
+// 'arabuluculuk' bilinçli olarak yalnızca etikettir: arabuluculuk dosyasına
+// bağlanmaz (avukat kararı). 'dava' ve 'cmk' mevcut caseId üzerinden bağlanır.
+export const taskCategoryValues = ['dava', 'cmk', 'arabuluculuk', 'genel'] as const
+export type TaskCategory = (typeof taskCategoryValues)[number]
+
 const optionalString = (max?: number) => {
   const base = max ? z.string().max(max) : z.string()
   return base.optional().or(z.literal(''))
@@ -14,6 +20,7 @@ const optionalDate = z.string().optional().or(z.literal(''))
 export const createTaskSchema = z.object({
   caseId: z.string().uuid().optional().or(z.literal('')),
   label: z.string().max(100).optional().or(z.literal('')),
+  category: z.enum(taskCategoryValues).optional().or(z.literal('')),
   title: z.string().min(2, 'Görev başlığı en az 2 karakter olmalıdır').max(500),
   description: z.string().max(5000).optional().or(z.literal('')),
   priority: z.enum(taskPriorityValues).default('medium'),

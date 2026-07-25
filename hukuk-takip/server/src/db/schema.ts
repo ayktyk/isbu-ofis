@@ -217,6 +217,9 @@ export const tasks = pgTable(
       .notNull(),
     caseId: uuid('case_id').references(() => cases.id, { onDelete: 'set null' }),
     label: varchar('label', { length: 100 }),
+    // Görev kategorisi: 'dava' | 'cmk' | 'arabuluculuk' | 'genel'
+    // Nullable — eski görevler NULL kalır, backfill yapılmaz.
+    category: varchar('category', { length: 20 }),
     title: varchar('title', { length: 500 }).notNull(),
     description: text('description'),
     status: taskStatusEnum('status').default('pending').notNull(),
@@ -244,6 +247,7 @@ export const tasks = pgTable(
     dueDateIdx: index('tasks_due_date_idx').on(table.dueDate),
     deadlineIdx: index('tasks_deadline_idx').on(table.isDeadline, table.dueDate),
     deadlineUserIdx: index('tasks_user_deadline_idx').on(table.userId, table.isDeadline),
+    userCategoryIdx: index('tasks_user_category_idx').on(table.userId, table.category),
   })
 )
 

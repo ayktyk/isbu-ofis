@@ -44,7 +44,11 @@ const taskSelectColumns = {
   completedAt: tasks.completedAt,
   caseId: tasks.caseId,
   label: tasks.label,
+  category: tasks.category,
   caseTitle: cases.title,
+  // Eski (kategorisiz) görevlerin rozeti bağlı davadan türetilir; bunun için
+  // davanın CMK olup olmadığı gerekir.
+  caseIsCmk: cases.isCmkAssignment,
   createdAt: tasks.createdAt,
   // Süreli iş alanları
   isDeadline: tasks.isDeadline,
@@ -235,6 +239,7 @@ router.post('/', validate(createTaskSchema), async (req: Request, res: Response)
     dueDate,
     caseId,
     label,
+    category,
     triggerEventDate,
     calculatedDueDate,
     isDeadline,
@@ -262,6 +267,7 @@ router.post('/', validate(createTaskSchema), async (req: Request, res: Response)
       userId: req.user!.userId,
       caseId: caseId || null,
       label: label || null,
+      category: category || null,
       dueDate: dueDate ? new Date(dueDate) : null,
       isDeadline: isDeadline === true,
       deadlineTemplateKey: deadlineTemplateKey || null,
@@ -325,6 +331,7 @@ router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Respons
     dueDate,
     caseId,
     label,
+    category,
     triggerEventDate,
     calculatedDueDate,
     completionEvidence,
@@ -334,6 +341,7 @@ router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Respons
 
   if ('caseId' in req.body) updateData.caseId = caseId || null
   if ('label' in req.body) updateData.label = label || null
+  if ('category' in req.body) updateData.category = category || null
   if ('dueDate' in req.body) updateData.dueDate = dueDate ? new Date(dueDate) : null
   if ('triggerEventDate' in req.body) updateData.triggerEventDate = triggerEventDate || null
   if ('calculatedDueDate' in req.body) updateData.calculatedDueDate = calculatedDueDate || null
