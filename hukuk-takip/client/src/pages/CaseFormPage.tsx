@@ -18,6 +18,10 @@ import { caseStatusLabels, caseTypeLabels } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import QuickAddClientDialog from '@/components/shared/QuickAddClientDialog'
+import FeeAgreementFields from '@/components/cases/FeeAgreementFields'
+import { useFeeInstallments } from '@/hooks/useFeeInstallments'
+import type { GeneratedInstallment } from '@/lib/feeInstallments'
+import { api } from '@/lib/axios'
 
 type CaseFormValues = CreateCaseInput & Pick<UpdateCaseInput, 'status' | 'closeDate'>
 
@@ -61,6 +65,11 @@ export default function CaseFormPage() {
       status: 'active',
       closeDate: '',
       isCmkAssignment: cmkPrefill,
+      feeType: 'fixed',
+      feePercentage: '',
+      feePercentageBase: '',
+      feePercentageNote: '',
+      feePaymentPlan: 'single',
     },
   })
 
@@ -81,6 +90,13 @@ export default function CaseFormPage() {
       status: caseData.status || 'active',
       closeDate: caseData.closeDate ? new Date(caseData.closeDate).toISOString().split('T')[0] : '',
       isCmkAssignment: !!caseData.isCmkAssignment,
+      // feeType bos ise 'fixed' varsayilir — eski davalar (rev12 oncesi) maktu
+      // ucret mantigiyla calisiyordu, davranis degismesin.
+      feeType: caseData.feeType || 'fixed',
+      feePercentage: caseData.feePercentage || '',
+      feePercentageBase: caseData.feePercentageBase || '',
+      feePercentageNote: caseData.feePercentageNote || '',
+      feePaymentPlan: caseData.feePaymentPlan || 'single',
     })
   }, [caseData, isEdit, reset])
 
@@ -88,17 +104,48 @@ export default function CaseFormPage() {
   const selectedStatus = watch('status')
   const isPending = createCase.isPending || updateCase.isPending
 
+  // Yeni davada henuz id yok; taksitler once yerel tutulur, dava kaydedildikten
+  // SONRA tek tek yazilir. Duzenleme modunda mevcut taksitler sunucudan gelir
+  // ve bu formda degistirilmez (dava detayindaki tablodan yonetilir).
+  const [pendingInstallments, setPendingInstallments] = useState<GeneratedInstallment[]>([])
+  const { data: existingInstallments } = useFeeInstallments(isEdit ? id : undefined)
+
+  async function writeInstallments(caseId: string, rows: GeneratedInstallment[]) {
+    // Sirayla yazilir; biri hata verirse digerleri denenmeye devam eder ve
+    // kullaniciya bilgi verilir — dava kaydi zaten olusmus durumdadir.
+    for (const row of rows) {
+      try {
+        await api.post(`/cases/${caseId}/fee-installments`, {
+          seq: row.seq,
+          amount: row.amount.toFixed(2),
+          dueDate: row.dueDate,
+        })
+      } catch {
+        // Tek tek hata yutulur; asagida toplam sonuc kontrol edilir.
+      }
+    }
+  }
+
   function onSubmit(values: CaseFormValues) {
     if (isEdit) {
       updateCase.mutate(values, {
-        onSuccess: () => navigate(`/cases/${id}`),
+        onSuccess: async () => {
+          if (pendingInstallments.length > 0 && id) {
+            await writeInstallments(id, pendingInstallments)
+            setPendingInstallments([])
+          }
+          navigate(`/cases/${id}`)
+        },
       })
       return
     }
 
     createCase.mutate(values, {
-      onSuccess: (response: any) => {
+      onSuccess: async (response: any) => {
         const newCaseId = response?.data?.id
+        if (newCaseId && pendingInstallments.length > 0) {
+          await writeInstallments(newCaseId, pendingInstallments)
+        }
         navigate(newCaseId ? `/cases/${newCaseId}` : '/cases')
       },
     })
@@ -235,26 +282,33 @@ export default function CaseFormPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label className="mb-1.5 block text-sm font-medium">Baslangic Tarihi</label>
-                <input
-                  {...register('startDate')}
-                  type="date"
-                  className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent focus:ring-2 focus:ring-law-accent/20"
-                />
-              </div>
-              <div>
-                <label className="mb-1.5 block text-sm font-medium">Anlasilan Ucret</label>
-                <input
-                  {...register('contractedFee')}
-                  className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent focus:ring-2 focus:ring-law-accent/20"
-                  placeholder="25000.00"
-                />
-                {errors.contractedFee && (
-                  <p className="mt-1 text-xs text-red-600">{errors.contractedFee.message}</p>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Baslangic Tarihi</label>
+              <input
+                {...register('startDate')}
+                type="date"
+                className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent focus:ring-2 focus:ring-law-accent/20"
+              />
+            </div>
+
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <label className="block text-sm font-medium">Ücret Anlaşması</label>
+                {isEdit && existingInstallments && existingInstallments.length > 0 && (
+                  <span className="text-xs text-muted-foreground">
+                    {existingInstallments.length} kayıtlı taksit · dava detayından yönetilir
+                  </span>
                 )}
               </div>
+              <FeeAgreementFields
+                register={register}
+                watch={watch}
+                installments={pendingInstallments}
+                onInstallmentsChange={setPendingInstallments}
+              />
+              {errors.contractedFee && (
+                <p className="mt-1 text-xs text-red-600">{errors.contractedFee.message}</p>
+              )}
             </div>
 
             <label className="flex items-start gap-3 rounded-xl border bg-muted/30 p-3 cursor-pointer">

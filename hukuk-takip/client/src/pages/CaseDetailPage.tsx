@@ -70,6 +70,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import FeeInstallmentTable from '@/components/cases/FeeInstallmentTable'
 
 const statusVariant: Record<string, 'default' | 'success' | 'danger' | 'warning' | 'secondary'> = {
   active: 'default',
@@ -201,6 +202,25 @@ export default function CaseDetailPage() {
   const contractedFee = detail?.financials?.contractedFee ?? Number.parseFloat(caseData?.contractedFee || '0')
   const pendingFee = contractedFee > 0 ? Math.max(0, contractedFee - totalCollections) : 0
 
+  // Ücret anlaşması özeti. Yalnızca yüzdelik anlaşmalarda hesaplanabilir bir
+  // tutar YOKTUR — rakam uydurmayız, oranı ve matrahı yazarız.
+  const feeType = caseData?.feeType || (contractedFee > 0 ? 'fixed' : null)
+  const feePercentage = caseData?.feePercentage
+  const feeBaseLabel =
+    caseData?.feePercentageBase === 'awarded' ? 'hükmedilen' : 'tahsil edilen'
+
+  const feeSummary = (() => {
+    const fixedPart =
+      contractedFee > 0 ? formatCurrency(contractedFee, caseData?.currency || 'TRY') : null
+    const percentPart = feePercentage ? `%${feePercentage} · ${feeBaseLabel}` : null
+
+    if (feeType === 'percentage') return percentPart || '—'
+    if (feeType === 'fixed_plus_percentage') {
+      return [fixedPart, percentPart].filter(Boolean).join(' + ') || '—'
+    }
+    return fixedPart || '—'
+  })()
+
   const diaryEntries: DiaryEntry[] = diaryData || []
   const filteredDiary = diaryEntries.filter((entry) => {
     if (diaryFilter === 'all') return true
@@ -309,7 +329,7 @@ export default function CaseDetailPage() {
             <div>
               <p className="text-xs text-muted-foreground">Anlaşılan Ücret</p>
               <p className="text-sm font-medium text-law-primary">
-                {contractedFee > 0 ? formatCurrency(contractedFee, caseData.currency || 'TRY') : '—'}
+                {feeSummary}
               </p>
             </div>
           </CardContent>
@@ -595,6 +615,9 @@ export default function CaseDetailPage() {
             ))}
           </CardContent>
         </Card>
+
+        {/* Ödeme planı — yalnızca taksiti olan davalarda görünür */}
+        {id && <FeeInstallmentTable caseId={id} />}
 
         <Card className="border-0 shadow-sm">
           <CardContent className="space-y-3 p-4">
