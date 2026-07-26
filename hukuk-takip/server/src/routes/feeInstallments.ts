@@ -1,6 +1,12 @@
 import { Router, type Request, type Response } from 'express'
 import { and, asc, eq, isNull } from 'drizzle-orm'
-import { createFeeInstallmentSchema, updateFeeInstallmentSchema } from '@hukuk-takip/shared'
+// Diger tum server route'lari paylasilan semalari bu goreli yol ile cagiriyor.
+// Bare specifier ('@hukuk-takip/shared') calisma aninda workspace symlink'ine
+// bagimli; derleme ortamina gore cozulemeyebilir. Konvansiyona uyuldu.
+import {
+  createFeeInstallmentSchema,
+  updateFeeInstallmentSchema,
+} from '../../../shared/dist/index.js'
 import { db } from '../db/index.js'
 import { caseFeeInstallments, cases } from '../db/schema.js'
 import { validate } from '../middleware/validate.js'
