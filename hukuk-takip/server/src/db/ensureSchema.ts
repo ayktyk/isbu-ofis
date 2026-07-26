@@ -309,6 +309,14 @@ CREATE INDEX IF NOT EXISTS "case_fee_installments_case_idx" ON "case_fee_install
 CREATE INDEX IF NOT EXISTS "case_fee_installments_due_idx" ON "case_fee_installments" ("due_date", "status");
 `
 
+// rev13 (2026-07): Görevlerde manuel sıralama (sürükle-bırak).
+// TAM ADDITIVE: nullable integer kolon. Hiç sürüklenmemiş görevler NULL kalır
+// ve eski davranışlarını (en yeni üstte) korur. Backfill YAPILMAZ.
+const REV13_TASK_SORT_ORDER_SQL = `
+ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "sort_order" integer;
+CREATE INDEX IF NOT EXISTS "tasks_user_sort_idx" ON "tasks" ("user_id", "sort_order");
+`
+
 export async function ensureSchema() {
   if (!process.env.DATABASE_URL) {
     console.warn('ensureSchema: DATABASE_URL yok, atlaniyor.')
@@ -340,6 +348,8 @@ export async function ensureSchema() {
     console.log('Schema guard: tasks.category hazir.')
     await sql.unsafe(REV12_FEE_AGREEMENT_SQL)
     console.log('Schema guard: esnek ucret anlasmasi (cases fee_* + case_fee_installments) hazir.')
+    await sql.unsafe(REV13_TASK_SORT_ORDER_SQL)
+    console.log('Schema guard: tasks.sort_order hazir.')
   } catch (err) {
     console.error('Schema guard hatasi:', err)
   } finally {

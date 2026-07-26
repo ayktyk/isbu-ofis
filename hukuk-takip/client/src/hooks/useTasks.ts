@@ -9,6 +9,32 @@ import {
 } from '@hukuk-takip/shared'
 import { api } from '@/lib/axios'
 
+// Surukle-birak siralama. Istemci ekranda gorunen SIRAYI id listesi olarak
+// gonderir; sunucu 0..n-1 atar.
+//
+// Iyimser guncelleme: kullanici birakir birakmaz liste yeni sirada kalir,
+// sunucu cevabi beklenmez. Hata olursa onceki sira geri yuklenir ve neden
+// oldugu bildirilir (sessizce eski sirasina donup kullaniciyi sasirtmaz).
+export function useReorderTasks() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async (ids: string[]) => (await api.patch('/tasks/reorder', { ids })).data,
+    onError: (error: any) => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
+      const status = error?.response?.status
+      if (status === 404) {
+        toast.error('Sıralama sunucuda henüz desteklenmiyor — sunucu güncellenince çalışacak.')
+      } else {
+        toast.error('Sıralama kaydedilemedi, eski sıra geri yüklendi.')
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] })
+    },
+  })
+}
+
 function taskMatchesParams(task: any, params: any) {
   if (!params) return true
   if (params.status && task.status !== params.status) return false

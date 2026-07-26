@@ -57,6 +57,17 @@ export const updateTaskSchema = createTaskSchema
     }
   )
 
+// Sürükle-bırak sıralama — ekranda görünen görevlerin YENİ sırası, id listesi
+// olarak gönderilir. Sunucu bu listeye göre 0..n-1 sıra numarası atar.
+export const reorderTasksSchema = z.object({
+  ids: z
+    .array(z.string().uuid())
+    .min(1, 'En az bir görev gereklidir')
+    .max(500, 'Tek seferde en fazla 500 görev sıralanabilir'),
+})
+
+export type ReorderTasksInput = z.infer<typeof reorderTasksSchema>
+
 // Süreli iş önizleme isteği — şablon ve tetik tarihinden son günü hesaplar.
 export const previewDeadlineSchema = z.object({
   templateKey: z.string().min(1).max(80),

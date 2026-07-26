@@ -1,5 +1,22 @@
-import { useMemo, useState } from 'react'
-import { useTasks, useUpdateTaskStatus, useDeleteTask } from '@/hooks/useTasks'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable'
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
+import { useTasks, useUpdateTaskStatus, useDeleteTask, useReorderTasks } from '@/hooks/useTasks'
 import { useCases } from '@/hooks/useCases'
 import { matchesQuery } from '@/lib/textSearch'
 import { resolveTaskCategory, taskCategoryOptions } from '@/lib/taskCategory'
@@ -47,6 +64,7 @@ export default function TasksPage() {
 
   const updateStatus = useUpdateTaskStatus()
   const deleteTask = useDeleteTask()
+  const reorderTasks = useReorderTasks()
 
   const tasks = Array.isArray(data) ? data : data?.data || []
   const casesList = casesData?.data || []
@@ -75,6 +93,53 @@ export default function TasksPage() {
 
   const isFiltered = filteredTasks.length !== tasks.length
   const hasAnyFilter = Boolean(status || priority || category || query)
+
+  // ── Sürükle-bırak sıralama ────────────────────────────────────────────────
+  // Sürükleme YALNIZCA filtresiz listede açıktır. Filtreliyken sürüklemek,
+  // ekranda görünmeyen görevlerin sırasını da bozardı — kullanıcı ne olduğunu
+  // göremediği için bu bilinçli olarak engellendi.
+  const canReorder = !hasAnyFilter && filteredTasks.length > 1
+
+  // Sunucudan gelen sıra, sürükleme sırasında anlık olarak burada tutulur;
+  // böylece kullanıcı bırakır bırakmaz liste yeni sırada kalır.
+  const [orderedIds, setOrderedIds] = useState<string[]>([])
+
+  useEffect(() => {
+    setOrderedIds(tasks.map((t: any) => t.id))
+    // tasks referansı her fetch'te değişir; id dizisini karşılaştırmak yeterli.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tasks.map((t: any) => t.id).join(',')])
+
+  const displayedTasks = useMemo(() => {
+    if (!canReorder || orderedIds.length === 0) return filteredTasks
+    const byId = new Map(filteredTasks.map((t: any) => [t.id, t]))
+    const ordered = orderedIds.map((id) => byId.get(id)).filter(Boolean)
+    // Henüz orderedIds'e girmemiş yeni görevler kaybolmasın.
+    const missing = filteredTasks.filter((t: any) => !orderedIds.includes(t.id))
+    return [...ordered, ...missing]
+  }, [filteredTasks, orderedIds, canReorder])
+
+  const sensors = useSensors(
+    // Mobilde: 200ms basılı tut, sonra sürükle. Böylece normal kaydırma
+    // hareketi yanlışlıkla sürükleme başlatmaz.
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
+    // Masaüstünde: 6px hareket eşiği — tıklamalar sürükleme sayılmaz.
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const oldIndex = orderedIds.indexOf(String(active.id))
+    const newIndex = orderedIds.indexOf(String(over.id))
+    if (oldIndex === -1 || newIndex === -1) return
+
+    const next = arrayMove(orderedIds, oldIndex, newIndex)
+    setOrderedIds(next)
+    reorderTasks.mutate(next)
+  }
 
   function toggleComplete(task: any) {
     const newStatus = task.status === 'completed' ? 'pending' : 'completed'
@@ -211,7 +276,7 @@ export default function TasksPage() {
 
       {!isLoading && !isError && (
         <>
-          {filteredTasks.length === 0 ? (
+          {displayedTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <ListChecks className="mb-3 h-12 w-12 text-muted-foreground/30" />
               <h3 className="text-lg font-medium text-muted-foreground">
@@ -233,30 +298,56 @@ export default function TasksPage() {
               )}
             </div>
           ) : (
-            <div className="space-y-2">
-              {filteredTasks.map((task: any) =>
-                editingId === task.id ? (
-                  <TaskForm
-                    key={task.id}
-                    mode="edit"
-                    task={task}
-                    casesList={casesList}
-                    cmkList={cmkList}
-                    existingTasks={existingTasks}
-                    onDone={() => setEditingId(null)}
-                    onCancel={() => setEditingId(null)}
-                  />
-                ) : (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    onToggleComplete={toggleComplete}
-                    onEdit={setEditingId}
-                    onDelete={handleDelete}
-                  />
-                )
+            <>
+              {canReorder && (
+                <p className="-mt-2 mb-2 text-xs text-muted-foreground">
+                  Soldaki tutamaktan sürükleyerek görevlerin sırasını
+                  değiştirebilirsin. Telefonda tutamağa basılı tut, sonra kaydır.
+                </p>
               )}
-            </div>
+              {hasAnyFilter && filteredTasks.length > 1 && (
+                <p className="-mt-2 mb-2 text-xs text-muted-foreground">
+                  Sıralamayı değiştirmek için arama ve filtreleri temizle.
+                </p>
+              )}
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                modifiers={[restrictToVerticalAxis]}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={displayedTasks.map((t: any) => t.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="space-y-2">
+                    {displayedTasks.map((task: any) =>
+                      editingId === task.id ? (
+                        <TaskForm
+                          key={task.id}
+                          mode="edit"
+                          task={task}
+                          casesList={casesList}
+                          cmkList={cmkList}
+                          existingTasks={existingTasks}
+                          onDone={() => setEditingId(null)}
+                          onCancel={() => setEditingId(null)}
+                        />
+                      ) : (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          sortable={canReorder}
+                          onToggleComplete={toggleComplete}
+                          onEdit={setEditingId}
+                          onDelete={handleDelete}
+                        />
+                      )
+                    )}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            </>
           )}
         </>
       )}

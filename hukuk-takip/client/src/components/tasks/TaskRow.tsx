@@ -1,5 +1,7 @@
 import { useNavigate } from 'react-router-dom'
-import { CheckCircle2, Circle, Clock, Pencil, Trash2 } from 'lucide-react'
+import { useSortable } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
+import { CheckCircle2, Circle, Clock, GripVertical, Pencil, Trash2 } from 'lucide-react'
 import { formatRelativeDate, isOverdue, taskPriorityLabels, taskStatusLabels } from '@/lib/utils'
 import { resolveTaskCategory, taskCategoryBadgeClass, taskCategoryLabels } from '@/lib/taskCategory'
 import { Badge } from '@/components/ui/badge'
@@ -17,11 +19,14 @@ export default function TaskRow({
   onToggleComplete,
   onEdit,
   onDelete,
+  sortable = false,
 }: {
   task: any
   onToggleComplete: (task: any) => void
   onEdit: (id: string) => void
   onDelete: (id: string) => void
+  /** Suruklenebilir mi? Arama/filtre aktifken kapatilir (bkz. TasksPage). */
+  sortable?: boolean
 }) {
   const navigate = useNavigate()
   const completed = task.status === 'completed'
@@ -30,11 +35,41 @@ export default function TaskRow({
   // yoksa rozet hic gosterilmez (uydurma etiket basmayiz).
   const category = resolveTaskCategory(task)
 
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    disabled: !sortable,
+  })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    // Suruklenen kart ustte kalsin ve hafifce belirsizlessin.
+    opacity: isDragging ? 0.5 : undefined,
+    zIndex: isDragging ? 20 : undefined,
+  }
+
   return (
     <Card
-      className={`transition-colors ${completed ? 'opacity-60' : ''} ${overdue ? 'border-red-200' : ''}`}
+      ref={setNodeRef}
+      style={style}
+      className={`transition-colors ${completed ? 'opacity-60' : ''} ${overdue ? 'border-red-200' : ''} ${
+        isDragging ? 'relative shadow-lg' : ''
+      }`}
     >
       <CardContent className="flex items-start gap-3 p-4">
+        {sortable && (
+          <button
+            type="button"
+            {...attributes}
+            {...listeners}
+            // touch-none: mobilde surukleme sirasinda sayfanin kaymasini onler.
+            className="mt-0.5 flex-shrink-0 cursor-grab touch-none text-muted-foreground/40 transition-colors hover:text-law-accent active:cursor-grabbing"
+            aria-label="Sürükleyerek sırala"
+            title="Sürükleyerek sırala"
+          >
+            <GripVertical className="h-5 w-5" />
+          </button>
+        )}
         <button
           onClick={() => onToggleComplete(task)}
           className={`mt-0.5 flex-shrink-0 transition-colors ${

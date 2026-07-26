@@ -7,6 +7,7 @@ import { validate } from '../middleware/validate.js'
 import {
   createTaskSchema,
   updateTaskSchema,
+  reorderTasksSchema,
   previewDeadlineSchema,
   LEGAL_DEADLINE_TEMPLATES,
   findTemplate,
@@ -45,6 +46,7 @@ const taskSelectColumns = {
   caseId: tasks.caseId,
   label: tasks.label,
   category: tasks.category,
+  sortOrder: tasks.sortOrder,
   caseTitle: cases.title,
   // Eski (kategorisiz) görevlerin rozeti bağlı davadan türetilir; bunun için
   // davanın CMK olup olmadığı gerekir.
@@ -206,7 +208,10 @@ router.get('/', async (req: Request, res: Response) => {
       .from(tasks)
       .leftJoin(cases, eq(tasks.caseId, cases.id))
       .where(where)
-      .orderBy(desc(tasks.createdAt))
+      // Manuel sıra (sürükle-bırak) önce gelir. Hiç sürüklenmemiş görevlerde
+      // sort_order NULL'dur; NULLS LAST ile listenin sonuna düşer ve kendi
+      // içinde eski davranışı (en yeni üstte) korur.
+      .orderBy(sql`${tasks.sortOrder} ASC NULLS LAST`, desc(tasks.createdAt))
     res.json(data)
     return
   }
@@ -218,7 +223,10 @@ router.get('/', async (req: Request, res: Response) => {
       .from(tasks)
       .leftJoin(cases, eq(tasks.caseId, cases.id))
       .where(where)
-      .orderBy(desc(tasks.createdAt))
+      // Manuel sıra (sürükle-bırak) önce gelir. Hiç sürüklenmemiş görevlerde
+      // sort_order NULL'dur; NULLS LAST ile listenin sonuna düşer ve kendi
+      // içinde eski davranışı (en yeni üstte) korur.
+      .orderBy(sql`${tasks.sortOrder} ASC NULLS LAST`, desc(tasks.createdAt))
       .limit(pageSize)
       .offset(offset),
     db.select({ count: sql<number>`count(*)::int` }).from(tasks).where(where),
@@ -232,6 +240,53 @@ router.get('/', async (req: Request, res: Response) => {
     pageSize,
     hasMore: offset + data.length < total,
   })
+})
+
+// ---------- PATCH /api/tasks/reorder — sürükle-bırak sıralama ----------
+// '/:id' iceren route'lardan ONCE tanimli olmali, aksi halde 'reorder' bir id
+// gibi yorumlanir.
+//
+// Istemci ekranda gorunen SIRAYI id listesi olarak gonderir; sunucu 0..n-1
+// atar. Yalnizca kullaniciya ait, arsivlenmemis gorevler guncellenir —
+// baskasinin gorevi id listesine konsa bile dokunulmaz.
+//
+// Veri koruma: sadece sort_order kolonu yazilir; hicbir satir silinmez.
+router.patch('/reorder', validate(reorderTasksSchema), async (req: Request, res: Response) => {
+  const { ids } = req.body as { ids: string[] }
+  const userId = req.user!.userId
+
+  // Sahiplik dogrulamasi: gonderilen id'lerden gercekten bu kullaniciya ait
+  // olanlari sec. Digerleri sessizce yok sayilir.
+  const owned = await db
+    .select({ id: tasks.id })
+    .from(tasks)
+    .where(and(eq(tasks.userId, userId), isNull(tasks.archivedAt), inArray(tasks.id, ids)))
+
+  const ownedSet = new Set(owned.map((row) => row.id))
+  const orderedOwnedIds = ids.filter((id) => ownedSet.has(id))
+
+  if (orderedOwnedIds.length === 0) {
+    res.json({ updated: 0 })
+    return
+  }
+
+  // Tek UPDATE + CASE WHEN: satir basina ayri sorgu atmak yerine tek turda
+  // yazilir (500 gorevde 500 round-trip olmasin).
+  const cases_ = orderedOwnedIds
+    .map((id, index) => sql`WHEN ${id}::uuid THEN ${index}`)
+    .reduce((acc, part) => sql`${acc} ${part}`)
+
+  await db
+    .update(tasks)
+    .set({
+      sortOrder: sql`CASE ${tasks.id} ${cases_} ELSE ${tasks.sortOrder} END`,
+      updatedAt: new Date(),
+    })
+    .where(
+      and(eq(tasks.userId, userId), isNull(tasks.archivedAt), inArray(tasks.id, orderedOwnedIds)),
+    )
+
+  res.json({ updated: orderedOwnedIds.length })
 })
 
 router.post('/', validate(createTaskSchema), async (req: Request, res: Response) => {
