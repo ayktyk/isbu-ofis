@@ -9,7 +9,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "incremental": true,
-    "tsBuildInfoFile": "./node_modules/.cache/tsc-server.tsbuildinfo",
+    "tsBuildInfoFile": "./dist/.tsbuildinfo",
     "types": ["node"],
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
