@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   DndContext,
   KeyboardSensor,
@@ -41,6 +41,23 @@ const priorityOptions = [
   { value: 'medium', label: 'Orta' },
   { value: 'low', label: 'Düşük' },
 ]
+
+// Sıralama grubu — sunucudaki ORDER BY (routes/tasks.ts · taskGroupRank) ile
+// birebir aynı kural. İkisi ayrı düşerse liste sürükleme sonrası zıplar.
+//   0 → açık görevlerden süreli (son tarihli) veya acil olanlar
+//   1 → diğer açık görevler
+//   2 → tamamlanan / iptal edilen görevler
+function taskSortGroup(task: any): 0 | 1 | 2 {
+  if (task.status === 'completed' || task.status === 'cancelled') return 2
+  if (task.dueDate || task.priority === 'urgent') return 0
+  return 1
+}
+
+const groupLabels: Record<number, string> = {
+  0: 'Süreli ve acil',
+  1: 'Diğer görevler',
+  2: 'Tamamlananlar',
+}
 
 export default function TasksPage() {
   const [status, setStatus] = useState('')
@@ -128,9 +145,23 @@ export default function TasksPage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
 
+  // Listede kaç farklı grup var? Tek grup varsa başlık göstermek gürültü olur.
+  const showGroupLabels = useMemo(
+    () => new Set(displayedTasks.map((t: any) => taskSortGroup(t))).size > 1,
+    [displayedTasks]
+  )
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
+
+    // Gruplar arası taşıma yok sayılır: sunucu listeyi yine gruplara göre
+    // döndüreceği için görev bir sonraki yüklemede eski grubuna geri sıçrardı.
+    const byId = new Map(displayedTasks.map((t: any) => [t.id, t]))
+    const activeTask = byId.get(String(active.id))
+    const overTask = byId.get(String(over.id))
+    if (!activeTask || !overTask) return
+    if (taskSortGroup(activeTask) !== taskSortGroup(overTask)) return
 
     const oldIndex = orderedIds.indexOf(String(active.id))
     const newIndex = orderedIds.indexOf(String(over.id))
@@ -302,7 +333,8 @@ export default function TasksPage() {
               {canReorder && (
                 <p className="-mt-2 mb-2 text-xs text-muted-foreground">
                   Soldaki tutamaktan sürükleyerek görevlerin sırasını
-                  değiştirebilirsin. Telefonda tutamağa basılı tut, sonra kaydır.
+                  değiştirebilirsin — sıralama görevin kendi başlığı altında
+                  geçerlidir. Telefonda tutamağa basılı tut, sonra kaydır.
                 </p>
               )}
               {hasAnyFilter && filteredTasks.length > 1 && (
@@ -321,29 +353,45 @@ export default function TasksPage() {
                   strategy={verticalListSortingStrategy}
                 >
                   <div className="space-y-2">
-                    {displayedTasks.map((task: any) =>
-                      editingId === task.id ? (
-                        <TaskForm
-                          key={task.id}
-                          mode="edit"
-                          task={task}
-                          casesList={casesList}
-                          cmkList={cmkList}
-                          existingTasks={existingTasks}
-                          onDone={() => setEditingId(null)}
-                          onCancel={() => setEditingId(null)}
-                        />
-                      ) : (
-                        <TaskRow
-                          key={task.id}
-                          task={task}
-                          sortable={canReorder}
-                          onToggleComplete={toggleComplete}
-                          onEdit={setEditingId}
-                          onDelete={handleDelete}
-                        />
+                    {displayedTasks.map((task: any, index: number) => {
+                      const group = taskSortGroup(task)
+                      const prevGroup =
+                        index > 0 ? taskSortGroup(displayedTasks[index - 1]) : null
+                      const showLabel = showGroupLabels && group !== prevGroup
+
+                      return (
+                        <Fragment key={task.id}>
+                          {showLabel && (
+                            <p
+                              className={`px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground ${
+                                index > 0 ? 'pt-4' : ''
+                              }`}
+                            >
+                              {groupLabels[group]}
+                            </p>
+                          )}
+                          {editingId === task.id ? (
+                            <TaskForm
+                              mode="edit"
+                              task={task}
+                              casesList={casesList}
+                              cmkList={cmkList}
+                              existingTasks={existingTasks}
+                              onDone={() => setEditingId(null)}
+                              onCancel={() => setEditingId(null)}
+                            />
+                          ) : (
+                            <TaskRow
+                              task={task}
+                              sortable={canReorder}
+                              onToggleComplete={toggleComplete}
+                              onEdit={setEditingId}
+                              onDelete={handleDelete}
+                            />
+                          )}
+                        </Fragment>
                       )
-                    )}
+                    })}
                   </div>
                 </SortableContext>
               </DndContext>

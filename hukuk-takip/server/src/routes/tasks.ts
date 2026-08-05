@@ -35,6 +35,30 @@ async function getTaskCaseTitle(userId: string, caseId?: string | null) {
   return caseRow?.title || null
 }
 
+// Görev listesi sırası — üstten alta üç grup:
+//   0) Açık görevlerden süreli olanlar (son tarihi var) veya acil olanlar
+//   1) Diğer açık görevler
+//   2) Tamamlanan / iptal edilen görevler (en aşağı)
+// Grup içinde: manuel sıra (sürükle-bırak) önce, sonra en yeni üstte.
+// Not: enum değerleri şablon içine düz SQL literal'i olarak yazılır (${...}
+// interpolasyonu bind parametresi üretir ve enum karşılaştırmasını zorlaştırır).
+const taskGroupRank = sql`
+  CASE
+    WHEN ${tasks.status} IN ('completed', 'cancelled') THEN 2
+    WHEN ${tasks.dueDate} IS NOT NULL OR ${tasks.priority} = 'urgent' THEN 0
+    ELSE 1
+  END
+`
+
+// Hiç sürüklenmemiş görevlerde sort_order NULL'dur; NULLS LAST ile grubun
+// sonuna düşer ve kendi içinde en yeni üstte kalır. Yeni eklenen görevler
+// POST / içinde negatif bir sort_order alır, böylece grubunun tepesine çıkar.
+const taskListOrderBy = [
+  sql`${taskGroupRank} ASC`,
+  sql`${tasks.sortOrder} ASC NULLS LAST`,
+  desc(tasks.createdAt),
+]
+
 const taskSelectColumns = {
   id: tasks.id,
   title: tasks.title,
@@ -208,10 +232,7 @@ router.get('/', async (req: Request, res: Response) => {
       .from(tasks)
       .leftJoin(cases, eq(tasks.caseId, cases.id))
       .where(where)
-      // Manuel sıra (sürükle-bırak) önce gelir. Hiç sürüklenmemiş görevlerde
-      // sort_order NULL'dur; NULLS LAST ile listenin sonuna düşer ve kendi
-      // içinde eski davranışı (en yeni üstte) korur.
-      .orderBy(sql`${tasks.sortOrder} ASC NULLS LAST`, desc(tasks.createdAt))
+      .orderBy(...taskListOrderBy)
     res.json(data)
     return
   }
@@ -223,10 +244,7 @@ router.get('/', async (req: Request, res: Response) => {
       .from(tasks)
       .leftJoin(cases, eq(tasks.caseId, cases.id))
       .where(where)
-      // Manuel sıra (sürükle-bırak) önce gelir. Hiç sürüklenmemiş görevlerde
-      // sort_order NULL'dur; NULLS LAST ile listenin sonuna düşer ve kendi
-      // içinde eski davranışı (en yeni üstte) korur.
-      .orderBy(sql`${tasks.sortOrder} ASC NULLS LAST`, desc(tasks.createdAt))
+      .orderBy(...taskListOrderBy)
       .limit(pageSize)
       .offset(offset),
     db.select({ count: sql<number>`count(*)::int` }).from(tasks).where(where),
@@ -315,10 +333,21 @@ router.post('/', validate(createTaskSchema), async (req: Request, res: Response)
     }
   }
 
+  // Yeni görev kendi grubunun en üstünde görünsün: mevcut en küçük sıra
+  // değerinin bir altı verilir. Hiç sıralama yapılmamışsa -1 olur ve
+  // NULLS LAST sayesinde sıralanmamış görevlerin üstüne çıkar.
+  const [minSortRow] = await db
+    .select({ min: sql<number | null>`min(${tasks.sortOrder})` })
+    .from(tasks)
+    .where(and(eq(tasks.userId, req.user!.userId), isNull(tasks.archivedAt)))
+
+  const nextSortOrder = Number(minSortRow?.min ?? 0) - 1
+
   const [task] = await db
     .insert(tasks)
     .values({
       ...rest,
+      sortOrder: nextSortOrder,
       userId: req.user!.userId,
       caseId: caseId || null,
       label: label || null,
