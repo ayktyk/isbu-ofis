@@ -513,7 +513,15 @@ export default function CollectionsPage() {
                         <td className="px-4 py-3">
                           <div className="flex items-start gap-2">
                             <SourceIcon className={`mt-0.5 h-4 w-4 flex-shrink-0 ${iconColor}`} />
-                            <p className="truncate font-medium">{row.title}</p>
+                            <div className="min-w-0">
+                              <p className="truncate font-medium">{row.title}</p>
+                              {/* Muvekkil sutunu md'den once acilmiyor; telefonda kalan tutarin
+                                  kimden beklendigi gorunmez kalirdi. Dashboard'daki bekleyen
+                                  tahsilat widget'i gibi basligin altinda gosterilir. */}
+                              <p className="mt-0.5 truncate text-xs text-muted-foreground md:hidden">
+                                {row.clientName || '—'}
+                              </p>
+                            </div>
                           </div>
                         </td>
                         <td className="hidden px-4 py-3 text-muted-foreground md:table-cell">
