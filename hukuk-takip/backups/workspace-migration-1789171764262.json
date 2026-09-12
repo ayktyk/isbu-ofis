@@ -1,0 +1,17 @@
+{
+  "appliedAt": "2026-09-12T00:09:24.261Z",
+  "backupReceipt": "pre-case-tracking-2026-09-12T00-07-16-458Z.dump.receipt.json",
+  "migrationSha256": "afec146193d947e434d057802f5e89ccc9504cbbaa9d3a9c627c24b39e583639",
+  "before": {
+    "cases": 86,
+    "clients": 92
+  },
+  "after": {
+    "cases": 86,
+    "clients": 92
+  },
+  "tables": [
+    "case_workspaces",
+    "hearing_review_receipts"
+  ]
+}

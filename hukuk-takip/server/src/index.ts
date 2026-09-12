@@ -16,6 +16,7 @@ import { runReminderScan } from './services/notificationScheduler.js'
 import authRouter from './routes/auth.js'
 import clientsRouter from './routes/clients.js'
 import casesRouter from './routes/cases.js'
+import workspaceRouter from './routes/workspace.js'
 import hearingsRouter from './routes/hearings.js'
 import tasksRouter from './routes/tasks.js'
 import expensesRouter from './routes/expenses.js'
@@ -145,6 +146,7 @@ app.use('/api', mediationRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/clients', clientsRouter)
 app.use('/api/cases', casesRouter)
+app.use('/api/workspace', workspaceRouter)
 app.use('/api/hearings', hearingsRouter)
 app.use('/api/tasks', tasksRouter)
 app.use('/api/expenses', expensesRouter)

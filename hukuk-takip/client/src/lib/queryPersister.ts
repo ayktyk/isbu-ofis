@@ -1,64 +1,40 @@
-import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister'
-import { get, set, del } from 'idb-keyval'
+﻿import { get, set, del } from 'idb-keyval'
 import type { Query } from '@tanstack/react-query'
+import type { PersistedClient, Persister } from '@tanstack/react-query-persist-client'
+import { getAccessToken } from './authTokens'
 
-// PWA'da uygulama RAM'den atilip tekrar acildiginda son veriyi ANINDA gosterip
-// arka planda yenilemek icin React Query cache'i diske yazilir.
-//
-// Neden IndexedDB (localStorage degil): localStorage senkron API'dir; buyuk
-// liste JSON'larini yazarken ana thread'i bloklar ve mobilde takilma yaratir.
-// IndexedDB asenkron oldugu icin bu sorun yoktur — bu yuzden onceki koddaki
-// "sadece auth query'sini sakla" kisitina artik gerek kalmaz.
-//
-// Gizli sekme / depolama kapali senaryosunda IndexedDB erisilemez olabilir.
-// O durumda sessizce devre disi kaliriz: uygulama agdan calismaya devam eder.
-const safeStorage = {
-  getItem: async (key: string): Promise<string | null> => {
-    try {
-      const value = await get<string>(key)
-      return value ?? null
-    } catch {
-      return null
-    }
+export function cacheOwner(): string | null {
+  try {
+    const token = getAccessToken()
+    if (!token) return null
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return typeof payload.userId === 'string' ? payload.userId : null
+  } catch { return null }
+}
+function belongsTo(client: PersistedClient, owner: string) {
+  const auth = client.clientState.queries.find(q => q.queryKey[0] === 'auth' && q.queryKey[1] === 'me')
+  return (auth?.state.data as { id?: string } | undefined)?.id === owner
+}
+export const queryPersister: Persister = {
+  persistClient: async client => {
+    const owner = cacheOwner()
+    if (!owner || !belongsTo(client, owner)) return
+    try { await set(`themis:query:${owner}`, client) } catch {}
   },
-  setItem: async (key: string, value: string): Promise<void> => {
+  restoreClient: async () => {
+    const owner = cacheOwner()
+    if (!owner) return undefined
     try {
-      await set(key, value)
-    } catch {
-      // Sessiz gec — kalicilastirma opsiyonel bir hizlandirmadir, kritik degil.
-    }
+      const client = await get<PersistedClient>(`themis:query:${owner}`)
+      return cacheOwner() === owner && client && belongsTo(client, owner) ? client : undefined
+    } catch { return undefined }
   },
-  removeItem: async (key: string): Promise<void> => {
-    try {
-      await del(key)
-    } catch {
-      // Sessiz gec.
-    }
+  removeClient: async () => {
+    const owner = cacheOwner()
+    if (owner) { try { await del(`themis:query:${owner}`) } catch {} }
   },
 }
-
-export const queryPersister = createAsyncStoragePersister({
-  storage: safeStorage,
-  key: 'hz-query-cache-idb',
-  throttleTime: 1000,
-})
-
-// Diske yazilacak query'ler. Acilista ekrani dolduran, buyuk olmayan listeler.
-// Buraya yazilmayan query'ler her acilista agdan gelir.
-const PERSISTED_ROOT_KEYS = new Set([
-  'auth',
-  'dashboard',
-  'tasks',
-  'cases',
-  'clients',
-  'notifications',
-  'collections',
-  'hearings',
-])
-
+const roots = new Set(['auth', 'dashboard', 'tasks', 'cases', 'clients', 'notifications', 'collections', 'hearings'])
 export function shouldPersistQuery(query: Query): boolean {
-  const rootKey = query.queryKey?.[0]
-  if (typeof rootKey !== 'string') return false
-  if (!PERSISTED_ROOT_KEYS.has(rootKey)) return false
-  return query.state.status === 'success'
+  return typeof query.queryKey[0] === 'string' && roots.has(query.queryKey[0]) && query.state.status === 'success'
 }

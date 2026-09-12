@@ -1,10 +1,14 @@
 import { Router } from 'express'
-import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm'
+import { z } from 'zod'
+import { loadCaseTracking } from '../utils/caseTrackingLoader.js'
+import { and, desc, eq, ilike, inArray, isNull, or, sql } from 'drizzle-orm'
+import { matchesTrackingFilter } from '@hukuk-takip/shared'
 import { createCaseSchema, updateCaseSchema } from '../../../shared/dist/index.js'
 import { db } from '../db/index.js'
 import {
   caseHearings,
   cases,
+  caseWorkspaces,
   clients,
   collections,
   documents,
@@ -125,6 +129,15 @@ router.post('/backfill-cmk', async (req, res) => {
 })
 
 router.get('/', async (req, res) => {
+  const trackingOption = z.enum(['true', 'false']).optional().safeParse(req.query.includeTracking)
+  if (!trackingOption.success) {
+    res.status(400).json({ error: 'Geçersiz takip özeti seçeneği.' })
+    return
+  }
+  const includeTracking = trackingOption.data === 'true'
+  const filterOption = z.enum(['', 'overdue', 'waiting', 'unplanned', 'check']).optional().safeParse(req.query.trackingFilter)
+  if (!filterOption.success) { res.status(400).json({ error: 'Geçersiz takip filtresi.' }); return }
+  const trackingFilter = filterOption.data || ''
   const search = getSingleValue(req.query.search)
   const status = getSingleValue(req.query.status)
   const statusGroup = getSingleValue(req.query.statusGroup)
@@ -192,6 +205,17 @@ router.get('/', async (req, res) => {
     conditions.push(eq(cases.caseType, caseType as any))
   }
 
+  if (trackingFilter) {
+    const candidates = await db.select({ id: cases.id, status: cases.status, workflow: caseWorkspaces }).from(cases)
+      .leftJoin(clients, eq(cases.clientId, clients.id)).leftJoin(caseWorkspaces, eq(cases.id, caseWorkspaces.caseId)).where(and(...conditions))
+    const matching: string[] = []
+    for (let start = 0; start < candidates.length; start += 200) {
+      const batch = candidates.slice(start, start + 200)
+      const summaries = await loadCaseTracking(db, req.user!.userId, batch.map(row => row.id))
+      matching.push(...batch.filter(row => matchesTrackingFilter(trackingFilter, row.status, summaries[row.id], row.workflow)).map(row => row.id))
+    }
+    conditions.push(matching.length ? inArray(cases.id, matching) : sql`false`)
+  }
   const where = and(...conditions)
 
   const [data, countResult] = await Promise.all([
@@ -199,6 +223,7 @@ router.get('/', async (req, res) => {
       .select({
         id: cases.id,
         caseNumber: cases.caseNumber,
+        workflow: caseWorkspaces,
         courtName: cases.courtName,
         caseType: cases.caseType,
         status: cases.status,
@@ -216,6 +241,7 @@ router.get('/', async (req, res) => {
       .from(cases)
       .leftJoin(clients, eq(cases.clientId, clients.id))
       .where(where)
+      .leftJoin(caseWorkspaces, eq(cases.id, caseWorkspaces.caseId))
       // 3-katmanlı sıralama: aktif (1) → istinaf/yargıtay (2) → biten (3) → pasif (4)
       // Her grup içinde createdAt DESC. Avukatın talebi: en yeni aktif üstte,
       // en eski biten en altta, istinaf/yargıtay aktiflerin altında.
@@ -243,9 +269,13 @@ router.get('/', async (req, res) => {
   ])
 
   const total = countResult[0]?.count ?? 0
+  const tracking = includeTracking
+    ? await loadCaseTracking(db, req.user!.userId, data.map(row => row.id))
+    : null
 
   res.json({
-    data,
+    data: tracking ? data.map(row => ({ ...row, tracking: tracking[row.id] })) : data,
+    trackingVersion: tracking ? 1 : undefined,
     total,
     page,
     pageSize,

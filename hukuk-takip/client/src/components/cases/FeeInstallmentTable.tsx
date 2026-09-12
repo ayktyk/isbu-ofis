@@ -16,7 +16,7 @@ import { Skeleton } from '@/components/ui/skeleton'
  * Taksiti olan davalarda gorunur; taksitsiz davalarda hic render edilmez
  * (mevcut ekranlarin gorunumu degismez).
  */
-export default function FeeInstallmentTable({ caseId }: { caseId: string }) {
+export default function FeeInstallmentTable({ caseId, readOnly = false }: { caseId: string; readOnly?: boolean }) {
   const { data: installments, isLoading } = useFeeInstallments(caseId)
   const updateInstallment = useUpdateFeeInstallment(caseId)
   const archiveInstallment = useArchiveFeeInstallment(caseId)
@@ -35,6 +35,7 @@ export default function FeeInstallmentTable({ caseId }: { caseId: string }) {
   const remaining = total - paid
 
   function togglePaid(row: { id: string; status: string }) {
+    if (readOnly || updateInstallment.isPending) return
     updateInstallment.mutate({
       id: row.id,
       status: row.status === 'paid' ? 'pending' : 'paid',
@@ -42,6 +43,7 @@ export default function FeeInstallmentTable({ caseId }: { caseId: string }) {
   }
 
   function handleArchive(id: string) {
+    if (readOnly || archiveInstallment.isPending) return
     const confirmed = window.confirm(
       'Bu taksit satırı kaldırılacak. Tahsilat kayıtları etkilenmez. Devam edilsin mi?'
     )
@@ -77,6 +79,7 @@ export default function FeeInstallmentTable({ caseId }: { caseId: string }) {
                 <button
                   type="button"
                   onClick={() => togglePaid(row)}
+                  disabled={readOnly || updateInstallment.isPending}
                   className={`flex-shrink-0 transition-colors ${
                     isPaid
                       ? 'text-emerald-600 hover:text-emerald-700'
@@ -121,6 +124,7 @@ export default function FeeInstallmentTable({ caseId }: { caseId: string }) {
                 <button
                   type="button"
                   onClick={() => handleArchive(row.id)}
+                  disabled={readOnly || archiveInstallment.isPending}
                   className="flex-shrink-0 rounded-lg p-2 text-muted-foreground/60 transition hover:bg-red-50 hover:text-red-600"
                   aria-label="Taksiti kaldır"
                 >

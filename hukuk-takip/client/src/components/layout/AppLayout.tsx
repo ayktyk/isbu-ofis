@@ -6,6 +6,7 @@ import Header from './Header'
 import MobileBottomNav from './MobileBottomNav'
 import ActionSearchBar from '@/components/shared/ActionSearchBar'
 import RefreshBar from '@/components/shared/RefreshBar'
+import ConnectionStatus from '@/components/shared/ConnectionStatus'
 import { InlinePageLoader } from '@/App'
 import { api } from '@/lib/axios'
 
@@ -197,6 +198,7 @@ export default function AppLayout() {
       <Sidebar open={sidebarOpen} onClose={closeSidebar} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onMenuToggle={toggleSidebar} />
+        <ConnectionStatus />
         <main id="app-scroll-main" className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-[calc(64px+env(safe-area-inset-bottom)+16px)] sm:p-4 md:p-6 md:pb-6">
           {/* Ic Suspense: sekme degistiginde layout kalir, yalnizca icerik
               alani skeleton gosterir — bos/titrek ekran olmaz. */}

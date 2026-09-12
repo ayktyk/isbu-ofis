@@ -46,13 +46,14 @@ if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   import('virtual:pwa-register')
     .then(({ registerSW }) => {
       const updateSW = registerSW({
+        onRegisteredSW(_url, registration) {
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && navigator.onLine) void registration?.update().catch(() => {})
+          })
+        },
         onNeedRefresh() {
-          // Sessiz auto-reload: kullanicinin nerede oldugunu kaydet, sonra yenile.
-          // confirm() istersen burada gosterebilirsin; mobilde rahatsiz edici olabilir.
-          try {
-            sessionStorage.setItem('hz-pwa-reloading', '1')
-          } catch {}
-          updateSW(true)
+          window.dispatchEvent(new CustomEvent('themis-update-ready', { detail: () => updateSW(true) }))
+          ;(window as any).__themisUpdate = () => updateSW(true)
         },
         onOfflineReady() {},
       })

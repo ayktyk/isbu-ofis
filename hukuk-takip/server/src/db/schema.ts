@@ -192,6 +192,15 @@ export const cases = pgTable(
   })
 )
 
+export const caseWorkspaces = pgTable('case_workspaces', {
+  caseId: uuid('case_id').primaryKey().references(() => cases.id, { onDelete: 'restrict' }),
+  stage: varchar('stage', { length: 120 }).notNull().default(''),
+  waitingFor: varchar('waiting_for', { length: 500 }).notNull().default(''),
+  checkDate: date('check_date'),
+  revision: integer('revision').notNull().default(1),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
+
 export const caseHearings = pgTable(
   'case_hearings',
   {
@@ -217,6 +226,13 @@ export const caseHearings = pgTable(
     resultDateIdx: index('hearings_result_date_idx').on(table.result, table.hearingDate),
   })
 )
+
+export const hearingReviewReceipts = pgTable('hearing_review_receipts', {
+  requestId: uuid('request_id').primaryKey(),
+  hearingId: uuid('hearing_id').notNull().references(() => caseHearings.id, { onDelete: 'restrict' }),
+  payloadHash: varchar('payload_hash', { length: 64 }).notNull(),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})
 
 export const tasks = pgTable(
   'tasks',

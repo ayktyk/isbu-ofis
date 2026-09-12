@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
     plugins: [
       react(),
       VitePWA({
-        registerType: 'autoUpdate',
+        registerType: 'prompt',
         injectRegister: 'auto',
         includeAssets: [
           'favicon.svg',
@@ -59,7 +59,7 @@ export default defineConfig(({ mode }) => {
           // chunk'ı istiyor → 404 / boş tepkili scroll-takılma yaşanıyor. skipWaiting +
           // clientsClaim, dağıtım sonrası kullanıcıyı tek refresh'le güncel sürüme
           // taşır, scroll/event çakışmasını önler.
-          skipWaiting: true,
+          skipWaiting: false,
           clientsClaim: true,
           // Tum build ciktisi (JS, CSS, HTML, assets) precache'lenir.
           // Hashed asset'ler 1 yil immutable cache'de kalir — Workbox zaten cache-busting'i
@@ -72,27 +72,8 @@ export default defineConfig(({ mode }) => {
           navigateFallbackDenylist: [/^\/api/],
           runtimeCaching: [
             {
-              // Ayni origin API: NetworkFirst + kisa timeout; offline'da stale veri gosterir.
-              urlPattern: ({ url, sameOrigin }) =>
-                sameOrigin && url.pathname.startsWith('/api/'),
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'hukuk-api',
-                networkTimeoutSeconds: 4,
-                expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 }, // 7 gun
-                cacheableResponse: { statuses: [0, 200] },
-              },
-            },
-            {
-              // VITE_API_BASE_URL ile ayri origin backend kullanildiginda (Vercel+Render).
-              urlPattern: ({ url }) => /\/api\//.test(url.pathname),
-              handler: 'NetworkFirst',
-              options: {
-                cacheName: 'hukuk-api-external',
-                networkTimeoutSeconds: 4,
-                expiration: { maxEntries: 200, maxAgeSeconds: 60 * 60 * 24 * 7 },
-                cacheableResponse: { statuses: [0, 200] },
-              },
+              urlPattern: ({ url }) => /\/api(?:\/|$)/.test(url.pathname),
+              handler: 'NetworkOnly',
             },
             {
               // Google Fonts stylesheet — StaleWhileRevalidate.

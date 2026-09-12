@@ -25,7 +25,9 @@ export function useLogin() {
 
   return useMutation({
     mutationFn: (data: LoginInput) => api.post('/auth/login', data),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
+      await queryClient.cancelQueries()
+      queryClient.clear()
       setAuthTokens({
         accessToken: res.data.accessToken,
         refreshToken: res.data.refreshToken,
@@ -51,7 +53,8 @@ export function useLogout() {
 
   return useMutation({
     mutationFn: () => api.post('/auth/logout'),
-    onSuccess: () => {
+    onSuccess: async () => {
+      await queryClient.cancelQueries()
       clearAuthTokens()
       queryClient.clear()
       navigate('/login', { replace: true })

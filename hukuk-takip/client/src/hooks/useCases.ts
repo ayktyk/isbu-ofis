@@ -11,6 +11,8 @@ export function useCases(params?: {
   isCmk?: 'only' | 'include' | undefined
   page?: number
   pageSize?: number
+  includeTracking?: boolean
+  trackingFilter?: string
 }) {
   return useQuery({
     queryKey: ['cases', params],
@@ -146,7 +148,7 @@ export function useCreateDocument() {
       return res.data
     },
     onSuccess: (data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['cases', variables.caseId, 'documents'] })
+      queryClient.invalidateQueries({ queryKey: ['cases', variables.caseId] })
       // Not: dashboard payload'unda documents alanı yok — invalidate gereksiz network
       // ve 14-paralel sorgu yeniden tetiklemesine yol açıyordu.
       const uploadedCount = Number(data?.uploadedCount || variables.files.length || 0)
@@ -168,7 +170,7 @@ export function useDeleteDocument(caseId?: string) {
     mutationFn: (id: string) => api.delete(`/documents/${id}`),
     onSuccess: () => {
       if (caseId) {
-        queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'documents'] })
+        queryClient.invalidateQueries({ queryKey: ['cases', caseId] })
       }
       // Dashboard'da documents alanı yok — invalidate gereksiz.
       toast.success('Belge silindi.')

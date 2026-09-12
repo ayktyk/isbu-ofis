@@ -162,6 +162,7 @@ router.get('/', async (req, res) => {
     db
       .select({
         id: tasks.id,
+        caseId: tasks.caseId,
         title: tasks.title,
         priority: tasks.priority,
         dueDate: tasks.dueDate,
@@ -172,7 +173,7 @@ router.get('/', async (req, res) => {
       .where(
         and(
           eq(tasks.userId, userId),
-          eq(tasks.status, 'pending'),
+          inArray(tasks.status, ['pending', 'in_progress']),
           eq(tasks.isDeadline, false),
           isNull(tasks.archivedAt)
         )
@@ -369,6 +370,7 @@ router.get('/summary', async (req, res) => {
     safeQuery('pendingTasks', () => db
       .select({
         id: tasks.id,
+        caseId: tasks.caseId,
         title: tasks.title,
         priority: tasks.priority,
         dueDate: tasks.dueDate,
@@ -379,13 +381,12 @@ router.get('/summary', async (req, res) => {
       .where(
         and(
           eq(tasks.userId, userId),
-          eq(tasks.status, 'pending'),
+          inArray(tasks.status, ['pending', 'in_progress']),
           eq(tasks.isDeadline, false),
           isNull(tasks.archivedAt)
         )
       )
-      .orderBy(tasks.dueDate)
-      .limit(10), [] as any[]),
+      .orderBy(tasks.dueDate), [] as any[]),
 
     safeQuery('recentCases', () => db
       .select({

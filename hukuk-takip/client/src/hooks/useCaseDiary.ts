@@ -73,6 +73,7 @@ export function useCaseNextStep(caseId: string | undefined) {
 }
 
 function invalidateDiary(queryClient: ReturnType<typeof useQueryClient>, caseId?: string) {
+  queryClient.invalidateQueries({ predicate: query => query.queryKey[0] === 'cases' && typeof query.queryKey[1] !== 'string' })
   queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'diary'] })
   queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'next-step'] })
   queryClient.invalidateQueries({ queryKey: ['cases', caseId, 'detail'] })

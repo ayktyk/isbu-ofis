@@ -46,9 +46,11 @@ function formatTemplateDuration(template: Template) {
 export function NewLegalDeadlineForm({
   onClose,
   defaultCaseId,
+  defaultCase,
 }: {
   onClose: () => void
   defaultCaseId?: string
+  defaultCase?: { id: string; title: string; caseType?: string }
 }) {
   const [step, setStep] = useState<1 | 2>(1)
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null)
@@ -92,7 +94,9 @@ export function NewLegalDeadlineForm({
 
   const { data: templates, isLoading: templatesLoading } = useDeadlineTemplates()
   const { data: casesData } = useCases({ pageSize: 200 })
-  const casesList = casesData?.data || []
+  const fetchedCases = casesData?.data || []
+  const casesList = defaultCase && !fetchedCases.some((item: any) => item.id === defaultCase.id)
+    ? [defaultCase, ...fetchedCases] : fetchedCases
   const createTask = useCreateTask()
 
   const selectedCase = useMemo(

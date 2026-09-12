@@ -1,0 +1,37 @@
+--- a/hukuk-takip/server/src/routes/cases.ts
++++ b/hukuk-takip/server/src/routes/cases.ts
+@@ -1,4 +1,6 @@
+ import { Router } from 'express'
++import { z } from 'zod'
++import { loadCaseTracking } from '../utils/caseTrackingLoader.js'
+ import { and, desc, eq, ilike, isNull, or, sql } from 'drizzle-orm'
+ import { createCaseSchema, updateCaseSchema } from '../../../shared/dist/index.js'
+ import { db } from '../db/index.js'
+@@ -125,6 +127,12 @@
+ })
+ 
+ router.get('/', async (req, res) => {
++  const trackingOption = z.enum(['true', 'false']).optional().safeParse(req.query.includeTracking)
++  if (!trackingOption.success) {
++    res.status(400).json({ error: 'Geçersiz takip özeti seçeneği.' })
++    return
++  }
++  const includeTracking = trackingOption.data === 'true'
+   const search = getSingleValue(req.query.search)
+   const status = getSingleValue(req.query.status)
+   const statusGroup = getSingleValue(req.query.statusGroup)
+@@ -243,9 +251,13 @@
+   ])
+ 
+   const total = countResult[0]?.count ?? 0
++  const tracking = includeTracking
++    ? await loadCaseTracking(db, req.user!.userId, data.map(row => row.id))
++    : null
+ 
+   res.json({
+-    data,
++    data: tracking ? data.map(row => ({ ...row, tracking: tracking[row.id] })) : data,
++    trackingVersion: tracking ? 1 : undefined,
+     total,
+     page,
+     pageSize,

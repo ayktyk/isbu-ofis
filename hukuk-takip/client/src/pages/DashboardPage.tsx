@@ -1,4 +1,5 @@
 import { useCallback, useState } from 'react'
+import DailyDesk from '@/components/cases/DailyDesk'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertOctagon,
@@ -268,6 +269,7 @@ export default function DashboardPage() {
       </div>
 
       {/* KRITIK SURELI ISLER BANDI — bu hafta (7 gün) içinde sonu olan açık süreli işler */}
+      <DailyDesk tasks={pendingTasks || []} />
       {criticalDeadlinesList.length > 0 && (
         <Card className="border-l-4 border-l-red-600 bg-red-50">
           <CardContent className="p-4">
@@ -584,7 +586,7 @@ export default function DashboardPage() {
                   <button
                     key={task.id}
                     type="button"
-                    onClick={() => navigate('/tasks')}
+                    onClick={() => navigate(task.caseId ? `/cases/${task.caseId}?section=work` : '/tasks')}
                     className="flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition hover:bg-muted/50"
                   >
                     <div className="min-w-0 flex-1">

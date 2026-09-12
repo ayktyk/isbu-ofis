@@ -1,0 +1,22 @@
+{
+  "file": "pre-case-tracking-2026-09-11T23-36-13-696Z.dump",
+  "createdAt": "2026-09-11T23:36:23.013Z",
+  "serverVersion": "170011",
+  "clientImage": "postgres:17-alpine",
+  "bytes": 133920,
+  "sha256": "9615f26e15b349ec7213108ffa1be4e4b87b29ec90fc20535715e426d6e865fb",
+  "archiveListVerified": true,
+  "restoreVerified": true,
+  "restoreVerifiedAt": "2026-09-11T23:38:33.227Z",
+  "restoredCounts": {
+    "cases": 86,
+    "clients": 92,
+    "tasks": 100,
+    "diary": 31,
+    "hearings": 14,
+    "notes": 4,
+    "documents": 0,
+    "expenses": 0,
+    "collections": 23
+  }
+}

@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useCaseListFilters, useCaseListPosition } from '@/hooks/useCaseListPosition'
 import { AlertTriangle, ChevronLeft, ChevronRight, Edit, Eye, PhoneCall, Plus, Scale, Search, Trash2, X } from 'lucide-react'
 import { useCases, useDeleteCase } from '@/hooks/useCases'
 import { useConsultations } from '@/hooks/useConsultations'
@@ -7,6 +8,7 @@ import { caseStatusLabels, caseTypeLabels, formatDate } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import CaseTrackingPreview from '@/components/cases/CaseTrackingPreview'
 
 const statusVariant: Record<string, 'default' | 'success' | 'danger' | 'warning' | 'secondary'> = {
   active: 'default',
@@ -57,27 +59,32 @@ const typeOptions = [
 export default function CasesPage() {
   const navigate = useNavigate()
   const deleteCase = useDeleteCase()
+  const location = useLocation()
+  const { params, setFilter } = useCaseListFilters()
+  const listState = { caseListUrl: location.pathname + location.search }
+  const [showFilters, setShowFilters] = useState(false)
 
-  const [search, setSearch] = useState('')
-  const [debouncedSearch, setDebouncedSearch] = useState('')
-  const [statusGroup, setStatusGroup] = useState('')
-  const [status, setStatus] = useState('')
-  const [caseType, setCaseType] = useState('')
-  const [page, setPage] = useState(1)
-  const [timer, setTimer] = useState<ReturnType<typeof setTimeout>>()
+  const search = params.get('search') || ''
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  const statusGroup = params.get('statusGroup') || ''
+  const status = params.get('status') || ''
+  const caseType = params.get('caseType') || ''
+  const includeCmk = params.get('cmk') !== 'exclude'
+  const rawPage = Number(params.get('page') || 1)
+  const page = Number.isSafeInteger(rawPage) && rawPage > 0 ? rawPage : 1
+  const setStatusGroup = (value: string) => setFilter('statusGroup', value)
+  const setStatus = (value: string) => setFilter('status', value)
+  const setCaseType = (value: string) => setFilter('caseType', value)
+  const setPage = (value: number | ((current: number) => number)) => setFilter('page', String(typeof value === 'function' ? value(page) : value))
   const pageSize = 20
 
   function handleSearch(value: string) {
-    setSearch(value)
-    if (timer) clearTimeout(timer)
-
-    const nextTimer = setTimeout(() => {
-      setDebouncedSearch(value)
-      setPage(1)
-    }, 300)
-
-    setTimer(nextTimer)
+    setFilter('search', value)
   }
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const { data, isLoading, isError } = useCases({
     search: debouncedSearch || undefined,
@@ -86,12 +93,15 @@ export default function CasesPage() {
     caseType: caseType || undefined,
     page,
     pageSize,
+    isCmk: includeCmk ? 'include' : undefined,
+    includeTracking: true,
+    trackingFilter: params.get('tracking') || undefined,
   })
 
   // "Potansiyel Davalar" sekmesinde, henüz dosya açılmamış potansiyel
   // görüşmeler de listenin üstüne eklenir. Diğer sekmelerde sorgu fetch
   // edilmez (enabled false ile çağrılma maliyeti yok).
-  const showPotentialConsultations = statusGroup === 'pending' && !debouncedSearch && !status && !caseType
+  const showPotentialConsultations = statusGroup === 'pending' && !debouncedSearch && !status && !caseType && !params.get('tracking')
   const { data: potentialConsultations } = useConsultations(
     showPotentialConsultations ? { status: 'potential' } : undefined
   )
@@ -107,6 +117,7 @@ export default function CasesPage() {
   const totalPages = Math.max(1, Math.ceil((data?.total || 0) / pageSize))
   const hasFilters = Boolean(debouncedSearch || statusGroup || status || caseType)
   const hasAnyRow = cases.length > 0 || consultationRows.length > 0
+  useCaseListPosition(!isLoading && !isError && debouncedSearch === search)
 
   return (
     <div className="space-y-6">
@@ -114,7 +125,7 @@ export default function CasesPage() {
         <div>
           <h1 className="page-title">Davalar</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {total > 0 ? `${total} dava kayitli` : 'Dava portfoyunuzu buradan yonetin'}
+            {total > 0 ? `${total} kayıt · ${includeCmk ? 'CMK dahil' : 'CMK hariç'}` : 'Dava portföyünüzü buradan yönetin'}
           </p>
         </div>
         <button
@@ -129,6 +140,15 @@ export default function CasesPage() {
 
       <Card className="bg-card shadow-sm">
         <CardContent className="space-y-4 p-4 sm:p-5">
+          <label className="block text-sm font-medium">Dosya takibi
+            <select aria-label="Dosya takibi" value={params.get('tracking') || ''} onChange={event => setFilter('tracking', event.target.value)} className="mt-1 min-h-11 w-full rounded-xl border bg-background px-3">
+              <option value="">Tüm dosyalar</option><option value="overdue">Geciken işler / kontroller</option><option value="waiting">Yanıt veya belge beklenenler</option><option value="unplanned">Sonraki adımı belirlenmemiş</option><option value="check">Bugün kontrol edilecekler</option>
+            </select>
+          </label>
+          <label className="flex min-h-11 items-center gap-2 text-sm">
+            <input type="checkbox" checked={includeCmk} onChange={event => setFilter('cmk', event.target.checked ? '' : 'exclude')} className="h-4 w-4" />
+            CMK görevlendirmelerini de göster
+          </label>
           <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap sm:gap-2">
             {statusGroupOptions.map((option) => (
               <button
@@ -136,7 +156,6 @@ export default function CasesPage() {
                 type="button"
                 onClick={() => {
                   setStatusGroup(option.value)
-                  setPage(1)
                 }}
                 className={`flex-shrink-0 rounded-full px-3 py-1.5 text-[13px] font-medium transition sm:px-3.5 sm:py-2 sm:text-sm ${
                   statusGroup === option.value
@@ -170,13 +189,16 @@ export default function CasesPage() {
               )}
             </div>
 
+            <button type="button" className="min-h-11 rounded-xl border px-3 text-sm sm:hidden" aria-expanded={showFilters} onClick={() => setShowFilters(value => !value)}>
+              Filtreler{status || caseType ? ' · Etkin' : ''}
+            </button>
             <select
+              aria-label="Dava durumu"
               value={status}
               onChange={(event) => {
                 setStatus(event.target.value)
-                setPage(1)
               }}
-              className="rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent"
+              className={`${showFilters ? 'block' : 'hidden sm:block'} rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent`}
             >
               {statusOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -186,12 +208,12 @@ export default function CasesPage() {
             </select>
 
             <select
+              aria-label="Dava türü"
               value={caseType}
               onChange={(event) => {
                 setCaseType(event.target.value)
-                setPage(1)
               }}
-              className="rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent"
+              className={`${showFilters ? 'block' : 'hidden sm:block'} rounded-xl border bg-background px-3 py-2.5 text-sm outline-none transition focus:border-law-accent`}
             >
               {typeOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -233,6 +255,7 @@ export default function CasesPage() {
 
       {!isLoading && !isError && (
         <>
+          {cases.length > 0 && data?.trackingVersion !== 1 && <p className="rounded-xl border bg-muted/30 p-3 text-sm text-muted-foreground">Takip özeti alınamadı. Dava bilgilerini görüntüleyebilir, işleri dosya içinden kontrol edebilirsiniz.</p>}
           {!hasAnyRow ? (
             <Card>
               <CardContent className="flex flex-col items-center justify-center py-16 text-center">
@@ -260,7 +283,33 @@ export default function CasesPage() {
           ) : (
             <Card className="overflow-hidden border-0 shadow-sm">
               <CardContent className="p-0">
-                <div className="table-mobile-scroll">
+                <div className="space-y-3 bg-background md:hidden">
+                  {consultationRows.map((item: any) => (
+                    <Link key={item.id} to="/consultations" className="block rounded-xl border border-amber-200 bg-card p-4">
+                      <Badge variant="warning">Potansiyel görüşme</Badge>
+                      <p className="mt-2 font-semibold">{item.fullName}</p>
+                      <p className="text-sm text-muted-foreground">{item.subject}</p>
+                    </Link>
+                  ))}
+                  {cases.map((item: any) => (
+                    <Link key={item.id} to={`/cases/${item.id}`} state={listState} className="block rounded-xl border bg-card p-4 shadow-sm transition active:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-law-accent">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="min-w-0 break-words font-semibold">{item.clientName || 'Müvekkil belirtilmemiş'}</p>
+                        <Badge variant={statusVariant[item.status] || 'secondary'}>{caseStatusLabels[item.status] || item.status}</Badge>
+                      </div>
+                      <p className="mt-2 break-words text-sm font-medium">{item.title}</p>
+                      {item.workflow && <p className="mt-2 text-sm">Aşama: {item.workflow.stage || 'Belirtilmedi'}{item.workflow.waitingFor && ` · Beklenen: ${item.workflow.waitingFor}`}{item.workflow.checkDate && ` · Kontrol: ${formatDate(item.workflow.checkDate)}`}</p>}
+                      <p className="mt-1 break-words text-sm text-muted-foreground">{item.courtName || 'Mahkeme belirtilmemiş'}</p>
+                      {item.isCmkAssignment && <p className="mt-1 text-xs text-muted-foreground">CMK görevlendirmesi</p>}
+                      {data?.trackingVersion === 1 && item.tracking && <div className="mt-3 rounded-lg bg-muted/30 p-3"><CaseTrackingPreview tracking={item.tracking} status={item.status} /></div>}
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
+                        <span>Esas: {item.caseNumber || 'Belirtilmemiş'}</span>
+                        <span className="font-medium text-law-accent">Dosyayı aç →</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+                <div className="table-mobile-scroll hidden md:block">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b bg-muted/40 text-left text-xs uppercase tracking-[0.18em] text-muted-foreground">
@@ -269,6 +318,7 @@ export default function CasesPage() {
                         <th className="hidden px-4 py-3 sm:table-cell">Müvekkil</th>
                         <th className="hidden px-4 py-3 md:table-cell">Tur</th>
                         <th className="px-4 py-3">Durum</th>
+                        {data?.trackingVersion === 1 && <th className="min-w-64 px-4 py-3">Dosya takibi</th>}
                         <th className="hidden px-4 py-3 lg:table-cell">Mahkeme</th>
                         <th className="hidden px-4 py-3 lg:table-cell">Tarih</th>
                         <th className="px-4 py-3 text-right">Islem</th>
@@ -307,6 +357,7 @@ export default function CasesPage() {
                           <td className="px-4 py-3">
                             <Badge variant="warning">GÖRÜŞME</Badge>
                           </td>
+                          {data?.trackingVersion === 1 && <td className="px-4 py-3 text-muted-foreground">Henüz dava açılmadı.</td>}
                           <td className="hidden px-4 py-3 lg:table-cell text-muted-foreground">
                             -
                           </td>
@@ -333,7 +384,7 @@ export default function CasesPage() {
                       {cases.map((item: any, idx: number) => (
                         <tr
                           key={item.id}
-                          onClick={() => navigate(`/cases/${item.id}`)}
+                          onClick={() => navigate(`/cases/${item.id}`, { state: listState })}
                           className="cursor-pointer transition hover:bg-muted/50"
                         >
                           <td className="w-12 px-3 py-3 text-center text-xs font-semibold tabular-nums text-muted-foreground">
@@ -341,6 +392,7 @@ export default function CasesPage() {
                           </td>
                           <td className="px-4 py-3">
                             <p className="font-medium">{item.title}</p>
+                            {item.workflow && <p className="mt-1 text-xs text-muted-foreground">{item.workflow.stage || 'Aşama belirtilmedi'}{item.workflow.waitingFor && ` · ${item.workflow.waitingFor}`}{item.workflow.checkDate && ` · Kontrol: ${formatDate(item.workflow.checkDate)}`}</p>}
                             {item.caseNumber && (
                               <p className="text-xs text-muted-foreground">Esas: {item.caseNumber}</p>
                             )}
@@ -356,6 +408,7 @@ export default function CasesPage() {
                               {caseStatusLabels[item.status] || item.status}
                             </Badge>
                           </td>
+                          {data?.trackingVersion === 1 && <td className="max-w-sm px-4 py-3">{item.tracking ? <CaseTrackingPreview tracking={item.tracking} status={item.status} /> : 'Takip özeti alınamadı.'}</td>}
                           <td className="hidden px-4 py-3 lg:table-cell text-muted-foreground">
                             {item.courtName || '-'}
                           </td>
@@ -368,7 +421,7 @@ export default function CasesPage() {
                                 type="button"
                                 onClick={(event) => {
                                   event.stopPropagation()
-                                  navigate(`/cases/${item.id}`)
+                                  navigate(`/cases/${item.id}`, { state: listState })
                                 }}
                                 className="rounded p-1.5 text-muted-foreground transition hover:bg-muted hover:text-foreground"
                                 title="Goruntule"

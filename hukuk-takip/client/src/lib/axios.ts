@@ -54,6 +54,9 @@ function settleSlowTimer(
 }
 
 api.interceptors.request.use((config) => {
+  if (typeof navigator !== 'undefined' && !navigator.onLine && !['get', 'head', 'options'].includes(config.method || 'get')) {
+    return Promise.reject(new Error('Çevrimdışıyken kayıt yapılamaz.'))
+  }
   if (typeof FormData !== 'undefined' && config.data instanceof FormData) {
     delete config.headers['Content-Type']
     // Dosya yükleme yavaş ağda 90 sn'yi aşabilir — üst sınırı kaldır.
