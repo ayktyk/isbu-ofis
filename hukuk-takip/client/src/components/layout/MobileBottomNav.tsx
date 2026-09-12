@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
-import { Briefcase, Calendar, CheckSquare, LayoutDashboard, Users } from 'lucide-react'
+import { Briefcase, Calendar, CheckSquare, LayoutDashboard, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/axios'
 import { prefetchRouteChunk } from '@/lib/routeChunks'
@@ -12,7 +12,7 @@ import { prefetchRouteChunk } from '@/lib/routeChunks'
 //   useCases          → ['cases', undefined]  (params undefined default)
 //   useCalendar       → ['calendar', undefined]  (varsa) — biz query çağırmıyorsak prefetch yararsız, atlanır
 //   useTasks          → ['tasks', undefined]
-//   useClients        → ['clients', undefined]
+//   useAllCollections → ['collections', 'all', undefined]  (source='all' → params undefined)
 // Dashboard endpoint'i /dashboard/summary; diğerleri liste endpoint'leri.
 type NavItem = {
   to: string
@@ -26,7 +26,7 @@ const items: NavItem[] = [
   { to: '/cases', label: 'Davalar', icon: Briefcase, prefetch: { queryKey: ['cases', undefined], url: '/cases' } },
   { to: '/calendar', label: 'Takvim', icon: Calendar }, // takvim sayfası tarihe göre fetch — liste prefetch'i anlamlı değil
   { to: '/tasks', label: 'Görevler', icon: CheckSquare, prefetch: { queryKey: ['tasks', undefined], url: '/tasks' } },
-  { to: '/clients', label: 'Müvekkil', icon: Users, prefetch: { queryKey: ['clients', undefined], url: '/clients' } },
+  { to: '/collections', label: 'Tahsilat', icon: Wallet, prefetch: { queryKey: ['collections', 'all', undefined], url: '/collections' } },
 ]
 
 // Aktif sekmeye tekrar basıldığında ana scroll konteynerini yumuşakça başa kaydır.
