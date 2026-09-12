@@ -426,7 +426,9 @@ html.theme-chamber {
   .priority-low { @apply bg-slate-50 text-slate-600; }
 
   .page-title {
-    @apply text-2xl font-semibold font-sans tracking-tight sm:text-3xl;
+    @apply text-2xl font-semibold tracking-tight sm:text-3xl;
+    /* Başlıklar seçilen yazı stilinin display fontunu kullanır (bkz. lib/theme.tsx). */
+    font-family: var(--font-serif);
     line-height: 1.25;
     color: hsl(var(--primary));
   }

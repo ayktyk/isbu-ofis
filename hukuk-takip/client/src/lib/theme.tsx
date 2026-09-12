@@ -1,4 +1,70 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useState, useCallback } from 'react'
+
+/**
+ * Yazı stilleri: her seçim bir başlık + gövde eşleşmesidir.
+ * `display` başlıklarda (h1-h6, .page-title, .ink-display), `body` geri kalan her yerde kullanılır.
+ */
+export const fontOptions = [
+  {
+    id: 'sade',
+    label: 'Sade',
+    name: 'Inter',
+    description: 'Nötr ve net. Gün boyu ekranda kalsanız da yormaz.',
+    display: "'Inter', system-ui, sans-serif",
+    body: "'Inter', system-ui, sans-serif",
+  },
+  {
+    id: 'modern',
+    label: 'Modern',
+    name: 'Plus Jakarta Sans',
+    description: 'Yumuşak geometri, ferah boşluklar — çağdaş büro havası.',
+    display: "'Plus Jakarta Sans', system-ui, sans-serif",
+    body: "'Plus Jakarta Sans', system-ui, sans-serif",
+  },
+  {
+    id: 'editoryel',
+    label: 'Editoryel',
+    name: 'Source Serif + Inter',
+    description: 'Tırnaklı başlıklar, net gövde. Rapor ve mütalaa hissi.',
+    display: "'Source Serif 4', Georgia, serif",
+    body: "'Inter', system-ui, sans-serif",
+  },
+  {
+    id: 'zarif',
+    label: 'Zarif',
+    name: 'Playfair + Manrope',
+    description: 'Yüksek kontrastlı başlıklar, ince gövde. En gösterişli seçim.',
+    display: "'Playfair Display', Georgia, serif",
+    body: "'Manrope', system-ui, sans-serif",
+  },
+  {
+    id: 'klasik',
+    label: 'Klasik',
+    name: 'Lora',
+    description: 'Baştan sona tırnaklı. Kitap sayfası ve klasik evrak duygusu.',
+    display: "'Lora', Georgia, serif",
+    body: "'Lora', Georgia, serif",
+  },
+] as const
+export type FontId = (typeof fontOptions)[number]['id']
+export const DEFAULT_FONT: FontId = 'sade'
+
+/** Önceki sürümde kaydedilmiş seçimleri yeni stillere taşır. */
+const LEGACY_FONT_IDS: Record<string, FontId> = {
+  inter: 'sade',
+  manrope: 'modern',
+  nunito: 'modern',
+  source: 'editoryel',
+  lora: 'klasik',
+}
+
+function resolveFontId(stored: string | null): FontId {
+  if (!stored) return DEFAULT_FONT
+  if (fontOptions.some(option => option.id === stored)) return stored as FontId
+  return LEGACY_FONT_IDS[stored] ?? DEFAULT_FONT
+}
+
+const FONT_STORAGE_KEY = 'hukuk-takip-font'
 
 export type ThemeId =
   | 'parchment'
@@ -79,6 +145,8 @@ const STORAGE_KEY = 'hukuk-takip-theme'
 interface ThemeContextValue {
   theme: ThemeId
   setTheme: (t: ThemeId) => void
+  font: FontId
+  setFont: (font: FontId) => void
 }
 
 const DEFAULT_THEME: ThemeId = 'parchment'
@@ -86,9 +154,25 @@ const DEFAULT_THEME: ThemeId = 'parchment'
 const ThemeContext = createContext<ThemeContextValue>({
   theme: DEFAULT_THEME,
   setTheme: () => {},
+  font: DEFAULT_FONT,
+  setFont: () => {},
 })
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const [font, setFontState] = useState<FontId>(() => {
+    try {
+      return resolveFontId(localStorage.getItem(FONT_STORAGE_KEY))
+    } catch { return DEFAULT_FONT }
+  })
+  const setFont = useCallback((value: FontId) => {
+    setFontState(value)
+    try { localStorage.setItem(FONT_STORAGE_KEY, value) } catch { /* Keep the selection for this session. */ }
+  }, [])
+  useLayoutEffect(() => {
+    const selected = fontOptions.find(option => option.id === font) ?? fontOptions[0]
+    document.documentElement.style.setProperty('--font-sans', selected.body)
+    document.documentElement.style.setProperty('--font-serif', selected.display)
+  }, [font])
   const [theme, setThemeState] = useState<ThemeId>(() => {
     const stored = localStorage.getItem(STORAGE_KEY) as ThemeId | null
     return stored && themes.some((t) => t.id === stored) ? stored : DEFAULT_THEME
@@ -114,7 +198,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [theme])
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, setTheme, font, setFont }}>
       {children}
     </ThemeContext.Provider>
   )

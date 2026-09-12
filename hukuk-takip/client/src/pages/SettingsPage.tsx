@@ -3,7 +3,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/axios'
 import { toast } from 'sonner'
-import { useTheme, themes } from '@/lib/theme'
+import { useTheme, themes, fontOptions } from '@/lib/theme'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   User,
@@ -102,7 +102,7 @@ function ThemeCard({
 export default function SettingsPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
-  const { theme: currentTheme, setTheme } = useTheme()
+  const { theme: currentTheme, setTheme, font, setFont } = useTheme()
 
   // Profil formu
   const [fullName, setFullName] = useState(user?.fullName || '')
@@ -264,6 +264,55 @@ export default function SettingsPage() {
               />
             ))}
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base" id="font-heading">Yazı stili</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="mb-4 text-sm text-muted-foreground">
+            Her stil bir başlık + gövde eşleşmesidir. Seçiminiz tüm sayfalara anında uygulanır, bu cihazda saklanır ve tema değiştirdiğinizde korunur.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2" role="group" aria-labelledby="font-heading">
+            {fontOptions.map(option => (
+              <button
+                key={option.id}
+                type="button"
+                aria-pressed={font === option.id}
+                onClick={() => setFont(option.id)}
+                style={{ fontFamily: option.body }}
+                className={cn(
+                  'rounded-xl border-2 p-4 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
+                  font === option.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                )}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    {option.label} · {option.name}
+                  </span>
+                  {font === option.id && <Check className="h-5 w-5 shrink-0 text-primary" aria-hidden="true" />}
+                </span>
+                <span
+                  className="mt-3 block text-xl font-semibold leading-snug text-primary"
+                  style={{ fontFamily: option.display }}
+                >
+                  Duruşma hazırlığı
+                </span>
+                <span className="mt-1.5 block text-sm leading-relaxed">
+                  Müvekkil görüşmesi ve dilekçe teslimi — şu an bu yazıyla okuyorsunuz.
+                </span>
+                <span className="mt-2 block text-sm tabular-nums text-muted-foreground">
+                  18.09.2026 · 10.30 · 12.500 ₺
+                </span>
+                <span className="mt-3 block text-xs text-muted-foreground">{option.description}</span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground" role="status">
+            Seçili: {fontOptions.find(option => option.id === font)?.name}
+          </p>
         </CardContent>
       </Card>
 
