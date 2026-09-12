@@ -1,3 +1,4 @@
+import { caseRecordHref, taskHref } from '@/lib/recordLinks'
 import { useCallback, useState } from 'react'
 import DailyDesk from '@/components/cases/DailyDesk'
 import { useNavigate } from 'react-router-dom'
@@ -296,7 +297,7 @@ export default function DashboardPage() {
                         className="flex flex-wrap items-center justify-between gap-2 rounded bg-white/60 p-2 text-sm"
                       >
                         <button
-                          onClick={() => navigate('/sureli-isler')}
+                          onClick={() => navigate(taskHref({ ...d, isDeadline: true }))}
                           className="min-w-0 flex-1 text-left"
                         >
                           <span className="font-medium text-red-900">{d.title}</span>
@@ -524,7 +525,7 @@ export default function DashboardPage() {
                       return (
                         <tr
                           key={hearing.id}
-                          onClick={() => navigate(`/cases/${hearing.caseId}`)}
+                          onClick={() => navigate(caseRecordHref(hearing.caseId, 'hearing', hearing.id))}
                           className="cursor-pointer transition hover:bg-muted/50"
                         >
                           <td className="py-3 pr-4">
@@ -586,7 +587,7 @@ export default function DashboardPage() {
                   <button
                     key={task.id}
                     type="button"
-                    onClick={() => navigate(task.caseId ? `/cases/${task.caseId}?section=work` : '/tasks')}
+                    onClick={() => navigate(taskHref(task))}
                     className="flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition hover:bg-muted/50"
                   >
                     <div className="min-w-0 flex-1">
@@ -699,7 +700,7 @@ export default function DashboardPage() {
                       key={`${fee.source || 'case'}-${fee.id}`}
                       type="button"
                       onClick={() =>
-                        navigate(isMediation ? `/tools/mediation-files` : `/cases/${fee.id}`)
+                        navigate(isMediation ? `/tools/mediation-files?record=${encodeURIComponent(fee.id)}` : `/cases/${fee.id}?section=finance`)
                       }
                       className="flex w-full items-start justify-between gap-3 rounded-xl border p-3 text-left transition hover:bg-muted/50"
                     >

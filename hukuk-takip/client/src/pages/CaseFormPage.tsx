@@ -13,7 +13,7 @@ import {
 import { ArrowLeft, Loader2, Plus, Save, Scale } from 'lucide-react'
 import { useCase, useCreateCase, useUpdateCase } from '@/hooks/useCases'
 import { useMobileKeyboardFix } from '@/hooks/useMobileKeyboardFix'
-import { useClients } from '@/hooks/useClients'
+import { useClients, useClient } from '@/hooks/useClients'
 import { caseStatusLabels, caseTypeLabels } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -30,6 +30,8 @@ export default function CaseFormPage() {
   const { id } = useParams()
   const [searchParams] = useSearchParams()
   const isEdit = Boolean(id)
+  const initialClientId = !isEdit ? searchParams.get('clientId') || '' : ''
+  const { data: initialClient } = useClient(initialClientId || undefined)
   const cmkPrefill = !isEdit && searchParams.get('cmk') === '1'
 
   useMobileKeyboardFix()
@@ -40,7 +42,8 @@ export default function CaseFormPage() {
 
   const [clientDialogOpen, setClientDialogOpen] = useState(false)
 
-  const clients = clientsData?.data || []
+  const listedClients = clientsData?.data || []
+  const clients = initialClient && !listedClients.some((c: any) => c.id === initialClient.id) ? [initialClient, ...listedClients] : listedClients
 
   const {
     register,
@@ -52,7 +55,7 @@ export default function CaseFormPage() {
   } = useForm<CaseFormValues>({
     resolver: zodResolver(isEdit ? updateCaseSchema : createCaseSchema),
     defaultValues: {
-      clientId: '',
+      clientId: initialClientId,
       caseNumber: '',
       courtName: '',
       caseType: 'diger',

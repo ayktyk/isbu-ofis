@@ -41,8 +41,8 @@
   --law-primary: 222 47% 11%;
   --law-accent: 201 96% 32%;
   /* Tipografi — tema bazında override edilebilir */
-  --font-sans: 'Lato', system-ui, -apple-system, sans-serif;
-  --font-serif: 'EB Garamond', Georgia, serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-serif: var(--font-sans);
   --font-mono: 'JetBrains Mono', 'Consolas', 'Liberation Mono', monospace;
 }
 
@@ -264,8 +264,8 @@ html.theme-parchment {
   --law-surface: 42 64% 93%;
   --law-primary: 30 22% 8%;
   --law-accent: 37 72% 32%;
-  --font-sans: 'Inter Tight', 'Lato', system-ui, sans-serif;
-  --font-serif: 'Fraunces', 'EB Garamond', Georgia, serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-serif: var(--font-sans);
   --font-mono: 'JetBrains Mono', 'Consolas', monospace;
 }
 
@@ -306,8 +306,8 @@ html.theme-chamber {
   --law-surface: 0 0% 100%;
   --law-primary: 215 67% 37%;
   --law-accent: 36 60% 44%;
-  --font-sans: 'Inter', 'Lato', system-ui, sans-serif;
-  --font-serif: 'Playfair Display', 'EB Garamond', Georgia, serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-serif: var(--font-sans);
   --font-mono: 'JetBrains Mono', 'Consolas', monospace;
 }
 
@@ -325,6 +325,7 @@ html.theme-chamber {
   body {
     @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
+    line-height: 1.6;
     font-feature-settings: "rlig" 1, "calt" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -425,7 +426,8 @@ html.theme-chamber {
   .priority-low { @apply bg-slate-50 text-slate-600; }
 
   .page-title {
-    @apply text-xl font-semibold font-serif tracking-tight sm:text-2xl;
+    @apply text-2xl font-semibold font-sans tracking-tight sm:text-3xl;
+    line-height: 1.25;
     color: hsl(var(--primary));
   }
 
@@ -456,7 +458,7 @@ html.theme-chamber {
 
   /* Themis tipografi yardımcıları — rakam ve koddaki kısaltmalar için */
   .num-display {
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.01em;
   }
@@ -503,4 +505,14 @@ html.theme-navy .status-passive { background: rgb(31 41 55 / 0.4); color: #9ca3a
 @keyframes hz-refresh-slide {
   0%   { transform: translateX(-100%); }
   100% { transform: translateX(400%); }
+}
+
+/* Selected records remain visible after navigating from another page. */
+[data-record-target="true"] {
+  outline: 2px solid hsl(var(--accent));
+  outline-offset: 4px;
+  scroll-margin-top: 10rem;
+}
+@media (max-width: 640px) {
+  input:not([type="checkbox"]):not([type="radio"]), textarea, select { font-size: 16px; }
 }

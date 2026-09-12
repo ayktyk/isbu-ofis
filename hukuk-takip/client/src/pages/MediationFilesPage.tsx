@@ -1,4 +1,6 @@
-import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import FocusedRecordNotice from '@/components/shared/FocusedRecordNotice'
+import { useEffect, useState } from 'react'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
@@ -78,14 +80,18 @@ function formatTRY(val: number | string, currency = 'TRY') {
 }
 
 export default function MediationFilesPage() {
+  const [params] = useSearchParams()
+  const focusedRecord = params.get('record')
   useMobileKeyboardFix()
   const [showForm, setShowForm] = useState(false)
   const [statusFilter, setStatusFilter] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
-  const { data: files, isLoading, isError } = useMediationFiles({
-    status: statusFilter || undefined,
+  const { data: allFiles, isLoading, isError } = useMediationFiles({
+    status: focusedRecord ? undefined : statusFilter || undefined,
   })
+  const files = focusedRecord ? (allFiles || []).filter((f: any) => f.id === focusedRecord) : allFiles
+  useEffect(() => { if (focusedRecord) setExpandedId(focusedRecord) }, [focusedRecord])
   // Endpoint dizi doner (pagination yok), sayi istemcide hesaplanir.
   // Durum filtresi aktifken gosterilen sayi filtrelenmis sonuctur — basliktaki
   // ifade de buna gore degisir, yaniltici "toplam" yazmaz.
@@ -135,6 +141,7 @@ export default function MediationFilesPage() {
 
   return (
     <div className="space-y-6">
+      <FocusedRecordNotice param="record" found={!!files?.length} loading={isLoading} />
       {/* Baslik */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>

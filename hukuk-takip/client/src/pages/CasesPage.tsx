@@ -292,7 +292,8 @@ export default function CasesPage() {
                     </Link>
                   ))}
                   {cases.map((item: any) => (
-                    <Link key={item.id} to={`/cases/${item.id}`} state={listState} className="block rounded-xl border bg-card p-4 shadow-sm transition active:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-law-accent">
+                    <article key={item.id} className="block rounded-xl border bg-card p-4 shadow-sm transition active:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-law-accent">
+                      <Link to={`/cases/${item.id}`} state={listState} className="block">
                       <div className="flex items-start justify-between gap-3">
                         <p className="min-w-0 break-words font-semibold">{item.clientName || 'Müvekkil belirtilmemiş'}</p>
                         <Badge variant={statusVariant[item.status] || 'secondary'}>{caseStatusLabels[item.status] || item.status}</Badge>
@@ -301,12 +302,13 @@ export default function CasesPage() {
                       {item.workflow && <p className="mt-2 text-sm">Aşama: {item.workflow.stage || 'Belirtilmedi'}{item.workflow.waitingFor && ` · Beklenen: ${item.workflow.waitingFor}`}{item.workflow.checkDate && ` · Kontrol: ${formatDate(item.workflow.checkDate)}`}</p>}
                       <p className="mt-1 break-words text-sm text-muted-foreground">{item.courtName || 'Mahkeme belirtilmemiş'}</p>
                       {item.isCmkAssignment && <p className="mt-1 text-xs text-muted-foreground">CMK görevlendirmesi</p>}
-                      {data?.trackingVersion === 1 && item.tracking && <div className="mt-3 rounded-lg bg-muted/30 p-3"><CaseTrackingPreview tracking={item.tracking} status={item.status} /></div>}
+                      </Link>
+                      {data?.trackingVersion === 1 && item.tracking && <div className="mt-3 rounded-lg bg-muted/30 p-3"><CaseTrackingPreview listState={listState} caseId={item.id} tracking={item.tracking} status={item.status} /></div>}
                       <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
                         <span>Esas: {item.caseNumber || 'Belirtilmemiş'}</span>
-                        <span className="font-medium text-law-accent">Dosyayı aç →</span>
+                        <Link to={`/cases/${item.id}`} state={listState} className="font-medium text-law-accent">Dosyayı aç →</Link>
                       </div>
-                    </Link>
+                    </article>
                   ))}
                 </div>
                 <div className="table-mobile-scroll hidden md:block">
@@ -408,7 +410,7 @@ export default function CasesPage() {
                               {caseStatusLabels[item.status] || item.status}
                             </Badge>
                           </td>
-                          {data?.trackingVersion === 1 && <td className="max-w-sm px-4 py-3">{item.tracking ? <CaseTrackingPreview tracking={item.tracking} status={item.status} /> : 'Takip özeti alınamadı.'}</td>}
+                          {data?.trackingVersion === 1 && <td className="max-w-sm px-4 py-3">{item.tracking ? <CaseTrackingPreview listState={listState} caseId={item.id} tracking={item.tracking} status={item.status} /> : 'Takip özeti alınamadı.'}</td>}
                           <td className="hidden px-4 py-3 lg:table-cell text-muted-foreground">
                             {item.courtName || '-'}
                           </td>

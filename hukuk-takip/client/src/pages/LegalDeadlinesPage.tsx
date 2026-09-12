@@ -1,3 +1,5 @@
+import { useSearchParams } from 'react-router-dom'
+import FocusedRecordNotice from '@/components/shared/FocusedRecordNotice'
 import { useMemo, useState } from 'react'
 import { useTasks } from '@/hooks/useTasks'
 import { Card, CardContent } from '@/components/ui/card'
@@ -31,6 +33,8 @@ const STATUS_OPTIONS = [
 ]
 
 export default function LegalDeadlinesPage() {
+  const [params] = useSearchParams()
+  const focusedTask = params.get('task')
   const [category, setCategory] = useState<string>('')
   const [severity, setSeverity] = useState<string>('')
   const [statusFilter, setStatusFilter] = useState<string>('')
@@ -38,19 +42,20 @@ export default function LegalDeadlinesPage() {
 
   const { data, isLoading, isError } = useTasks({
     isDeadline: true,
-    category: category || undefined,
-    severity: severity || undefined,
-    status: statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
+    category: focusedTask ? undefined : category || undefined,
+    severity: focusedTask ? undefined : severity || undefined,
+    status: !focusedTask && statusFilter && statusFilter !== 'all' ? statusFilter : undefined,
   })
 
   const tasks: DeadlineTaskLike[] = Array.isArray(data) ? data : data?.data || []
 
   // Aktif filtre = pending + in_progress
   const visibleTasks = useMemo(() => {
+    if (focusedTask) return tasks.filter(t => t.id === focusedTask)
     if (statusFilter === 'all') return tasks
     if (!statusFilter) return tasks.filter((t) => t.status === 'pending' || t.status === 'in_progress')
     return tasks.filter((t) => t.status === statusFilter)
-  }, [tasks, statusFilter])
+  }, [tasks, statusFilter, focusedTask])
 
   const sortedTasks = useMemo(() => {
     return [...visibleTasks].sort((a, b) => {
@@ -80,6 +85,7 @@ export default function LegalDeadlinesPage() {
 
   return (
     <div className="space-y-6">
+      <FocusedRecordNotice param="task" found={tasks.some(t => t.id === focusedTask)} loading={isLoading} />
       {/* Başlık */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

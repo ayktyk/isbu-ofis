@@ -208,7 +208,7 @@ export default function ClientDetailPage() {
                 )}
               </CardTitle>
               <button
-                onClick={() => navigate('/cases/new')}
+                onClick={() => navigate(`/cases/new?clientId=${encodeURIComponent(id!)}`)}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-law-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-[#1d4ed8]"
               >
                 <Plus className="h-3.5 w-3.5" />

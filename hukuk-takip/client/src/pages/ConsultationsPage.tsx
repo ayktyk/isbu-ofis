@@ -1,3 +1,5 @@
+import { Link, useSearchParams } from 'react-router-dom'
+import FocusedRecordNotice from '@/components/shared/FocusedRecordNotice'
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -259,14 +261,16 @@ function EditConsultationForm({
 // ─── Main Page ──────────────────────────────────────────────────────────────
 
 export default function ConsultationsPage() {
+  const [params] = useSearchParams()
+  const focusedRecord = params.get('record')
   const [status, setStatus] = useState('')
   const [source, setSource] = useState('')
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
 
   const { data, isLoading, isError } = useConsultations({
-    status: status || undefined,
-    source: source || undefined,
+    status: focusedRecord ? undefined : status || undefined,
+    source: focusedRecord ? undefined : source || undefined,
   })
   const { data: stats } = useConsultationStats()
   const { data: clientsData } = useClients({ pageSize: 200 })
@@ -275,7 +279,8 @@ export default function ConsultationsPage() {
   const deleteConsultation = useDeleteConsultation()
   const convertConsultation = useConvertConsultation()
 
-  const consultations = Array.isArray(data) ? data : data?.data || []
+  const allConsultations = Array.isArray(data) ? data : data?.data || []
+  const consultations = focusedRecord ? allConsultations.filter((c: any) => c.id === focusedRecord) : allConsultations
   const clientsList = clientsData?.data || []
 
   const defaultDate = new Date()
@@ -330,6 +335,7 @@ export default function ConsultationsPage() {
 
   return (
     <div className="space-y-6">
+      <FocusedRecordNotice param="record" found={!!consultations.length} loading={isLoading} />
       {/* Başlık */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -652,7 +658,7 @@ export default function ConsultationsPage() {
 
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium">{c.fullName}</p>
+                          <p className="font-medium">{c.convertedClientId ? <Link className="text-law-accent hover:underline" to={`/clients/${c.convertedClientId}`}>{c.fullName} →</Link> : c.fullName}</p>
                           <Badge variant={statusVariant[c.status] || 'secondary'} className="text-[10px] px-1.5 py-0">
                             {consultationStatusLabels[c.status] || c.status}
                           </Badge>

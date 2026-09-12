@@ -1,5 +1,8 @@
+import FocusedRecordNotice from '@/components/shared/FocusedRecordNotice'
+import DocumentDownload from '@/components/shared/DocumentDownload'
+import { useRecordFocus } from '@/hooks/useRecordFocus'
 import { useEffect, useState } from 'react'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -155,6 +158,7 @@ export default function CaseDetailPage() {
   function openSection(value: string, target = 'case-section-start') {
     setSearchParams(current => {
       const next = new URLSearchParams(current)
+      next.delete('focus')
       if (value === 'overview') next.delete('section')
       else next.set('section', value)
       return next
@@ -222,6 +226,7 @@ export default function CaseDetailPage() {
   const deleteDiaryEntry = useDeleteDiaryEntry(id)
   const toggleNextStepDone = useToggleNextStepDone(id)
 
+  useRecordFocus(!isLoading && !!detail && !diaryLoading)
   const hearings = hearingsData || []
   const tasks = tasksData || []
   const expenses = expensesData || []
@@ -267,7 +272,7 @@ export default function CaseDetailPage() {
   const diaryEntries: DiaryEntry[] = diaryData || []
   const diarySteps = getOpenWork([], diaryEntries)
   const filteredDiary = diaryEntries.filter((entry) => {
-    if (diaryFilter === 'all') return true
+    if (searchParams.get('focus') === `case-entry-${entry.id}` || diaryFilter === 'all') return true
     if (diaryFilter === 'manual') return entry.entryType === 'manual'
     if (diaryFilter === 'auto') return entry.entryType !== 'manual'
     if (diaryFilter === 'open_next_step') return !!entry.nextStep && !entry.nextStepDone
@@ -353,13 +358,19 @@ export default function CaseDetailPage() {
         </div>
       </div>
 
-      <p className="text-sm text-muted-foreground">{caseData.clientName || 'Müvekkil belirtilmemiş'} · {caseData.courtName || 'Mahkeme belirtilmemiş'} · Başlangıç: {formatDate(caseData.startDate)}</p>
+      <p className="text-sm text-muted-foreground">{caseData.clientId ? <Link className="font-medium text-law-accent hover:underline" to={`/clients/${caseData.clientId}`}>{caseData.clientName || 'Müvekkili aç'}</Link> : 'Müvekkil belirtilmemiş'} · {caseData.courtName || 'Mahkeme belirtilmemiş'} · Başlangıç: {formatDate(caseData.startDate)}</p>
       {readOnly && <p className="rounded-xl border bg-muted p-3 text-sm">Bu dava sonuçlandığı için yalnızca görüntülenebilir.</p>}
       <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
         <span>Tahsilat: {formatCurrency(totalCollections, caseData.currency || 'TRY')}</span>
         <span>Masraf: {formatCurrency(totalExpenses, caseData.currency || 'TRY')}</span>
         <span>Fark (tahsilat − masraf): {formatCurrency(totalCollections - totalExpenses, caseData.currency || 'TRY')}</span>
       </p>
+      <FocusedRecordNotice param="focus" loading={isLoading || diaryLoading} found={[
+        ...tasks.map((t: any) => `case-${t.isDeadline ? 'deadline' : 'task'}-${t.id}`),
+        ...hearings.map((h: any) => `case-hearing-${h.id}`), ...notes.map((n: any) => `case-note-${n.id}`),
+        ...documents.map((d: any) => `case-document-${d.id}`), ...expenses.map((e: any) => `case-expense-${e.id}`),
+        ...collections.map((c: any) => `case-collection-${c.id}`), ...diaryEntries.map(e => `case-entry-${e.id}`),
+      ].includes(searchParams.get('focus') || '')} />
       <Tabs id="case-section-start" value={section} onValueChange={value => openSection(value)} className="space-y-4">
       <div id="case-sections" className="sticky top-0 z-20 space-y-2 rounded-xl border bg-background/95 p-2 shadow-sm">
         <TabsList aria-label="Dava bölümleri" className="grid h-auto w-full grid-cols-4">
@@ -533,6 +544,7 @@ export default function CaseDetailPage() {
                 return (
                   <li
                     key={entry.id}
+                    id={`case-entry-${entry.id}`}
                     className="flex gap-3 rounded-xl border bg-card p-3"
                   >
                     <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-law-accent/10 text-law-accent">
@@ -648,7 +660,7 @@ export default function CaseDetailPage() {
             <h2 className="flex items-center gap-2 text-base font-semibold"><StickyNote className="h-4 w-4 text-law-accent" />Notlar</h2>
             {canWrite && <button type="button" onClick={() => setShowQuickNote(true)} className="min-h-11 rounded-xl border px-4 text-sm font-medium text-law-accent">Not ekle</button>}
             {notes.length === 0 ? <p className="text-sm text-muted-foreground">Not bulunmuyor.</p> : notes.map((item: any) => (
-              <div key={item.id} className="flex items-start justify-between rounded-xl border p-3">
+              <div id={`case-note-${item.id}`} key={item.id} className="flex items-start justify-between rounded-xl border p-3">
                 <div>
                   <p className="whitespace-pre-wrap text-sm">{item.content}</p>
                   <p className="mt-1 text-xs text-muted-foreground">{formatDateTime(item.createdAt)}</p>
@@ -706,7 +718,7 @@ export default function CaseDetailPage() {
             </CaseEntryForm>
             <p className="text-xs text-muted-foreground">Durusmalar da Google Calendar baglantisi aktif oldugunda 3 gun once hatirlatilir.</p>
             {hearings.length === 0 ? <p className="text-sm text-muted-foreground">Duruşma bulunmuyor.</p> : hearings.map((item: any) => (
-              <div key={item.id} className="flex items-start justify-between rounded-xl border p-3">
+              <div id={`case-hearing-${item.id}`} key={item.id} className="flex items-start justify-between rounded-xl border p-3">
                 <div>
                   <p className="text-sm font-medium">{formatDateTime(item.hearingDate)}</p>
                   <p className="text-xs text-muted-foreground">{hearingResultLabels[item.result] || item.result || 'Beklemede'}</p>
@@ -757,7 +769,7 @@ export default function CaseDetailPage() {
             </CaseEntryForm>
             <p className="text-xs text-muted-foreground">Son tarih girilen gorevler Google Calendar baglantisi aktif oldugunda 3 gun once hatirlatilir.</p>
             {(() => {
-              const normalTasks = tasks.filter((t: any) => !t.isDeadline && (showCompletedTasks || t.status === 'pending' || t.status === 'in_progress')).sort(compareDueDates)
+              const normalTasks = tasks.filter((t: any) => !t.isDeadline && (showCompletedTasks || searchParams.get('focus') === `case-task-${t.id}` || t.status === 'pending' || t.status === 'in_progress')).sort(compareDueDates)
               if (normalTasks.length === 0)
                 return <p className="text-sm text-muted-foreground">Görev bulunmuyor.</p>
               return normalTasks.map((item: any) => (
@@ -831,6 +843,7 @@ export default function CaseDetailPage() {
                         {item.legalBasis ? `${item.legalBasis} · ` : ''}
                         {taskStatusLabels[item.status] || item.status}
                       </p>
+                      <Link className="inline-flex min-h-10 items-center text-sm font-medium text-law-accent hover:underline" to={`/sureli-isler?task=${encodeURIComponent(item.id)}`}>Süreli işi aç ve işlem yap →</Link>
                       {due && (
                         <p className={`mt-0.5 text-xs ${critical ? 'font-semibold text-red-700' : 'text-muted-foreground'}`}>
                           Son gün: {formatDate(due)}
@@ -878,13 +891,13 @@ export default function CaseDetailPage() {
             </button>
             </CaseEntryForm>
             {documents.length === 0 ? <p className="text-sm text-muted-foreground">Belge bulunmuyor.</p> : documents.map((item: any) => (
-              <div key={item.id} className="flex items-start justify-between rounded-xl border p-3">
+              <div id={`case-document-${item.id}`} key={item.id} className="flex items-start justify-between rounded-xl border p-3">
                 <div>
                   <p className="text-sm font-medium">{item.fileName}</p>
                   <p className="text-xs text-muted-foreground">{getDocumentTypeLabel(item.fileName)} • {formatFileSize(item.fileSize)}</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <a href={`/api/documents/${item.id}/download`} className="text-sm text-law-accent">Indir</a>
+                  <DocumentDownload id={item.id} fileName={item.fileName} />
                   <button type="button" disabled={!canWrite} onClick={() => deleteDocument.mutate(item.id)} className="rounded p-1 text-muted-foreground hover:bg-red-50 hover:text-red-600"><Trash2 className="h-4 w-4" /></button>
                 </div>
               </div>
@@ -982,7 +995,7 @@ export default function CaseDetailPage() {
             </form>
             </CaseEntryForm>
             {expenses.length === 0 ? <p className="text-sm text-muted-foreground">Masraf bulunmuyor.</p> : expenses.map((item: any) => (
-              <div key={item.id} className="flex items-start justify-between rounded-xl border p-3">
+              <div id={`case-expense-${item.id}`} key={item.id} className="flex items-start justify-between rounded-xl border p-3">
                 <div>
                   <p className="text-sm font-medium">{item.description}</p>
                   <p className="text-xs text-muted-foreground">{expenseTypeLabels[item.type] || item.type}</p>
@@ -1022,7 +1035,7 @@ export default function CaseDetailPage() {
             </form>
             </CaseEntryForm>
             {collections.length === 0 ? <p className="text-sm text-muted-foreground">Tahsilat bulunmuyor.</p> : collections.map((item: any) => (
-              <div key={item.id} className="flex items-start justify-between rounded-xl border p-3">
+              <div id={`case-collection-${item.id}`} key={item.id} className="flex items-start justify-between rounded-xl border p-3">
                 <div>
                   <p className="text-sm font-medium">{formatCurrency(item.amount, item.currency || caseData.currency || 'TRY')}</p>
                   <p className="text-xs text-muted-foreground">{formatDate(item.collectionDate)}</p>

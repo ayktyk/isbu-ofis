@@ -1,3 +1,4 @@
+import { caseRecordHref } from '@/lib/recordLinks'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Ban, CheckCircle2, ExternalLink, RotateCcw, AlertOctagon } from 'lucide-react'
@@ -93,7 +94,7 @@ export function LegalDeadlineRow({ task }: { task: DeadlineTaskLike }) {
                 )}
                 {task.caseTitle && task.caseId && (
                   <button
-                    onClick={() => navigate(`/cases/${task.caseId}`)}
+                    onClick={() => navigate(caseRecordHref(task.caseId!, 'deadline', task.id))}
                     className="inline-flex items-center gap-1 hover:text-law-accent hover:underline"
                   >
                     <ExternalLink className="h-3 w-3" />

@@ -1,3 +1,6 @@
+import { useSearchParams } from 'react-router-dom'
+import FocusedRecordNotice from '@/components/shared/FocusedRecordNotice'
+import { LegalDeadlineRow } from '@/components/deadlines/LegalDeadlineRow'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import {
   DndContext,
@@ -60,6 +63,8 @@ const groupLabels: Record<number, string> = {
 }
 
 export default function TasksPage() {
+  const [params] = useSearchParams()
+  const focusedTask = params.get('task')
   const [status, setStatus] = useState('')
   const [priority, setPriority] = useState('')
   const [category, setCategory] = useState('')
@@ -68,9 +73,9 @@ export default function TasksPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
 
   const { data, isLoading, isError } = useTasks({
-    status: status || undefined,
-    priority: priority || undefined,
-    isDeadline: false,
+    status: focusedTask ? undefined : status || undefined,
+    priority: focusedTask ? undefined : priority || undefined,
+    isDeadline: focusedTask ? undefined : false,
   })
 
   // Normal davalar ve CMK dosyalari ayri cekilir: gorev formunda kategori
@@ -92,10 +97,11 @@ export default function TasksPage() {
   const filteredTasks = useMemo(
     () =>
       tasks.filter((task: any) => {
+        if (focusedTask) return task.id === focusedTask && !task.isDeadline
         if (category && resolveTaskCategory(task) !== category) return false
         return matchesQuery(query, [task.title, task.description, task.label, task.caseTitle])
       }),
-    [tasks, query, category]
+    [tasks, query, category, focusedTask]
   )
 
   const openCount = useMemo(
@@ -109,7 +115,7 @@ export default function TasksPage() {
   )
 
   const isFiltered = filteredTasks.length !== tasks.length
-  const hasAnyFilter = Boolean(status || priority || category || query)
+  const hasAnyFilter = Boolean(status || priority || category || query || focusedTask)
 
   // ── Sürükle-bırak sıralama ────────────────────────────────────────────────
   // Sürükleme YALNIZCA filtresiz listede açıktır. Filtreliyken sürüklemek,
@@ -185,6 +191,8 @@ export default function TasksPage() {
 
   return (
     <div className="space-y-6">
+      <FocusedRecordNotice param="task" found={tasks.some((t: any) => t.id === focusedTask)} loading={isLoading} />
+      {focusedTask && tasks.find((t: any) => t.id === focusedTask)?.isDeadline && <LegalDeadlineRow task={tasks.find((t: any) => t.id === focusedTask)} />}
       {/* Başlık + sayaç */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -307,7 +315,7 @@ export default function TasksPage() {
 
       {!isLoading && !isError && (
         <>
-          {displayedTasks.length === 0 ? (
+          {focusedTask && tasks.find((t: any) => t.id === focusedTask)?.isDeadline ? null : displayedTasks.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <ListChecks className="mb-3 h-12 w-12 text-muted-foreground/30" />
               <h3 className="text-lg font-medium text-muted-foreground">

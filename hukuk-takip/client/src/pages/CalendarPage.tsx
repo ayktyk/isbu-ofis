@@ -1,3 +1,4 @@
+import { caseRecordHref, taskHref } from '@/lib/recordLinks'
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useHearings } from '@/hooks/useHearings'
@@ -262,6 +263,9 @@ export default function CalendarPage() {
                       {dayEvents.slice(0, 2).map((evt) => (
                         <div
                           key={evt.id}
+                      role="link"
+                      tabIndex={0}
+                      onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.click() }}
                           className={`truncate rounded px-1 text-[10px] leading-tight ${
                             evt.type === 'deadline'
                               ? minDays <= 3
@@ -346,12 +350,11 @@ export default function CalendarPage() {
                   return (
                     <div
                       key={evt.id}
+                      role="link"
+                      tabIndex={0}
+                      onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.click() }}
                       onClick={() => {
-                        if (evt.type === 'deadline') {
-                          navigate('/sureli-isler')
-                        } else if (evt.caseId) {
-                          navigate(`/cases/${evt.caseId}`)
-                        }
+                        navigate(evt.type === 'hearing' && evt.caseId ? caseRecordHref(evt.caseId, 'hearing', evt.id) : taskHref({ id: evt.id, caseId: evt.caseId, isDeadline: evt.type === 'deadline' }))
                       }}
                       className={`cursor-pointer rounded-lg border p-3 transition-colors hover:bg-muted/50 ${borderClass}`}
                     >

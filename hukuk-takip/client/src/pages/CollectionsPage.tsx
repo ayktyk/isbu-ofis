@@ -1,3 +1,4 @@
+import { caseRecordHref } from '@/lib/recordLinks'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAllCollections, useOutstandingCollections } from '@/hooks/useCollections'
@@ -123,8 +124,8 @@ export default function CollectionsPage() {
   const totalCount = filtered.length
 
   function openSource(c: any) {
-    if (c.caseId) navigate(`/cases/${c.caseId}`)
-    else if (c.mediationFileId) navigate(`/tools/mediation-files`)
+    if (c.caseId) navigate(caseRecordHref(c.caseId, 'collection', c.id))
+    else if (c.mediationFileId) navigate(`/tools/mediation-files?record=${encodeURIComponent(c.mediationFileId)}`)
   }
 
   return (
@@ -504,8 +505,8 @@ export default function CollectionsPage() {
                         key={`${row.source}-${row.id}`}
                         onClick={
                           isMediation
-                            ? () => navigate('/tools/mediation-files')
-                            : () => navigate(`/cases/${row.id}`)
+                            ? () => navigate(`/tools/mediation-files?record=${encodeURIComponent(row.id)}`)
+                            : () => navigate(`/cases/${row.id}?section=finance`)
                         }
                         className="cursor-pointer transition-colors even:bg-muted/20 hover:bg-muted/50"
                       >

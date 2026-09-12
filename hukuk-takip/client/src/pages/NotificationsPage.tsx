@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+import { notificationHref } from '@/lib/recordLinks'
 import {
   useNotifications,
   useMarkAsRead,
@@ -114,6 +116,7 @@ export default function NotificationsPage() {
               {notifications.map((notification: any) => {
                 const Icon = typeIcon[notification.type] || Bell
                 const iconClass = typeBg[notification.type] || 'bg-gray-100 text-gray-600'
+                const target = notificationHref(notification)
                 const isCriticalDeadline = notification.type === 'legal_deadline_critical'
 
                 return (
@@ -138,7 +141,7 @@ export default function NotificationsPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className={`text-sm ${!notification.isRead ? 'font-semibold' : 'font-medium'}`}>
-                              {notification.title}
+                              {target ? <Link className="hover:underline focus-visible:underline" to={target} onClick={() => { if (!notification.isRead) markAsRead.mutate(notification.id) }}>{notification.title} ?</Link> : notification.title}
                             </p>
                             {notification.message && (
                               <p className="mt-0.5 text-sm text-muted-foreground">

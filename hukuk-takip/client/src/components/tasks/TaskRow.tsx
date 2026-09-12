@@ -1,4 +1,5 @@
-import { useNavigate } from 'react-router-dom'
+import { taskHref } from '@/lib/recordLinks'
+import { Link, useNavigate } from 'react-router-dom'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { CheckCircle2, Circle, Clock, GripVertical, Pencil, Trash2 } from 'lucide-react'
@@ -84,7 +85,7 @@ export default function TaskRow({
 
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className={`font-medium ${completed ? 'line-through' : ''}`}>{task.title}</p>
+            <Link to={taskHref(task)} className={`font-medium hover:text-law-accent hover:underline ${completed ? 'line-through' : ''}`}>{task.title}</Link>
             {category && (
               <span
                 className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${taskCategoryBadgeClass[category]}`}
@@ -125,7 +126,7 @@ export default function TaskRow({
           )}
 
           <div className="mt-1.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            {task.caseTitle && (
+            {task.caseTitle && task.caseId && (
               <button
                 onClick={() => navigate(`/cases/${task.caseId}`)}
                 className="hover:text-law-accent hover:underline"

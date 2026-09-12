@@ -3,14 +3,14 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { StaticRouter } from 'react-router-dom'
 
-const fixture = vi.hoisted(() => ({ role: 'lawyer', status: 'active' }))
+const fixture = vi.hoisted(() => ({ role: 'lawyer', status: 'active', taskStatus: 'pending' }))
 vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: { role: fixture.role } }) }))
 vi.mock('@/hooks/useCases', () => {
   const mutation = () => ({ mutate: vi.fn(), isPending: false })
   return {
     useCaseDetail: () => ({ data: {
       case: { id: 'case-1', title: 'Örnek dava', status: fixture.status, clientName: 'Örnek müvekkil', caseType: 'diger', currency: 'TRY', contractedFee: '1000' },
-      tasks: [{ id: 'task-1', title: 'Açık görev', status: 'pending', priority: 'medium' }],
+      tasks: [{ id: 'task-1', title: 'Açık görev', status: fixture.taskStatus, priority: 'medium' }],
       hearings: [], notes: [{ id: 'note-1', content: 'Korunacak eski not', createdAt: '2026-01-01' }],
       documents: [{ id: 'doc-1', fileName: 'korunan-belge.pdf', fileSize: 1024 }],
       expenses: [], collections: [],
@@ -47,7 +47,16 @@ function render(section = 'overview') {
 }
 
 describe('case sections preserve records and respect write permissions', () => {
-  beforeEach(() => { fixture.role = 'lawyer'; fixture.status = 'active' })
+  beforeEach(() => { fixture.role = 'lawyer'; fixture.status = 'active'; fixture.taskStatus = 'pending' })
+  it('reveals a completed task reached from another page', () => {
+    fixture.taskStatus = 'completed'
+    expect(render('work')).not.toContain('id="case-task-task-1"')
+    expect(render('work&focus=case-task-task-1')).toContain('id="case-task-task-1"')
+  })
+  it('gives notes and documents stable destinations for search results', () => {
+    expect(render('overview')).toContain('id="case-note-note-1"')
+    expect(render('documents')).toContain('id="case-document-doc-1"')
+  })
   it('keeps old records mounted in every section and opens only the requested panel', () => {
     const html = render('documents')
     expect(html).toContain('Korunacak eski not')

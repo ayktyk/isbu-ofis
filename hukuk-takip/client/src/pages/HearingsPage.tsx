@@ -1,5 +1,7 @@
+import { caseRecordHref } from '@/lib/recordLinks'
+import FocusedRecordNotice from '@/components/shared/FocusedRecordNotice'
 import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useHearings, useCreateHearing } from '@/hooks/useHearings'
 import { useCases } from '@/hooks/useCases'
 import {
@@ -30,7 +32,10 @@ const resultVariant: Record<string, 'success' | 'warning' | 'danger' | 'secondar
 
 export default function HearingsPage() {
   const navigate = useNavigate()
-  const { data: hearings, isLoading, isError } = useHearings({ upcoming: true })
+  const [params] = useSearchParams()
+  const focusedHearing = params.get('hearing')
+  const { data: allHearings, isLoading, isError } = useHearings(focusedHearing ? undefined : { upcoming: true })
+  const hearings = focusedHearing ? (allHearings || []).filter((h: any) => h.id === focusedHearing) : allHearings
   const createHearing = useCreateHearing()
 
   // Modal state
@@ -93,6 +98,7 @@ export default function HearingsPage() {
 
   return (
     <div className="space-y-6">
+      <FocusedRecordNotice param="hearing" found={!!hearings?.length} loading={isLoading} />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="page-title">Duruşmalar</h1>
@@ -165,7 +171,7 @@ export default function HearingsPage() {
                     return (
                       <tr
                         key={h.id}
-                        onClick={() => h.caseId && navigate(`/cases/${h.caseId}`)}
+                        onClick={() => h.caseId && navigate(caseRecordHref(h.caseId, 'hearing', h.id))}
                         className="cursor-pointer transition-colors hover:bg-muted/50 even:bg-muted/20"
                       >
                         <td className="px-4 py-3">

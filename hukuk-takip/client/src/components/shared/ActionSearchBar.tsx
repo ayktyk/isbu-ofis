@@ -1,3 +1,4 @@
+import { caseRecordHref, taskHref } from '@/lib/recordLinks'
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -174,7 +175,7 @@ export default function ActionSearchBar() {
         {results.tasks.length > 0 && (
           <CommandGroup heading="Görevler">
             {results.tasks.map((t) => (
-              <CommandItem key={`task-${t.id}`} onSelect={() => runAction('/tasks')}>
+              <CommandItem key={`task-${t.id}`} onSelect={() => runAction(taskHref(t))}>
                 <CheckSquare className="mr-2 h-4 w-4 text-amber-500" />
                 <div className="flex flex-col">
                   <span>{t.title}</span>
@@ -189,7 +190,7 @@ export default function ActionSearchBar() {
         {results.hearings.length > 0 && (
           <CommandGroup heading="Duruşmalar">
             {results.hearings.map((h) => (
-              <CommandItem key={`hearing-${h.id}`} onSelect={() => runAction(`/cases/${h.caseId}`)}>
+              <CommandItem key={`hearing-${h.id}`} onSelect={() => runAction(caseRecordHref(h.caseId, 'hearing', h.id))}>
                 <Calendar className="mr-2 h-4 w-4 text-blue-500" />
                 <div className="flex flex-col">
                   <span>{h.caseTitle || 'Duruşma'}</span>
@@ -206,7 +207,7 @@ export default function ActionSearchBar() {
         {results.consultations.length > 0 && (
           <CommandGroup heading="Görüşmeler">
             {results.consultations.map((c) => (
-              <CommandItem key={`cons-${c.id}`} onSelect={() => runAction('/consultations')}>
+              <CommandItem key={`cons-${c.id}`} onSelect={() => runAction(`/consultations?record=${encodeURIComponent(c.id)}`)}>
                 <MessageSquare className="mr-2 h-4 w-4 text-cyan-500" />
                 <div className="flex flex-col">
                   <span>{c.fullName}</span>
@@ -223,7 +224,7 @@ export default function ActionSearchBar() {
         {results.mediations.length > 0 && (
           <CommandGroup heading="Arabuluculuk">
             {results.mediations.map((m) => (
-              <CommandItem key={`med-${m.id}`} onSelect={() => runAction('/tools/mediation-files')}>
+              <CommandItem key={`med-${m.id}`} onSelect={() => runAction(`/tools/mediation-files?record=${encodeURIComponent(m.id)}`)}>
                 <Handshake className="mr-2 h-4 w-4 text-purple-500" />
                 <div className="flex flex-col">
                   <span>{m.disputeType}</span>
@@ -241,7 +242,7 @@ export default function ActionSearchBar() {
           <CommandGroup heading="Notlar">
             {results.notes.map((n) => {
               const target = n.caseId
-                ? `/cases/${n.caseId}`
+                ? caseRecordHref(n.caseId, 'note', n.id)
                 : n.clientId
                   ? `/clients/${n.clientId}`
                   : '/dashboard'
@@ -268,7 +269,7 @@ export default function ActionSearchBar() {
             {results.expenses.map((e) => (
               <CommandItem
                 key={`exp-${e.id}`}
-                onSelect={() => runAction(e.caseId ? `/cases/${e.caseId}` : '/dashboard')}
+                onSelect={() => runAction(e.caseId ? caseRecordHref(e.caseId, 'expense', e.id) : '/dashboard')}
               >
                 <Receipt className="mr-2 h-4 w-4 text-orange-500" />
                 <div className="flex flex-col min-w-0">
@@ -288,9 +289,9 @@ export default function ActionSearchBar() {
           <CommandGroup heading="Tahsilatlar">
             {results.collections.map((c) => {
               const target = c.caseId
-                ? `/cases/${c.caseId}`
+                ? caseRecordHref(c.caseId, 'collection', c.id)
                 : c.mediationFileId
-                  ? '/tools/mediation-files'
+                  ? `/tools/mediation-files?record=${encodeURIComponent(c.mediationFileId)}`
                   : '/collections'
               return (
                 <CommandItem key={`col-${c.id}`} onSelect={() => runAction(target)}>
@@ -312,7 +313,7 @@ export default function ActionSearchBar() {
         {results.documents.length > 0 && (
           <CommandGroup heading="Belgeler">
             {results.documents.map((d) => (
-              <CommandItem key={`doc-${d.id}`} onSelect={() => runAction(`/cases/${d.caseId}`)}>
+              <CommandItem key={`doc-${d.id}`} onSelect={() => runAction(caseRecordHref(d.caseId, 'document', d.id))}>
                 <FileText className="mr-2 h-4 w-4 text-sky-500" />
                 <div className="flex flex-col min-w-0">
                   <span className="truncate">{d.fileName}</span>
