@@ -166,6 +166,8 @@ const MediationDocumentsPage = lazy(() => import('./pages/MediationDocumentsPage
 const SentenceCalcPage = lazy(() => import('./pages/SentenceCalcPage'))
 const ConsultationsPage = lazy(() => import('./pages/ConsultationsPage'))
 const CollectionsPage = lazy(() => import('./pages/CollectionsPage'))
+const ProposalsPage = lazy(() => import('./pages/ProposalsPage'))
+const PulsePage = lazy(() => import('./pages/PulsePage'))
 
 // ─── Sayfa yüklenirken gösterilecek skeleton ──────────────────────────────────
 
@@ -301,6 +303,8 @@ export default function App() {
           <Route path="sureli-isler" element={<LegalDeadlinesPage />} />
           <Route path="consultations" element={<ConsultationsPage />} />
           <Route path="collections" element={<CollectionsPage />} />
+          <Route path="oneriler" element={<ProposalsPage />} />
+          <Route path="dosya-nabzi" element={<PulsePage />} />
           <Route path="calendar" element={<CalendarPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="settings" element={<SettingsPage />} />

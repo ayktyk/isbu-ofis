@@ -1,9 +1,10 @@
-import { Bell, LogOut, Menu, Search } from 'lucide-react'
+import { Bell, Bot, LogOut, Menu, Search } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/axios'
 import { getInitials } from '@/lib/utils'
 import { useUnreadCount } from '@/hooks/useNotifications'
+import { usePendingProposalCount } from '@/hooks/useIntegration'
 import { clearCachedUser } from '@/lib/authCache'
 
 export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
@@ -20,6 +21,7 @@ export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
   })
 
   const unreadCount = useUnreadCount()
+  const pendingProposals = usePendingProposalCount()
 
   const logoutMutation = useMutation({
     mutationFn: () => api.post('/auth/logout'),
@@ -39,7 +41,12 @@ export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
           className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground md:hidden"
           aria-label="Menu"
         >
-          <Menu size={20} />
+          <span className="relative block">
+            <Menu size={20} />
+            {pendingProposals > 0 && (
+              <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-law-danger ring-2 ring-card" aria-hidden="true" />
+            )}
+          </span>
         </button>
 
         {/* Search trigger */}
@@ -58,6 +65,21 @@ export default function Header({ onMenuToggle }: { onMenuToggle: () => void }) {
       </div>
 
       <div className="flex items-center gap-1.5 sm:gap-2">
+        {/* Bekleyen asistan önerileri — yalnızca varsa görünür (mobilde alt bar dolu) */}
+        {pendingProposals > 0 && (
+          <button
+            onClick={() => navigate('/oneriler')}
+            className="relative cursor-pointer rounded-lg p-2 text-muted-foreground transition-all duration-200 hover:bg-muted/50 hover:text-foreground"
+            aria-label={`Asistan önerileri: ${pendingProposals} bekleyen`}
+            title="Asistan önerileri"
+          >
+            <Bot size={18} />
+            <span className="absolute -right-0.5 -top-0.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-law-danger px-1 text-[10px] font-bold text-white ring-2 ring-white">
+              {pendingProposals > 9 ? '9+' : pendingProposals}
+            </span>
+          </button>
+        )}
+
         {/* Bildirim butonu */}
         <button
           onClick={() => navigate('/notifications')}

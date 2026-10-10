@@ -2,9 +2,11 @@ import { useCallback, type ElementType } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import {
+  Activity,
   AlertOctagon,
   BarChart3,
   Bell,
+  Bot,
   Briefcase,
   Calculator,
   Calendar,
@@ -24,6 +26,7 @@ import {
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/axios'
 import { prefetchRouteChunk } from '@/lib/routeChunks'
+import { usePendingProposalCount } from '@/hooks/useIntegration'
 
 // Her menu ogesi icin: route + opsiyonel prefetch meta (hangi query + URL on yuklenecek).
 // Hover/touch aninda veri on cekilerek sekme gecisinde beklemeyi sifira yaklastiririz.
@@ -32,8 +35,11 @@ const navItems: Array<{
   label: string
   icon: ElementType
   prefetch?: { queryKey: unknown[]; url: string }
+  badge?: 'proposals'
 }> = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, prefetch: { queryKey: ['dashboard'], url: '/dashboard/summary' } },
+  { to: '/oneriler', label: 'Asistan Önerileri', icon: Bot, badge: 'proposals', prefetch: { queryKey: ['proposals', { status: 'pending' }], url: '/proposals?status=pending' } },
+  { to: '/dosya-nabzi', label: 'Dosya Nabzı', icon: Activity, prefetch: { queryKey: ['pulse'], url: '/pulse' } },
   { to: '/clients', label: 'Müvekkiller', icon: Users, prefetch: { queryKey: ['clients', undefined], url: '/clients' } },
   { to: '/cases', label: 'Davalar', icon: Briefcase, prefetch: { queryKey: ['cases', undefined], url: '/cases' } },
   { to: '/cmk', label: 'CMK Görevlendirmeleri', icon: ShieldCheck, prefetch: { queryKey: ['cases', { isCmk: 'only' }], url: '/cases?isCmk=only' } },
@@ -60,12 +66,14 @@ function SidebarLink({
   Icon,
   onClick,
   onPrefetch,
+  badge,
 }: {
   to: string
   label: string
   Icon: ElementType
   onClick?: () => void
   onPrefetch?: () => void
+  badge?: number
 }) {
   return (
     <NavLink
@@ -93,7 +101,16 @@ function SidebarLink({
             )}
           />
           <span className="truncate">{label}</span>
-          {isActive && <div className="ml-auto h-4 w-1 rounded-full bg-law-gold/60" />}
+          {badge ? (
+            <span
+              className="ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-law-danger px-1 text-[10px] font-bold text-white"
+              aria-label={`${badge} bekleyen`}
+            >
+              {badge > 99 ? '99+' : badge}
+            </span>
+          ) : (
+            isActive && <div className="ml-auto h-4 w-1 rounded-full bg-law-gold/60" />
+          )}
         </>
       )}
     </NavLink>
@@ -109,6 +126,7 @@ export default function Sidebar({
 }) {
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const pendingProposals = usePendingProposalCount()
   const prefetch = useCallback(
     (meta?: { queryKey: unknown[]; url: string }) => {
       if (!meta) return
@@ -168,6 +186,7 @@ export default function Sidebar({
               to={item.to}
               label={item.label}
               Icon={item.icon}
+              badge={item.badge === 'proposals' ? pendingProposals : undefined}
               onClick={onClose}
               onPrefetch={() => {
                 // Once sayfanin JS chunk'i, sonra verisi isitilir.

@@ -17,6 +17,8 @@ const routeChunkLoaders: Record<string, () => Promise<unknown>> = {
   '/sureli-isler': () => import('../pages/LegalDeadlinesPage'),
   '/consultations': () => import('../pages/ConsultationsPage'),
   '/collections': () => import('../pages/CollectionsPage'),
+  '/oneriler': () => import('../pages/ProposalsPage'),
+  '/dosya-nabzi': () => import('../pages/PulsePage'),
   '/calendar': () => import('../pages/CalendarPage'),
   '/notifications': () => import('../pages/NotificationsPage'),
   '/statistics': () => import('../pages/StatisticsPage'),
