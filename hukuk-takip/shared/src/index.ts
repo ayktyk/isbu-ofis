@@ -20,6 +20,9 @@ export * from './legalDeadlines.js'
 export * from './legalDeadlineCalc.js'
 export * from './caseTracking.js'
 export * from './workspace.js'
+export * from './integration.js'
+export * from './proposalMerge.js'
+export * from './casePulse.js'
 
 // Explicit re-exports help the client bundler resolve shared runtime symbols.
 export {
