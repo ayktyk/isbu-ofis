@@ -58,6 +58,11 @@ function toColumns(changes: Record<string, unknown>) {
   return out
 }
 
+// Doğal anahtarla bulunan (external_ref'siz) kayda öneri anahtarı yazılır; yinelenen kayıt açılmaz.
+function refLink(target: { linkRef?: boolean; row: AnyPayload | null }, externalRef: string): { externalRef?: string } {
+  return target.linkRef && target.row && !target.row.externalRef ? { externalRef } : {}
+}
+
 async function diary(tx: Exec, ctx: ApplyContext, caseId: string, values: { entryType: 'manual' | 'hearing_added' | 'hearing_updated' | 'task_added' | 'status_changed'; title: string; content?: string | null; linkedEntityType?: string; linkedEntityId?: string }) {
   await tx.insert(caseDiaryEntries).values({
     caseId,
@@ -162,11 +167,14 @@ async function applyHearingUpsert(tx: Exec, ctx: ApplyContext): Promise<ApplyRes
     return { targetType: 'hearing', targetId: row.id, created: true, changedFields: Object.keys(proposed).filter((k) => proposed[k] !== undefined), overwrittenFields: [], conflictAtApply: false, calendar: { hearingId: row.id } }
   }
   const plan = planFieldUpdates(stripMeta(target.snapshot), proposed)
+  const link = refLink(target, ctx.externalRef)
+  if (Object.keys(plan.changes).length || link.externalRef) {
+    await tx.update(caseHearings).set({ ...toColumns(plan.changes), ...link, updatedAt: new Date(), updatedByActor: ACTOR }).where(eq(caseHearings.id, target.targetId!))
+  }
   if (Object.keys(plan.changes).length) {
-    await tx.update(caseHearings).set({ ...toColumns(plan.changes), updatedAt: new Date(), updatedByActor: ACTOR }).where(eq(caseHearings.id, target.targetId!))
     await diary(tx, ctx, caseRow.id, { entryType: 'hearing_updated', title: 'Duruşma güncellendi (asistan önerisi)', content: `Değişen: ${Object.keys(plan.changes).join(', ')} • Tarih: ${when}`, linkedEntityType: 'hearing', linkedEntityId: target.targetId! })
   }
-  return { targetType: 'hearing', targetId: target.targetId!, created: false, changedFields: Object.keys(plan.changes), overwrittenFields: plan.overwritten, conflictAtApply: detectConflict(target.actor, plan), calendar: { hearingId: target.targetId! } }
+  return { targetType: 'hearing', targetId: target.targetId!, created: false, changedFields: [...Object.keys(plan.changes), ...Object.keys(link)], overwrittenFields: plan.overwritten, conflictAtApply: detectConflict(target.actor, plan), calendar: { hearingId: target.targetId! } }
 }
 
 async function applyTaskLike(tx: Exec, ctx: ApplyContext): Promise<ApplyResult> {
@@ -203,13 +211,14 @@ async function applyTaskLike(tx: Exec, ctx: ApplyContext): Promise<ApplyResult> 
     return { targetType: 'task', targetId: row.id, created: true, changedFields: Object.keys(values), overwrittenFields: [], conflictAtApply: false, calendar: { taskId: row.id } }
   }
   const plan = planFieldUpdates(stripMeta(target.snapshot), proposed)
-  if (Object.keys(plan.changes).length) {
+  const link = refLink(target, ctx.externalRef)
+  if (Object.keys(plan.changes).length || link.externalRef) {
     await tx
       .update(tasks)
-      .set({ ...toColumns(plan.changes), ...statusChange(plan.changes.status), updatedAt: new Date(), updatedByActor: ACTOR })
+      .set({ ...toColumns(plan.changes), ...statusChange(plan.changes.status), ...link, updatedAt: new Date(), updatedByActor: ACTOR })
       .where(and(eq(tasks.id, target.targetId!), eq(tasks.userId, ctx.userId)))
   }
-  return { targetType: 'task', targetId: target.targetId!, created: false, changedFields: Object.keys(plan.changes), overwrittenFields: plan.overwritten, conflictAtApply: detectConflict(target.actor, plan), calendar: { taskId: target.targetId! } }
+  return { targetType: 'task', targetId: target.targetId!, created: false, changedFields: [...Object.keys(plan.changes), ...Object.keys(link)], overwrittenFields: plan.overwritten, conflictAtApply: detectConflict(target.actor, plan), calendar: { taskId: target.targetId! } }
 }
 
 async function applyDiaryAdd(tx: Exec, ctx: ApplyContext): Promise<ApplyResult> {

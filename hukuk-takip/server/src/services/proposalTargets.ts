@@ -89,9 +89,61 @@ export interface ResolvedTarget {
   snapshot: Record<string, unknown> | null
   actor: string | null
   archived: boolean
+  // external_ref'siz mevcut kayıt doğal anahtarla bulundu; onayda external_ref yazılır.
+  linkRef?: boolean
 }
 
 const EMPTY = (targetType: string): ResolvedTarget => ({ targetType, row: null, targetId: null, snapshot: null, actor: null, archived: false })
+
+// Türkiye 2016'dan beri sabit UTC+3; saat dilimsiz (UTC) kolonu İstanbul gününe çevirir.
+const istanbulDay = (column: unknown) => sql`((${column}) + interval '3 hours')::date`
+const utcLiteral = (isoValue: string) => isoValue.replace(/Z$/, '')
+
+// external_ref'i olmayan (avukatın elle girdiği) duruşmayı aynı dava + aynı gün/saat (dakika) ile bulur.
+async function findHearingByNaturalKey(exec: Exec, caseId: string, payload: AnyPayload) {
+  const when = iso(payload.hearing_date)
+  if (!when) return undefined
+  const rows = await exec
+    .select()
+    .from(caseHearings)
+    .where(
+      and(
+        eq(caseHearings.caseId, caseId),
+        isNull(caseHearings.externalRef),
+        isNull(caseHearings.archivedAt),
+        sql`date_trunc('minute', ${caseHearings.hearingDate}) = date_trunc('minute', ${utcLiteral(when)}::timestamp)`
+      )
+    )
+    .limit(2)
+  return rows.length === 1 ? rows[0] : undefined
+}
+
+// external_ref'i olmayan görevi/süreyi aynı dava + başlık (büyük/küçük harf duyarsız) + aynı vade günü ile bulur.
+async function findTaskByNaturalKey(exec: Exec, userId: string, kind: 'deadline_upsert' | 'task_add', payload: AnyPayload, caseRow: Case | null) {
+  const proposed = proposedComparable(kind, payload)
+  const title = typeof proposed.title === 'string' ? proposed.title.trim() : ''
+  if (!title) return undefined
+  const due = typeof proposed.dueDate === 'string' ? proposed.dueDate : null
+  const rows = await exec
+    .select()
+    .from(tasks)
+    .where(
+      and(
+        eq(tasks.userId, userId),
+        caseRow ? eq(tasks.caseId, caseRow.id) : isNull(tasks.caseId),
+        isNull(tasks.externalRef),
+        isNull(tasks.archivedAt),
+        sql`lower(trim(${tasks.title})) = lower(${title})`,
+        due ? sql`${istanbulDay(tasks.dueDate)} = ${trDay(new Date(due))}::date` : isNull(tasks.dueDate)
+      )
+    )
+    .limit(2)
+  return rows.length === 1 ? rows[0] : undefined
+}
+
+function linked(target: ResolvedTarget): ResolvedTarget {
+  return target.row ? { ...target, linkRef: true } : target
+}
 
 export function caseSnapshot(row: AnyPayload) {
   return {
@@ -161,13 +213,16 @@ export async function findTarget(
       return withMeta('case', caseRow ?? undefined, (r) => ({ status: r.status, closeDate: r.closeDate }))
     case 'hearing_upsert': {
       if (!caseRow) return EMPTY('hearing')
+      const hearingSnapshot = (r: AnyPayload) => ({ hearingDate: iso(r.hearingDate), courtRoom: r.courtRoom, judge: r.judge, notes: r.notes, result: r.result })
       const [row] = await exec.select().from(caseHearings).where(and(eq(caseHearings.caseId, caseRow.id), eq(caseHearings.externalRef, externalRef))).limit(1)
-      return withMeta('hearing', row, (r) => ({ hearingDate: iso(r.hearingDate), courtRoom: r.courtRoom, judge: r.judge, notes: r.notes, result: r.result }))
+      if (row) return withMeta('hearing', row, hearingSnapshot)
+      return linked(withMeta('hearing', await findHearingByNaturalKey(exec, caseRow.id, payload), hearingSnapshot))
     }
     case 'deadline_upsert':
     case 'task_add': {
       const [row] = await exec.select().from(tasks).where(and(eq(tasks.userId, userId), eq(tasks.externalRef, externalRef))).limit(1)
-      return withMeta('task', row, taskSnapshot)
+      if (row) return withMeta('task', row, taskSnapshot)
+      return linked(withMeta('task', await findTaskByNaturalKey(exec, userId, kind, payload, caseRow), taskSnapshot))
     }
     case 'diary_add': {
       if (!caseRow) return EMPTY('diary')

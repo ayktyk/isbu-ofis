@@ -106,7 +106,7 @@ async function submitOne(userId: string, apiKeyId: string, raw: unknown, index: 
       const noChange =
         !!target?.row &&
         (isInsertOnly(item.kind, payload) ||
-          (Object.keys(plan.changes).length === 0 && !(item.kind === 'case_upsert' && !target.row.externalRef)))
+          (Object.keys(plan.changes).length === 0 && !(item.kind === 'case_upsert' && !target.row.externalRef) && !target.linkRef))
       if (noChange) {
         if (pending) {
           await tx.update(assistantProposals).set({ status: 'superseded', decidedAt: new Date(), updatedAt: new Date(), decidedNote: 'Kayıt zaten güncel; öneri gereksiz kaldı.' }).where(eq(assistantProposals.id, pending.id))
@@ -143,7 +143,7 @@ async function submitOne(userId: string, apiKeyId: string, raw: unknown, index: 
       }
       await tx.insert(integrationEvents).values({
         userId, actor: 'asistan', apiKeyId, action: `proposal_${status}`, targetType: values.targetType, targetId: values.targetId, proposalId,
-        details: { request_id: item.request_id, kind: item.kind, external_ref: item.external_ref, previous_request_id: pending?.requestId ?? null, conflict, changed_fields: Object.keys(plan.changes) },
+        details: { request_id: item.request_id, kind: item.kind, external_ref: item.external_ref, previous_request_id: pending?.requestId ?? null, conflict, changed_fields: Object.keys(plan.changes), matched_without_ref: target?.linkRef || undefined },
       })
       return { index, request_id: item.request_id, status, proposal_id: proposalId, conflict, deferred_case: deferred || undefined }
     })
