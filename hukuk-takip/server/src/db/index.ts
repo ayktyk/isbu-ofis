@@ -38,3 +38,9 @@ export const db = new Proxy({} as ReturnType<typeof drizzle>, {
 })
 
 export type DB = ReturnType<typeof drizzle>
+
+// Yalnızca testler için: süreç içi bir veritabanı (PGlite) enjekte eder.
+// Üretim kodu bunu çağırmaz; çağrılmadığı sürece davranış değişmez.
+export function setDbForTests(instance: unknown) {
+  _db = instance as ReturnType<typeof drizzle>
+}

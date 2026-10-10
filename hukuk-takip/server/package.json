@@ -10,7 +10,8 @@
     "db:migrate": "node --env-file=../.env ./node_modules/drizzle-kit/bin.cjs migrate",
     "db:studio": "node --env-file=../.env ./node_modules/drizzle-kit/bin.cjs studio",
     "db:seed": "tsx src/db/seed.ts",
-    "db:bootstrap-admin": "node --env-file=../.env --import=tsx ./src/db/bootstrapAdmin.ts"
+    "db:bootstrap-admin": "node --env-file=../.env --import=tsx ./src/db/bootstrapAdmin.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@hukuk-takip/shared": "*",
@@ -31,6 +32,7 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@types/bcrypt": "^5.0.2",
     "@types/compression": "^1.8.1",
     "@types/cookie-parser": "^1.4.8",
@@ -42,6 +44,7 @@
     "@types/node-cron": "^3.0.11",
     "drizzle-kit": "^0.31.0",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.10"
   }
 }

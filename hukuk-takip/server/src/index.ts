@@ -33,6 +33,10 @@ import searchRouter from './routes/search.js'
 import consultationsRouter from './routes/consultations.js'
 import caseDiaryRouter from './routes/caseDiary.js'
 import feeInstallmentsRouter from './routes/feeInstallments.js'
+import integrationRouter from './routes/integration.js'
+import integrationKeysRouter from './routes/integrationKeys.js'
+import proposalsRouter from './routes/proposals.js'
+import pulseRouter from './routes/pulse.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
 const __filename = fileURLToPath(import.meta.url)
@@ -142,6 +146,13 @@ app.get('/api/health', async (req, res) => {
   }
 })
 
+// Asistan entegrasyonu. /api/integration yalnızca API anahtarı kabul eder; '/api'
+// altına bağlanan ve router.use(authenticate) yapan router'lardan (caseDiary,
+// feeInstallments) ÖNCE bağlanmalı, yoksa JWT kontrolü anahtar isteklerini 401'ler.
+app.use('/api/integration', integrationRouter)
+app.use('/api/integration-keys', integrationKeysRouter)
+app.use('/api/proposals', proposalsRouter)
+app.use('/api/pulse', pulseRouter)
 app.use('/api', mediationRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/clients', clientsRouter)
