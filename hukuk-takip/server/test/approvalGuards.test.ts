@@ -150,6 +150,9 @@ describe('HIGH1: onay avukatın elle düzenlemesini ezmez', () => {
   })
 
   it('aynı partideki asistan değişikliği ilgisiz alanda ise bloklamaz (dava + durum)', async () => {
+    // Durumu en son asistan yazmış olsun: avukatın dolu değeri ezilmediğinden çakışma yok
+    // (avukatın yazdığı durumu değiştiren öneri toplu onayda CONFLICT_REVIEW_REQUIRED ile atlanır).
+    await ctx.db.update(s.cases).set({ updatedByActor: 'asistan' }).where(eq(s.cases.id, caseA))
     const res = await propose([
       { kind: 'case_upsert', external_ref: 'uyap:dosya:2026/7', case_ref: { id: caseA }, payload: { description: 'UYAP açıklaması' }, summary: 'dava', source: 'uyap', request_id: rid() },
       { kind: 'status_change', external_ref: 'uyap:durum:2026/7', case_ref: { id: caseA }, payload: { status: 'istinafta' }, summary: 'durum', source: 'uyap', request_id: rid() },

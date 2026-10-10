@@ -38,6 +38,8 @@ export interface ApplyContext {
   payload: AnyPayload
   caseRow: Case | null
   summary: string
+  // Öneri anında bulunan hedef (doğal anahtar yeniden aranmaz) — bkz. FindTargetOptions
+  targetId?: string | null
 }
 
 export interface ApplyResult {
@@ -48,6 +50,11 @@ export interface ApplyResult {
   overwrittenFields: string[]
   conflictAtApply: boolean
   calendar?: { hearingId?: string; taskId?: string }
+}
+
+// Onay yolunda hedef satır kilitlenir ve öneri anındaki hedef kimliği kullanılır.
+function targetOptions(ctx: ApplyContext) {
+  return { lock: true, targetId: ctx.targetId ?? null }
 }
 
 function toColumns(changes: Record<string, unknown>) {
@@ -95,7 +102,7 @@ async function findOrCreateClient(tx: Exec, userId: string, payload: AnyPayload)
 }
 
 async function applyCaseUpsert(tx: Exec, ctx: ApplyContext): Promise<ApplyResult> {
-  const target = await findTarget(tx, ctx.userId, 'case_upsert', ctx.externalRef, ctx.payload, ctx.caseRow)
+  const target = await findTarget(tx, ctx.userId, 'case_upsert', ctx.externalRef, ctx.payload, ctx.caseRow, targetOptions(ctx))
   if (target.archived) throw new ApplyError('Hedef dava arşivlenmiş.')
   const proposed = proposedComparable('case_upsert', ctx.payload)
   if (!target.row) {
@@ -130,7 +137,7 @@ async function applyCaseUpsert(tx: Exec, ctx: ApplyContext): Promise<ApplyResult
 
 async function applyStatusChange(tx: Exec, ctx: ApplyContext): Promise<ApplyResult> {
   const caseRow = ctx.caseRow!
-  const target = await findTarget(tx, ctx.userId, 'status_change', ctx.externalRef, ctx.payload, caseRow)
+  const target = await findTarget(tx, ctx.userId, 'status_change', ctx.externalRef, ctx.payload, caseRow, targetOptions(ctx))
   const plan = planFieldUpdates(stripMeta(target.snapshot), proposedComparable('status_change', ctx.payload))
   if (Object.keys(plan.changes).length) {
     await tx.update(cases).set({ ...toColumns(plan.changes), updatedAt: new Date(), updatedByActor: ACTOR }).where(and(eq(cases.id, caseRow.id), eq(cases.userId, ctx.userId)))
@@ -145,7 +152,7 @@ async function applyStatusChange(tx: Exec, ctx: ApplyContext): Promise<ApplyResu
 
 async function applyHearingUpsert(tx: Exec, ctx: ApplyContext): Promise<ApplyResult> {
   const caseRow = ctx.caseRow!
-  const target = await findTarget(tx, ctx.userId, 'hearing_upsert', ctx.externalRef, ctx.payload, caseRow)
+  const target = await findTarget(tx, ctx.userId, 'hearing_upsert', ctx.externalRef, ctx.payload, caseRow, targetOptions(ctx))
   if (target.archived) throw new ApplyError('Bu duruşma avukat tarafından arşivlenmiş.')
   const proposed = proposedComparable('hearing_upsert', ctx.payload)
   const when = new Date(String(proposed.hearingDate)).toLocaleString('tr-TR', { timeZone: 'Europe/Istanbul' })
@@ -179,7 +186,7 @@ async function applyHearingUpsert(tx: Exec, ctx: ApplyContext): Promise<ApplyRes
 
 async function applyTaskLike(tx: Exec, ctx: ApplyContext): Promise<ApplyResult> {
   const kind = ctx.kind as 'deadline_upsert' | 'task_add'
-  const target = await findTarget(tx, ctx.userId, kind, ctx.externalRef, ctx.payload, ctx.caseRow)
+  const target = await findTarget(tx, ctx.userId, kind, ctx.externalRef, ctx.payload, ctx.caseRow, targetOptions(ctx))
   if (target.archived) throw new ApplyError('Bu görev avukat tarafından arşivlenmiş.')
   const proposed = proposedComparable(kind, ctx.payload)
   const statusChange = (status: unknown) =>
@@ -223,7 +230,7 @@ async function applyTaskLike(tx: Exec, ctx: ApplyContext): Promise<ApplyResult> 
 
 async function applyDiaryAdd(tx: Exec, ctx: ApplyContext): Promise<ApplyResult> {
   const caseRow = ctx.caseRow!
-  const target = await findTarget(tx, ctx.userId, ctx.kind, ctx.externalRef, ctx.payload, caseRow)
+  const target = await findTarget(tx, ctx.userId, ctx.kind, ctx.externalRef, ctx.payload, caseRow, targetOptions(ctx))
   // Aynı external_ref ile girdi zaten varsa tekrar eklenmez (idempotent).
   if (target.row) return { targetType: 'diary', targetId: target.targetId!, created: false, changedFields: [], overwrittenFields: [], conflictAtApply: false }
   const p = ctx.payload
@@ -250,7 +257,7 @@ async function applyDiaryAdd(tx: Exec, ctx: ApplyContext): Promise<ApplyResult> 
 async function applyNextStep(tx: Exec, ctx: ApplyContext): Promise<ApplyResult> {
   if (ctx.payload.target === 'diary') return applyDiaryAdd(tx, ctx)
   const caseRow = ctx.caseRow!
-  const target = await findTarget(tx, ctx.userId, 'next_step', ctx.externalRef, ctx.payload, caseRow)
+  const target = await findTarget(tx, ctx.userId, 'next_step', ctx.externalRef, ctx.payload, caseRow, targetOptions(ctx))
   const plan = planFieldUpdates(stripMeta(target.snapshot), proposedComparable('next_step', ctx.payload))
   if (Object.keys(plan.changes).length) {
     const [current] = await tx.select().from(caseWorkspaces).where(eq(caseWorkspaces.caseId, caseRow.id)).for('update')

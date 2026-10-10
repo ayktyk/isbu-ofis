@@ -102,11 +102,35 @@ const EMPTY = (targetType: string): ResolvedTarget => ({ targetType, row: null, 
 const istanbulDay = (column: unknown) => sql`((${column}) + interval '3 hours')::date`
 const utcLiteral = (isoValue: string) => isoValue.replace(/Z$/, '')
 
+export interface FindTargetOptions {
+  // Onay yolu: hedef satır SELECT ... FOR UPDATE ile kilitlenir (eşzamanlı avukat düzenlemesi).
+  lock?: boolean
+  // Onay yolu: öneri anında bulunan hedefin kimliği. Doluysa hedef yalnız bu kimlikle
+  // okunur (doğal anahtar yeniden aranmaz); satır yoksa veya başka bir ref'e bağlanmışsa
+  // 409 TARGET_CHANGED (yeni kayıt açılmaz).
+  targetId?: string | null
+}
+
+// Drizzle seçim sorgusunu isteğe bağlı olarak FOR UPDATE ile çalıştırır.
+function locked<T>(query: PromiseLike<T> & { for: (strength: 'update') => PromiseLike<T> }, lock?: boolean): PromiseLike<T> {
+  return lock ? query.for('update') : query
+}
+
+function targetGone(reason: string): HttpError {
+  return new HttpError(409, `Öneri anındaki hedef kayıt değişmiş (${reason}); yeni kayıt açılmadı, öneriyi yeniden inceleyin.`, undefined, {
+    code: 'TARGET_CHANGED',
+    current: null,
+    before: null,
+    after: null,
+    changed_fields: [],
+  })
+}
+
 // external_ref'i olmayan (avukatın elle girdiği) duruşmayı aynı dava + aynı gün/saat (dakika) ile bulur.
-async function findHearingByNaturalKey(exec: Exec, caseId: string, payload: AnyPayload) {
+async function findHearingByNaturalKey(exec: Exec, caseId: string, payload: AnyPayload, lock?: boolean) {
   const when = iso(payload.hearing_date)
   if (!when) return undefined
-  const rows = await exec
+  const rows = await locked(exec
     .select()
     .from(caseHearings)
     .where(
@@ -117,17 +141,17 @@ async function findHearingByNaturalKey(exec: Exec, caseId: string, payload: AnyP
         sql`date_trunc('minute', ${caseHearings.hearingDate}) = date_trunc('minute', ${utcLiteral(when)}::timestamp)`
       )
     )
-    .limit(2)
+    .limit(2), lock)
   return rows.length === 1 ? rows[0] : undefined
 }
 
 // external_ref'i olmayan görevi/süreyi aynı dava + başlık (büyük/küçük harf duyarsız) + aynı vade günü ile bulur.
-async function findTaskByNaturalKey(exec: Exec, userId: string, kind: 'deadline_upsert' | 'task_add', payload: AnyPayload, caseRow: Case | null) {
+async function findTaskByNaturalKey(exec: Exec, userId: string, kind: 'deadline_upsert' | 'task_add', payload: AnyPayload, caseRow: Case | null, lock?: boolean) {
   const proposed = proposedComparable(kind, payload)
   const title = typeof proposed.title === 'string' ? proposed.title.trim() : ''
   if (!title) return undefined
   const due = typeof proposed.dueDate === 'string' ? proposed.dueDate : null
-  const rows = await exec
+  const rows = await locked(exec
     .select()
     .from(tasks)
     .where(
@@ -140,7 +164,7 @@ async function findTaskByNaturalKey(exec: Exec, userId: string, kind: 'deadline_
         due ? sql`${istanbulDay(tasks.dueDate)} = ${trDay(new Date(due))}::date` : isNull(tasks.dueDate)
       )
     )
-    .limit(2)
+    .limit(2), lock)
   return rows.length === 1 ? rows[0] : undefined
 }
 
@@ -205,27 +229,54 @@ export async function findTarget(
   kind: ProposalKind,
   externalRef: string,
   payload: AnyPayload,
-  caseRow: Case | null
+  caseRow: Case | null,
+  options: FindTargetOptions = {}
 ): Promise<ResolvedTarget> {
+  const { lock, targetId } = options
+  // Hedefi kimliğiyle okur: satır kayıp/başka kapsamda veya başka bir ref'e bağlıysa 409.
+  const byTargetId = (row: AnyPayload | undefined, inScope: boolean): AnyPayload => {
+    if (!row || !inScope) throw targetGone('kayıt bulunamadı')
+    if (row.externalRef && row.externalRef !== externalRef) throw targetGone('kayıt başka bir asistan anahtarına bağlandı')
+    return row
+  }
+  const statusSnapshot = (r: AnyPayload) => ({ status: r.status, closeDate: r.closeDate })
+  const freshCase = async (id: string) => {
+    const [row] = await locked(exec.select().from(cases).where(and(eq(cases.userId, userId), eq(cases.id, id))).limit(1), lock)
+    return row
+  }
   switch (kind) {
     case 'case_upsert': {
-      const [byRef] = await exec.select().from(cases).where(and(eq(cases.userId, userId), eq(cases.externalRef, externalRef))).limit(1)
-      return withMeta('case', byRef ?? caseRow ?? undefined, caseSnapshot)
+      const [byRef] = await locked(exec.select().from(cases).where(and(eq(cases.userId, userId), eq(cases.externalRef, externalRef))).limit(1), lock)
+      if (byRef || !caseRow || !lock) return withMeta('case', byRef ?? caseRow ?? undefined, caseSnapshot)
+      return withMeta('case', await freshCase(caseRow.id), caseSnapshot)
     }
     case 'status_change':
-      return withMeta('case', caseRow ?? undefined, (r) => ({ status: r.status, closeDate: r.closeDate }))
+      if (!caseRow || !lock) return withMeta('case', caseRow ?? undefined, statusSnapshot)
+      return withMeta('case', await freshCase(caseRow.id), statusSnapshot)
     case 'hearing_upsert': {
       if (!caseRow) return EMPTY('hearing')
       const hearingSnapshot = (r: AnyPayload) => ({ hearingDate: iso(r.hearingDate), courtRoom: r.courtRoom, judge: r.judge, notes: r.notes, result: r.result })
-      const [row] = await exec.select().from(caseHearings).where(and(eq(caseHearings.caseId, caseRow.id), eq(caseHearings.externalRef, externalRef))).limit(1)
+      if (targetId) {
+        const [row] = await locked(exec.select().from(caseHearings).where(eq(caseHearings.id, targetId)).limit(1), lock)
+        const hit = byTargetId(row, row?.caseId === caseRow.id)
+        const target = withMeta('hearing', hit, hearingSnapshot)
+        return hit.externalRef ? target : linked(target)
+      }
+      const [row] = await locked(exec.select().from(caseHearings).where(and(eq(caseHearings.caseId, caseRow.id), eq(caseHearings.externalRef, externalRef))).limit(1), lock)
       if (row) return withMeta('hearing', row, hearingSnapshot)
-      return linked(withMeta('hearing', await findHearingByNaturalKey(exec, caseRow.id, payload), hearingSnapshot))
+      return linked(withMeta('hearing', await findHearingByNaturalKey(exec, caseRow.id, payload, lock), hearingSnapshot))
     }
     case 'deadline_upsert':
     case 'task_add': {
-      const [row] = await exec.select().from(tasks).where(and(eq(tasks.userId, userId), eq(tasks.externalRef, externalRef))).limit(1)
+      if (targetId) {
+        const [row] = await locked(exec.select().from(tasks).where(and(eq(tasks.id, targetId), eq(tasks.userId, userId))).limit(1), lock)
+        const hit = byTargetId(row, !!row)
+        const target = withMeta('task', hit, taskSnapshot)
+        return hit.externalRef ? target : linked(target)
+      }
+      const [row] = await locked(exec.select().from(tasks).where(and(eq(tasks.userId, userId), eq(tasks.externalRef, externalRef))).limit(1), lock)
       if (row) return withMeta('task', row, taskSnapshot)
-      return linked(withMeta('task', await findTaskByNaturalKey(exec, userId, kind, payload, caseRow), taskSnapshot))
+      return linked(withMeta('task', await findTaskByNaturalKey(exec, userId, kind, payload, caseRow, lock), taskSnapshot))
     }
     case 'diary_add': {
       if (!caseRow) return EMPTY('diary')

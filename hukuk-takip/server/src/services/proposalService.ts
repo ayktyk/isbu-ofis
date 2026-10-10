@@ -31,6 +31,7 @@ import {
   stripMeta,
   type AnyPayload,
   type Exec,
+  type ResolvedTarget,
 } from './proposalTargets.js'
 
 export type SubmitStatus = 'created' | 'updated' | 'duplicate' | 'no_change' | 'skipped' | 'error'
@@ -204,21 +205,45 @@ function assertProposalVersion(proposal: AssistantProposal, expectedUpdatedAt: s
 }
 
 // HIGH1: hedef kayıt öneri anındaki hâlinden (before) sonra değiştiyse uygulanmaz.
-async function assertTargetUnchanged(exec: Exec, userId: string, kind: ProposalKind, proposal: AssistantProposal, payload: AnyPayload, caseRow: Case | null) {
-  if (isInsertOnly(kind, payload)) return // var olan girdiye dokunulmaz
-  const target = await findTarget(exec, userId, kind, proposal.externalRef, payload, caseRow)
-  if (!target.row || target.archived) return
+// M1/M2: hedef öneri anındaki kimliğiyle (targetId) ve FOR UPDATE kilidiyle okunur.
+async function assertTargetUnchanged(exec: Exec, userId: string, kind: ProposalKind, proposal: AssistantProposal, payload: AnyPayload, caseRow: Case | null): Promise<ResolvedTarget | null> {
+  if (isInsertOnly(kind, payload)) return null // var olan girdiye dokunulmaz
+  const target = await findTarget(exec, userId, kind, proposal.externalRef, payload, caseRow, { lock: true, targetId: proposal.targetId })
+  if (!target.row || target.archived) return target
   const proposed = proposedComparable(kind, payload)
   const touched = Object.keys(proposed).filter((k) => proposed[k] !== undefined)
   const before = (proposal.before as Record<string, unknown> | null) ?? null
   const change = detectTargetChange(before, target.snapshot, target.actor, touched)
-  if (!change.blocking) return
+  if (!change.blocking) return target
   throw new HttpError(409, 'Kayıt öneri geldikten sonra değiştirilmiş; üzerine yazmadan önce kontrol edin.', undefined, {
     code: 'TARGET_CHANGED',
     current: target.snapshot,
     before,
     after: Object.fromEntries(touched.map((k) => [k, proposed[k]])),
     changed_fields: change.changedFields,
+  })
+}
+
+// H1: avukatın girdiği dolu bir değerin üzerine yazacak öneri açık "yine de üzerine
+// yaz" (force_overwrite) olmadan uygulanmaz. Toplu onayda force hiç yoktur → kalem atlanır.
+// Çakışma onay anında yeniden hesaplanır; öneri anındaki conflict=true da (avukat
+// payload'u düzenlemediyse) incelemeyi zorunlu kılar.
+export const CONFLICT_REVIEW_REQUIRED = 'CONFLICT_REVIEW_REQUIRED'
+
+function assertNoUnreviewedOverwrite(kind: ProposalKind, proposal: AssistantProposal, payload: AnyPayload, target: ResolvedTarget | null, edited: boolean) {
+  if (isInsertOnly(kind, payload)) return
+  const live = !!target?.row && !target.archived
+  const proposed = proposedComparable(kind, payload)
+  const plan = live ? planFieldUpdates(stripMeta(target!.snapshot), proposed, planOptionsFor(kind, payload)) : null
+  const now = !!plan && detectConflict(target!.actor, plan)
+  if (!now && !(proposal.conflict && !edited)) return
+  throw new HttpError(409, 'Öneri sizin girdiğiniz dolu bir değerin üzerine yazacak; inceleyip açıkça "Yine de üzerine yaz" ile onaylayın.', undefined, {
+    code: CONFLICT_REVIEW_REQUIRED,
+    current: live ? target!.snapshot : null,
+    before: (proposal.before as Record<string, unknown> | null) ?? null,
+    after: plan ? plan.changes : null,
+    overwritten_fields: plan ? plan.overwritten : [],
+    changed_fields: [],
   })
 }
 
@@ -248,8 +273,11 @@ export async function approveProposal(userId: string, proposalId: string, edited
       const applied = await tx.transaction(async (sp) => {
         const caseRow = await loadCaseForProposal(sp, userId, proposal)
         if (KINDS_NEEDING_CASE.has(kind) && !caseRow) throw new ApplyError('Dava bulunamadı.')
-        if (!options.forceOverwrite) await assertTargetUnchanged(sp, userId, kind, proposal, payload, caseRow)
-        const res = await applyProposal(sp, { userId, kind, externalRef: proposal.externalRef, payload, caseRow, summary: proposal.summary })
+        if (!options.forceOverwrite) {
+          const target = await assertTargetUnchanged(sp, userId, kind, proposal, payload, caseRow)
+          assertNoUnreviewedOverwrite(kind, proposal, payload, target, !!editedPayload)
+        }
+        const res = await applyProposal(sp, { userId, kind, externalRef: proposal.externalRef, payload, caseRow, summary: proposal.summary, targetId: proposal.targetId })
         return { res, caseRow }
       })
       const { res } = applied
@@ -317,8 +345,9 @@ export interface BulkErrorRow {
   error: string
 }
 
-// Toplu karar: force_overwrite YOKTUR. Sürümü uyuşmayan (PROPOSAL_CHANGED) veya hedefi
-// avukatça değişmiş (TARGET_CHANGED) kalemler atlanır; diğerleri uygulanır.
+// Toplu karar: force_overwrite YOKTUR. Sürümü uyuşmayan (PROPOSAL_CHANGED), hedefi
+// avukatça değişmiş (TARGET_CHANGED) veya avukatın dolu değerinin üzerine yazacak
+// (CONFLICT_REVIEW_REQUIRED) kalemler uygulanmadan atlanır; diğerleri uygulanır.
 export async function bulkDecide(userId: string, ids: string[], action: 'approve' | 'reject', note?: string, expectedUpdatedAt?: Record<string, string>) {
   const rows = await db.select({ id: assistantProposals.id, kind: assistantProposals.kind, createdAt: assistantProposals.createdAt }).from(assistantProposals).where(and(eq(assistantProposals.userId, userId), inArray(assistantProposals.id, ids)))
   // Davalar önce: aynı partideki duruşma/süre önerileri yeni davayı bulabilsin.
@@ -333,7 +362,8 @@ export async function bulkDecide(userId: string, ids: string[], action: 'approve
       results.push({ ...result, ok: result.status !== 'failed' })
     } catch (error) {
       const code = error instanceof HttpError ? error.code : undefined
-      results.push({ id: row.id, status: 'error', ok: false, ...(code ? { code } : {}), error: error instanceof Error ? error.message : String(error) })
+      const message = code === CONFLICT_REVIEW_REQUIRED ? 'Tekli incelemeyle onaylayın' : error instanceof Error ? error.message : String(error)
+      results.push({ id: row.id, status: 'error', ok: false, ...(code ? { code } : {}), error: message })
     }
   }
   const found = new Set(rows.map((r) => r.id))
