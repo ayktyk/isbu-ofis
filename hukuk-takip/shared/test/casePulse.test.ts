@@ -14,7 +14,7 @@ describe('computeCasePulse', () => {
     const [item] = computeCasePulse({
       cases: [baseCase('a')],
       hearings: [
-        { id: 'h-past', caseId: 'a', hearingDate: daysAgo(3), result: 'pending' },
+        { id: 'h-past', caseId: 'a', hearingDate: daysAgo(3), result: 'completed' },
         { id: 'h1', caseId: 'a', hearingDate: '2026-10-20T07:30:00Z', result: 'pending' },
       ],
       tasks: [{ id: 't1', caseId: 'a', title: 'Bilirkişi itirazı', status: 'pending', dueDate: '2026-10-15T06:00:00Z', isDeadline: true }],
@@ -108,5 +108,50 @@ describe('computeCasePulse', () => {
     expect(items).toHaveLength(1)
     expect(items[0]).toMatchObject({ type: 'mediation', openBalance: 3000 })
     expect(items[0].flags).toContain('tahsilat_bekliyor')
+  })
+  it('flags a past hearing whose result was never entered as gecikmis', () => {
+    const [item] = computeCasePulse({
+      cases: [baseCase('a')],
+      hearings: [
+        { id: 'h-old', caseId: 'a', hearingDate: daysAgo(4), result: 'pending' },
+        { id: 'h-next', caseId: 'a', hearingDate: '2026-10-20T07:30:00Z', result: 'pending' },
+      ],
+    }, NOW)
+    expect(item.flags).toContain('gecikmis')
+    expect(item.nextItem).toMatchObject({ kind: 'hearing', id: 'h-old', overdue: true })
+    expect(item.nextItem?.title).toBe('Duruşma sonucu girilmedi')
+    expect(item.urgency).toBe(0)
+  })
+
+  it('does not flag a hearing held earlier today before its result is entered', () => {
+    const [item] = computeCasePulse({
+      cases: [baseCase('a')],
+      hearings: [{ id: 'h-today', caseId: 'a', hearingDate: '2026-10-10T06:30:00Z', result: 'pending' }],
+    }, NOW)
+    expect(item.flags).not.toContain('gecikmis')
+    expect(item.nextItem).toMatchObject({ kind: 'hearing', id: 'h-today', overdue: false })
+  })
+
+  it('derives the next item of a mediation file from its own dates', () => {
+    const items = computeCasePulse({
+      cases: [],
+      mediationFiles: [
+        { id: 'future', title: 'Bitişi ileride', status: 'active', startDate: '2026-10-01', endDate: '2026-10-22', updatedAt: daysAgo(9) },
+        { id: 'past', title: 'Bitişi geçmiş', status: 'active', startDate: '2026-09-01', endDate: '2026-10-05', updatedAt: daysAgo(9) },
+        { id: 'open', title: 'Süreç sürüyor', status: 'active', startDate: '2026-10-03', updatedAt: daysAgo(7) },
+        { id: 'empty', title: 'Tarih yok', status: 'active', updatedAt: daysAgo(7) },
+      ],
+    }, NOW)
+    const by = Object.fromEntries(items.map((i) => [i.id, i]))
+    expect(by.future.nextItem).toMatchObject({ kind: 'check', id: 'future', date: '2026-10-22', overdue: false })
+    expect(by.future.flags).not.toContain('sirada_is_yok')
+    expect(by.past.nextItem).toMatchObject({ date: '2026-10-05', overdue: true })
+    expect(by.past.flags).toContain('gecikmis')
+    expect(by.open.nextItem).toMatchObject({ kind: 'check', date: null, overdue: false })
+    expect(by.open.flags).not.toContain('sirada_is_yok')
+    expect(by.open.openItemCount).toBe(1)
+    expect(by.empty.nextItem).toBeNull()
+    expect(by.empty.flags).toContain('sirada_is_yok')
+    expect(items[0].id).toBe('past')
   })
 })

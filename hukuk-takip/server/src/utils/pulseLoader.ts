@@ -26,7 +26,7 @@ export async function loadCasePulse(userId: string, now = new Date()): Promise<C
     .leftJoin(clients, eq(cases.clientId, clients.id))
     .where(and(eq(cases.userId, userId), isNull(cases.archivedAt), ne(cases.status, 'closed')))
   const mediationRows = await db
-    .select({ id: mediationFiles.id, fileNo: mediationFiles.fileNo, disputeType: mediationFiles.disputeType, status: mediationFiles.status, agreedFee: mediationFiles.agreedFee, createdAt: mediationFiles.createdAt, updatedAt: mediationFiles.updatedAt })
+    .select({ id: mediationFiles.id, fileNo: mediationFiles.fileNo, disputeType: mediationFiles.disputeType, status: mediationFiles.status, agreedFee: mediationFiles.agreedFee, startDate: mediationFiles.startDate, endDate: mediationFiles.endDate, createdAt: mediationFiles.createdAt, updatedAt: mediationFiles.updatedAt })
     .from(mediationFiles)
     .where(and(eq(mediationFiles.userId, userId), isNull(mediationFiles.archivedAt), eq(mediationFiles.status, 'active')))
 
@@ -53,7 +53,7 @@ export async function loadCasePulse(userId: string, now = new Date()): Promise<C
 
   return computeCasePulse({
     cases: caseRows,
-    mediationFiles: mediationRows.map((m) => ({ id: m.id, title: m.fileNo || m.disputeType, status: m.status, agreedFee: m.agreedFee, createdAt: m.createdAt, updatedAt: m.updatedAt })),
+    mediationFiles: mediationRows.map((m) => ({ id: m.id, title: m.fileNo || m.disputeType, status: m.status, agreedFee: m.agreedFee, startDate: m.startDate, endDate: m.endDate, createdAt: m.createdAt, updatedAt: m.updatedAt })),
     hearings: hearingRows,
     tasks: taskRows,
     diary: diaryRows,

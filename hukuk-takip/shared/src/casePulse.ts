@@ -21,6 +21,9 @@ export interface PulseMediationInput {
   title: string
   status: string
   agreedFee?: string | number | null
+  // Arabuluculuk dosyasının kendi tarihleri (sıradaki işi bunlardan türetiriz)
+  startDate?: DateValue
+  endDate?: DateValue
   createdAt?: DateValue
   updatedAt?: DateValue
 }
@@ -159,6 +162,22 @@ function urgencyOf(flags: Set<PulseFlag>, hasNext: boolean): number {
   return 5
 }
 
+// Arabuluculuk dosyasına bağlı görev/duruşma yoktur; sıradaki iş dosyanın kendi
+// tarihlerinden türetilir. Yasal süre varsayımı YAPILMAZ (yalnızca girilmiş tarihler):
+//   bitiş tarihi ileride → o gün kontrol; geçmiş ve dosya hâlâ aktif → sonuç girilmedi (gecikmiş);
+//   yalnız başlangıç tarihi → süreç sürüyor, son tutanak bekleniyor (tarihsiz açık iş).
+function mediationNextItem(m: PulseMediationInput, today: string): PulseNextItem | null {
+  const endDay = dayOf(m.endDate)
+  if (endDay) {
+    const isOverdue = endDay < today
+    return { kind: 'check', id: m.id, title: isOverdue ? 'Arabuluculuk sonucu girilmedi' : 'Arabuluculuk bitiş tarihi', date: endDay, overdue: isOverdue }
+  }
+  if (dayOf(m.startDate)) {
+    return { kind: 'check', id: m.id, title: 'Arabuluculuk sürüyor: son tutanak bekleniyor', date: null, overdue: false }
+  }
+  return null
+}
+
 export function computeCasePulse(input: CasePulseInput, now = new Date()): CasePulseItem[] {
   const today = trDay(now)
   const warnUntil = addDays(today, PULSE_DEADLINE_WARN_DAYS)
@@ -205,9 +224,14 @@ export function computeCasePulse(input: CasePulseInput, now = new Date()): CaseP
       if (!date) continue
       if (date.getTime() <= now.getTime()) mark(date)
       const day = trDay(date)
-      if (h.result === 'pending' && day >= today) {
-        openCount++
+      if (h.result !== 'pending') continue
+      openCount++
+      if (day >= today) {
         next = pickEarlier(next, { kind: 'hearing', id: h.id, title: 'Duruşma', date: serialize(h.hearingDate), overdue: false })
+      } else {
+        // Günü geçmiş ama sonucu girilmemiş duruşma: avukatın kapatması gereken iş.
+        overdue = true
+        next = pickEarlier(next, { kind: 'hearing', id: h.id, title: 'Duruşma sonucu girilmedi', date: serialize(h.hearingDate), overdue: true })
       }
     }
     for (const t of tasksBy.get(c.id) ?? []) {
@@ -276,21 +300,24 @@ export function computeCasePulse(input: CasePulseInput, now = new Date()): CaseP
 
   for (const m of input.mediationFiles ?? []) {
     if (m.status !== 'active') continue
-    const activity = [toDate(m.updatedAt), toDate(m.createdAt)].filter((d): d is Date => !!d && d.getTime() <= now.getTime()).map((d) => d.getTime())
+    const activity = [toDate(m.updatedAt), toDate(m.createdAt), toDate(m.startDate)].filter((d): d is Date => !!d && d.getTime() <= now.getTime()).map((d) => d.getTime())
     const lastActivity = activity.length ? Math.max(...activity) : null
     const daysSince = lastActivity === null ? null : Math.floor((now.getTime() - lastActivity) / 86_400_000)
     const fee = m.agreedFee == null || m.agreedFee === '' ? null : money(m.agreedFee)
     const openBalance = fee && fee > 0 ? Math.round((fee - (mediationCollected.get(m.id) ?? 0)) * 100) / 100 : null
-    const flags = new Set<PulseFlag>(['sirada_is_yok'])
-    if (daysSince === null || daysSince > PULSE_IDLE_DAYS) flags.add('atil')
+    const next = mediationNextItem(m, today)
+    const flags = new Set<PulseFlag>()
+    if (!next) flags.add('sirada_is_yok')
+    if (!next && (daysSince === null || daysSince > PULSE_IDLE_DAYS)) flags.add('atil')
+    if (next?.overdue) flags.add('gecikmis')
     if (openBalance !== null && openBalance > 0) flags.add('tahsilat_bekliyor')
     items.push({
       type: 'mediation', id: m.id, title: m.title, status: m.status,
       caseNumber: null, courtName: null, buroKodu: null, clientName: null,
       lastActivityAt: lastActivity === null ? null : new Date(lastActivity).toISOString(),
-      daysSinceActivity: daysSince, nextItem: null, openItemCount: 0,
+      daysSinceActivity: daysSince, nextItem: next, openItemCount: next ? 1 : 0,
       openBalance, overdueInstallments: { count: 0, amount: 0 },
-      flags: [...flags], urgency: urgencyOf(flags, false),
+      flags: [...flags], urgency: urgencyOf(flags, !!next),
     })
   }
 
