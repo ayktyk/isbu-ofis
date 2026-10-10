@@ -54,16 +54,27 @@ async function lockKey(tx: Exec, key: string) {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`)
 }
 
-async function findByRequestId(tx: Exec, requestId: string): Promise<{ userId: string; proposalId: string } | null> {
-  const [direct] = await tx.select({ id: assistantProposals.id, userId: assistantProposals.userId }).from(assistantProposals).where(eq(assistantProposals.requestId, requestId)).limit(1)
-  if (direct) return { userId: direct.userId, proposalId: direct.id }
+// L2: tekrar kontrolü (user_id, request_id) kapsamındadır; başka kullanıcının kaydı
+// hiçbir biçimde (id, durum, varlık ayrıntısı) yanıta yansımaz.
+async function findByRequestId(tx: Exec, userId: string, requestId: string): Promise<{ proposalId: string } | null> {
+  const [direct] = await tx.select({ id: assistantProposals.id }).from(assistantProposals).where(and(eq(assistantProposals.userId, userId), eq(assistantProposals.requestId, requestId))).limit(1)
+  if (direct) return { proposalId: direct.id }
   const [event] = await tx
-    .select({ userId: integrationEvents.userId, proposalId: integrationEvents.proposalId })
+    .select({ proposalId: integrationEvents.proposalId })
     .from(integrationEvents)
-    .where(and(inArray(integrationEvents.action, ['proposal_created', 'proposal_updated', 'proposal_no_change']), sql`${integrationEvents.details}->>'request_id' = ${requestId}`))
+    .where(and(eq(integrationEvents.userId, userId), inArray(integrationEvents.action, ['proposal_created', 'proposal_updated', 'proposal_no_change']), sql`${integrationEvents.details}->>'request_id' = ${requestId}`))
     .limit(1)
-  return event ? { userId: event.userId, proposalId: event.proposalId ?? '' } : null
+  return event ? { proposalId: event.proposalId ?? '' } : null
 }
+
+// assistant_proposals.request_id tablo genelinde tekildir; başka kullanıcının bekleyen
+// önerisinde kullanılan request_id yeni öneriye yazılamaz → genel hata.
+async function requestIdTakenElsewhere(tx: Exec, userId: string, requestId: string) {
+  const [row] = await tx.select({ userId: assistantProposals.userId }).from(assistantProposals).where(eq(assistantProposals.requestId, requestId)).limit(1)
+  return !!row && row.userId !== userId
+}
+
+const REQUEST_ID_UNUSABLE = 'Öğe işlenemedi; yeni bir request_id ile yeniden gönderin.'
 
 async function submitOne(userId: string, apiKeyId: string, raw: unknown, index: number): Promise<SubmitResult> {
   const parsedItem = proposalItemSchema.safeParse(raw)
@@ -77,9 +88,9 @@ async function submitOne(userId: string, apiKeyId: string, raw: unknown, index: 
   try {
     return await db.transaction(async (tx) => {
       await lockKey(tx, `req:${item.request_id}`)
-      const seen = await findByRequestId(tx, item.request_id)
+      const seen = await findByRequestId(tx, userId, item.request_id)
+      if (!seen && (await requestIdTakenElsewhere(tx, userId, item.request_id))) throw new HttpError(409, REQUEST_ID_UNUSABLE)
       if (seen) {
-        if (seen.userId !== userId) throw new HttpError(409, 'Bu request_id başka bir kayıtta kullanılmış.')
         return { index, request_id: item.request_id, status: 'duplicate' as const, proposal_id: seen.proposalId || undefined }
       }
       await lockKey(tx, `prop:${userId}:${item.kind}:${item.external_ref}`)

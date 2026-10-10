@@ -1,5 +1,5 @@
 import { type NextFunction, type Request, type Response } from 'express'
-import { and, eq, isNull } from 'drizzle-orm'
+import { and, eq, isNull, lt, or } from 'drizzle-orm'
 import { db } from '../db/index.js'
 import { apiKeys, users } from '../db/schema.js'
 import { apiKeyLookupPrefix, apiKeyMatches, isWellFormedApiKey } from '../utils/apiKeys.js'
@@ -17,6 +17,8 @@ declare global {
     }
   }
 }
+
+const LAST_USED_RESOLUTION_MS = 60_000
 
 // Asistan betikleri için kimlik doğrulama: Authorization: Bearer isbu_sk_...
 // JWT oturumu burada KABUL EDİLMEZ; /api/integration/* yalnızca API anahtarıyla çalışır.
@@ -40,7 +42,12 @@ export async function authenticateApiKey(req: Request, res: Response, next: Next
     return
   }
 
-  await db.update(apiKeys).set({ lastUsedAt: new Date() }).where(eq(apiKeys.id, match.id))
+  // L4: her istekte yazma yükü olmasın; son kullanım dakikada en çok bir kez güncellenir.
+  const now = new Date()
+  await db
+    .update(apiKeys)
+    .set({ lastUsedAt: now })
+    .where(and(eq(apiKeys.id, match.id), or(isNull(apiKeys.lastUsedAt), lt(apiKeys.lastUsedAt, new Date(now.getTime() - LAST_USED_RESOLUTION_MS)))))
   req.integration = { userId: match.userId, apiKeyId: match.id, scopes: match.scopes ?? [] }
   next()
 }
