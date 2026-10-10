@@ -23,6 +23,7 @@ avukat  ──(oturum/JWT)───> POST /api/proposals/:id/approve  ──> t�
   (`key_hash`) saklanır; karşılaştırma sabit zamanlıdır.
 - Kapsamlar: `read` (okuma uçları), `propose` (öneri gönderme). Betiğe en az yetkiyi verin.
 - İptal: `POST /api/integration-keys/:id/revoke` (geri alınamaz; satır silinmez, `revoked_at` dolar).
+- `last_used_at` her istekte değil, en çok **dakikada bir** güncellenir (yazma yükü); "son kullanım" dakika hassasiyetindedir.
 - Anahtar yönetimi ve öneri onayı yalnızca `admin`/`lawyer` rolündedir.
 - Anahtar `.env` veya işletim sistemi anahtar deposunda tutulur; repoya/loga yazılmaz.
 
@@ -57,6 +58,9 @@ Yazma (`propose`): `POST /proposals`
 - `case_ref`: `id` | `external_ref` | `buro_kodu` | `case_number`+`court_name` (büyük/küçük harf duyarsız).
   Birden fazla dava eşleşirse öğe hata alır.
 - `source`: `uyap` | `kalkan` | `icra_ozet` | `asistan`. `request_id`: 8–100 karakter, benzersiz.
+- **Boş değer silmez:** metin alanlarında trim sonrası boş kalan değer (`""`, `"   "`) gönderilmemiş sayılır;
+  boş/`null` öneri değeri hiçbir zaman dolu bir alanın üzerine yazılmaz. Bir alanı temizlemek yalnız
+  avukatın elle yapabileceği iştir.
 - Yanıt `{ counts, results[] }`; herhangi bir öğe hatalıysa HTTP **207**. Öğe durumları:
   `created`, `updated` (aynı anahtarın bekleyen önerisi güncellendi), `duplicate` (aynı
   `request_id` daha önce işlendi), `no_change` (kayıt zaten güncel, öneri açılmadı),
@@ -69,6 +73,11 @@ Yazma (`propose`): `POST /proposals`
   anlık görüntüsü, avukatın dolu değerini değiştirecekse `conflict=true`) ve onayda kayda öneri
   `external_ref`'i yazılır. Değer değişmese de bağlantı için öneri açılır (`no_change` dönmez).
   Olay kaydında `matched_without_ref: true`.
+- **Onayda hedef = öneri anındaki hedef:** öneri bir kayda bağlandıysa (`target_id`), onayda hedef doğal
+  anahtarla yeniden aranmaz, yalnız bu kimlikle okunur. Satır yoksa (başka davaya geçti vb.) veya o arada
+  başka bir `external_ref`'e bağlandıysa (ör. aynı avukat duruşmasına iki farklı ref'le gelen iki öneriden
+  ilki onaylandı) **409 `TARGET_CHANGED`** döner ve **yeni kayıt açılmaz** (kopya duruşma/görev oluşmaz).
+  Bu durum `force_overwrite` ile de aşılmaz; asistan öneriyi doğru ref'le yeniden göndermelidir.
 
 ### Öneri türleri (payload snake_case, bilinmeyen alan reddedilir)
 
@@ -97,10 +106,19 @@ pending ──onay──> applied            (uygulandı; applied_target_id dolu
 - **Tek bekleyen öneri:** aynı (kullanıcı, kind, external_ref) için yeni öneri gelirse bekleyen
   öneri güncellenir (`updated`), yenisi açılmaz (kısmi tekil indeks de bunu zorlar).
 - **İdempotens:** `request_id` önce `assistant_proposals`, sonra `integration_events` geçmişinde
-  aranır; eski bir istek tekrar gelse bile içerik geri yazılmaz.
+  **(kullanıcı, request_id) kapsamında** aranır; eski bir istek tekrar gelse bile içerik geri yazılmaz.
+  `assistant_proposals.request_id` tablo genelinde tekil olduğundan başka bir kullanıcının bekleyen
+  önerisinde kullanılan değer öğe hatası alır: `"Öğe işlenemedi; yeni bir request_id ile yeniden gönderin."`
+  (o kayıt hakkında hiçbir bilgi dönmez). Asistan `request_id`'yi rastgele/UUID tabanlı üretmelidir.
 - **`before` + `conflict`:** öneri anındaki hedef satırın anlık görüntüsü saklanır. Hedefi en son
   avukat düzenlemişse (`updated_by_actor='avukat'`) ve öneri **dolu** bir değeri değiştirecekse
   `conflict=true`. Mevcut tüm satırlar `avukat` kabul edilir. Onay listesi çakışmalıları üstte gösterir.
+- **Çakışmalı öneri incelemesiz uygulanmaz:** onay anında plan hedefin güncel hâline göre yeniden hesaplanır.
+  Öneri avukatın girdiği dolu bir değerin üzerine yazacaksa (yeniden hesaplanan çakışma) veya öneri
+  `conflict=true` ile gelmişse (avukat payload'u düzenlemediyse) tekli onay **409
+  `{ code: 'CONFLICT_REVIEW_REQUIRED', current, before, after, overwritten_fields }`** döner; hiçbir şey
+  yazılmaz. Avukat arayüzde "Yine de üzerine yaz" derse istek `force_overwrite: true` ile tekrarlanır.
+  Not: avukatın yazdığı dava durumunu değiştiren `status_change` de bu kapsamdadır (tekli onay ister).
 - **Onay** (`POST /api/proposals/:id/approve { payload?, note?, expected_updated_at, force_overwrite? }`):
   düzenlenmiş payload yeniden doğrulanır (geçersizse 422, öneri `pending` kalır). Uygulama tek
   transaction + savepoint içinde; iş kuralı hatasında öneri `failed` olur ve yanıt 422 döner. Davası
@@ -110,7 +128,7 @@ pending ──onay──> applied            (uygulandı; applied_target_id dolu
   öneriyi o arada güncellediyse) **409 `{ code: 'PROPOSAL_CHANGED', current_updated_at }`**; hiçbir
   şey yazılmaz, liste yenilenip yeniden incelenir. Alan gönderilmezse kontrol atlanır — bu yalnızca
   eski istemcilerle geriye uyumluluk içindir; yeni istemciler alanı **her zaman** göndermelidir.
-  Ret (`/reject`) da aynı alanı kabul eder.
+  Ret (`/reject`) da aynı alanı kabul eder ve uygulama istemcisi retlerde de gönderir.
 - **Hedef değişikliği koruması:** onay anında hedef kayıt yeniden okunur ve öneri anındaki `before`
   ile karşılaştırılır (`shared` → `detectTargetChange`). Kayıt o zamandan beri değiştiyse (`updated_at`
   ileri gitti veya bir alan farklı) **ve** son düzenleyen avukatsa ya da önerinin yazacağı alanlardan
@@ -123,9 +141,13 @@ pending ──onay──> applied            (uygulandı; applied_target_id dolu
   (`diary_add`, `next_step` günlük hedefi) kontrol yoktur.
 - **Toplu:** `POST /api/proposals/bulk { ids, action: approve|reject, note?, expected_updated_at: { [id]: updatedAt } }`
   — `case_upsert` önce işlenir ki aynı partideki duruşma/süre önerileri yeni davayı bulsun. Toplu
-  uçta **`force_overwrite` yoktur** (gönderilirse yok sayılır). Sürümü uyuşmayan veya hedefi değişmiş
-  kalemler atlanır ve sonuç satırında `{ id, ok: false, status: 'error', code: 'PROPOSAL_CHANGED' |
-  'TARGET_CHANGED' | 'NOT_FOUND', error }` döner; diğerleri uygulanır (`{ id, ok: true, status, … }`).
+  uçta **`force_overwrite` yoktur** (gönderilirse yok sayılır). Sürümü uyuşmayan, hedefi değişmiş veya
+  avukatın dolu değerinin üzerine yazacak (çakışmalı) kalemler **uygulanmadan atlanır** ve sonuç satırında
+  `{ id, ok: false, status: 'error', code: 'PROPOSAL_CHANGED' | 'TARGET_CHANGED' | 'CONFLICT_REVIEW_REQUIRED' |
+  'NOT_FOUND', error }` döner (`CONFLICT_REVIEW_REQUIRED` için `error: 'Tekli incelemeyle onaylayın'`);
+  diğerleri uygulanır (`{ id, ok: true, status, … }`). Arayüz atlananları kodu ve nedeniyle listeler.
+- **Kilit:** onay yolunda hedef dava/duruşma/görev satırı `SELECT … FOR UPDATE` ile okunur (çalışma planı ve
+  icra özeti zaten kilitliydi); eşzamanlı avukat düzenlemesiyle onay arasında yarış olmaz.
 - **Liste:** `GET /api/proposals?status=pending|...|all&kind=&caseId=`.
 
 Avukatın mevcut yazma uçları (dava, duruşma, görev, günlük, duruşma sonrası kayıt) artık
@@ -178,9 +200,13 @@ Hesap saf fonksiyondur: `shared/src/casePulse.ts`.
    SHA-256 ve satır sayılarını `backups/README.md` içindeki rev14 kaydına yazın.
    Neon PITR (7 gün) ek güvencedir, yedeğin yerine geçmez.
 2. Bu dal `main`'e birleştiğinde Render `autoDeploy` ile derler (build komutunda DB komutu yok).
-3. **Şema uygulaması:** sunucu açılışında `app.listen` sonrası `ensureSchema()` sırayla rev2…rev14'ü
+3. **Şema uygulaması:** sunucu açılışında `app.listen` sonrası `ensureSchema()` sırayla rev2…rev15'i
    çalıştırır. REV14 idempotenttir (`IF NOT EXISTS`); her açılışta yeniden çalışması güvenlidir.
-   Hata olursa log'a `Schema guard hatasi` düşer ve sunucu çalışmaya devam eder. **Dikkat:** Drizzle
+   REV14 ve REV15 ayrı ayrı kendi transaction'larında **`SET LOCAL lock_timeout = '5s'`** ile çalışır
+   (`applyIntegrationSchema`): canlı tablodaki uzun bir sorgu kilidi tutarsa DDL 5 sn sonra vazgeçer,
+   açılış takılmaz. Hata olursa log'a `Schema guard hatasi (...); sonraki acilista yeniden denenecek`
+   düşer, sunucu çalışmaya devam eder ve bir sonraki açılışta yeniden denenir (REV14 hata verirse REV15
+   denenmez). Kilit zaman aşımı görülürse yoğun olmayan bir saatte yeniden başlatın. **Dikkat:** Drizzle
    `select()` sorguları yeni kolonları (`buro_kodu`, `external_ref`, `updated_by_actor`) adıyla
    istediği için REV14 uygulanmadan dava/duruşma/görev/günlük okuma-yazmaları da hata verir
    (rev12'deki `cases.fee_*` kolonlarıyla aynı risk). Entegrasyon (`/api/integration/*`,
@@ -194,10 +220,30 @@ Hesap saf fonksiyondur: `shared/src/casePulse.ts`.
    `GET /api/integration/pulse` (Bearer anahtar) 200 dönmeli.
 6. `db:push` / `db:migrate` **çalıştırılmaz**; `render.yaml`/`vercel.json` değiştirilmedi.
 
-## 8. Testler
+## 8. İkinci inceleme notları (2026-10-10)
+
+| Bulgu | Durum |
+|---|---|
+| H1 toplu onay avukat değerini boşaltıyordu | Düzeltildi: boş değer yazılmaz; çakışmalı kalem toplu onayda atlanır, tekli onayda `CONFLICT_REVIEW_REQUIRED` + açık onay |
+| M1 aynı kayda iki ref → kopya | Düzeltildi: onayda hedef `target_id` ile okunur, uyuşmazlıkta 409 `TARGET_CHANGED` |
+| M2 hedef satır kilidi | Düzeltildi: `FOR UPDATE` |
+| M3 açılış DDL kilit bekleyişi | Düzeltildi: `lock_timeout = 5s`, hata açılışı durdurmaz |
+| L1 ret sürümü | Düzeltildi: istemci retlerde `expected_updated_at` gönderir |
+| L2 request_id ifşası | Düzeltildi: kullanıcı kapsamı + genel hata; yeni indeks gerekmedi (rev15 ifade indeksi yeterli) |
+| L4 `last_used_at` yazım yükü | Düzeltildi: dakikada en çok bir yazım |
+| L3, L5 | Belgelenecek: inceleme metni bu turda elde değildi (aşağıdaki "Bilinen sınırlar"a eklenmeli) |
+
+**Bilinen sınırlar**
+- Çakışma "son düzenleyen avukat mı" sorusuna dayanır; satır bazındadır, alan bazında aktör tutulmaz.
+  Asistanın yazdığı bir satırda avukatın sonradan düzenlediği tek alan da satırı `avukat` yapar.
+- Eski (düzeltme öncesi) bekleyen önerilerde payload'da boş metin kalmış olabilir; onayda yeniden
+  doğrulanır ve boş değer yine yazılmaz.
+
+## 9. Testler
 
 - `npm test --workspace=shared` — nabız, birleştirme/çakışma, payload şemaları (vitest).
-- `npm test --workspace=server` — anahtar özetleme + uçtan uca akış. Veritabanı **süreç içi PGlite**
+- `npm test --workspace=server` — anahtar özetleme + uçtan uca akış (ikinci inceleme:
+  `reviewFixes.test.ts`, `reviewFixesLow.test.ts`, `schemaLockTimeout.test.ts`). Veritabanı **süreç içi PGlite**
   (WASM Postgres); taban şema Drizzle tanımından üretilir, yeni tablolar REV14 + REV15 SQL'iyle kurulur
   (`schemaNotReady.test.ts` bilerek REV14'süz kurar).
   Hiçbir uzak veritabanına bağlanılmaz. Önce `npm run build --workspace=shared` gerekir.
