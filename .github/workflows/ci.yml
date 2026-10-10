@@ -37,3 +37,8 @@ jobs:
       # Tüm workspace'lerde tip kontrolü + üretim derlemesini kapsar.
       - name: Build (type-check + bundle, DB komutu yok)
         run: npm run build
+
+      # Birim + uçtan uca testler. Veritabanı süreç içi PGlite (WASM Postgres);
+      # hiçbir uzak/canlı veritabanına bağlanılmaz, migration komutu çalışmaz.
+      - name: Test (shared + server, süreç içi PGlite)
+        run: npm test --workspace=shared --workspace=server

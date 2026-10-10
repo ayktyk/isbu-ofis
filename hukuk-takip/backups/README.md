@@ -104,3 +104,22 @@ Migration: `server/src/db/workspace-additive.sql`. Build/startup/Render/Vercel k
 Migration öncesi güncel yedek: `pre-case-tracking-2026-09-12T00-07-16-458Z.dump`; SHA-256: `8a2300acf753eb0454542591455c037d5920da5ead431c43045d8d1126716e12`. Ayrı geçici PostgreSQL 17 ortamına geri yükleme doğrulandı: 86 dava, 92 müvekkil, 100 görev, 31 günlük, 14 duruşma, 4 not, 23 tahsilat. Makbuz aynı isimli `.receipt.json` dosyasında. Dump Git'e dahil edilmez.
 
 İzole yedek kopyasında HTTP testleri: çalışma planı sürüm çakışması, eski açıklamanın korunması, sayfalama öncesi portföy filtresi, sahiplik, eşzamanlı çift gönderim, yapay veritabanı hatasında atomik rollback, bitmiş dava ve asistan kısıtı geçti. Bu testler canlı API'ye yazmadı.
+
+## 2026-10-10 — rev14 asistan entegrasyonu (PLANLI — henüz uygulanmadı)
+
+**Durum:** Kod `feat/entegrasyon` dalında; canlıya çıkmadı. Bu kayıt deploy ÖNCESİ tamamlanacak.
+
+**Kapsam (tamamen additive):** yeni tablolar `api_keys`, `assistant_proposals`, `integration_events`,
+`case_enforcement`; `cases.buro_kodu`, `external_ref` (cases, case_hearings, tasks,
+case_diary_entries, mediation_files) ve `updated_by_actor` (default 'avukat'; cases,
+case_hearings, tasks, case_diary_entries) kolonları; kısmi tekil indeksler
+(`WHERE external_ref IS NOT NULL`). DROP/DELETE yok, backfill yok.
+
+**Uygulama yolu:** `ensureSchema` → `REV14_INTEGRATION_SQL` (Render açılışında, idempotent).
+Aynı SQL: `server/drizzle/migrations/0015_assistant_integration.sql`.
+
+**Deploy öncesi yapılacak (zorunlu):**
+- [ ] Neon havuzsuz bağlantıyla `pg_dump -Fc` → `backups/pre-rev14-<tarih>.dump`
+- [ ] `pg_restore --list` ile okuma doğrulaması; SHA-256 ve satır sayıları buraya
+- [ ] Neon PITR geri dönüş noktası (deploy saatinden önce) not edildi
+
