@@ -1,9 +1,11 @@
+import { sql } from 'drizzle-orm'
 import {
   boolean,
   date,
   decimal,
   index,
   integer,
+  jsonb,
   pgEnum,
   pgTable,
   text,
@@ -180,6 +182,12 @@ export const cases = pgTable(
     // Bu davalar UI'da ayrı "CMK Görevlendirmeleri" sayfasında listelenir, normal davalar
     // listesinde gizlenir. Tahsilat raporlamasında "CMK'dan kazanılan" olarak ayrı sayılır.
     isCmkAssignment: boolean('is_cmk_assignment').default(false).notNull(),
+    // Asistan entegrasyonu (rev14). buroKodu = büronun iç dosya kodu (örn. 2026-012),
+    // externalRef = dış sistemdeki (UYAP eşitleme vb.) kalıcı anahtar. İkisi de nullable.
+    buroKodu: varchar('buro_kodu', { length: 20 }),
+    externalRef: varchar('external_ref', { length: 200 }),
+    // Son değişikliği kim yaptı: 'avukat' (uygulama arayüzü) | 'asistan' (onaylı öneri)
+    updatedByActor: varchar('updated_by_actor', { length: 20 }).default('avukat').notNull(),
     archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
@@ -189,6 +197,10 @@ export const cases = pgTable(
     clientIdx: index('cases_client_idx').on(table.clientId),
     statusIdx: index('cases_status_idx').on(table.status),
     cmkIdx: index('cases_cmk_idx').on(table.userId, table.isCmkAssignment),
+    externalRefIdx: uniqueIndex('cases_user_external_ref_uidx')
+      .on(table.userId, table.externalRef)
+      .where(sql`external_ref IS NOT NULL`),
+    buroKoduIdx: index('cases_user_buro_kodu_idx').on(table.userId, table.buroKodu),
   })
 )
 
@@ -214,12 +226,17 @@ export const caseHearings = pgTable(
     result: hearingResultEnum('result').default('pending').notNull(),
     notes: text('notes'),
     nextHearingDate: timestamp('next_hearing_date'),
+    externalRef: varchar('external_ref', { length: 200 }),
+    updatedByActor: varchar('updated_by_actor', { length: 20 }).default('avukat').notNull(),
     archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
     caseIdx: index('hearings_case_idx').on(table.caseId),
+    externalRefIdx: uniqueIndex('case_hearings_case_external_ref_uidx')
+      .on(table.caseId, table.externalRef)
+      .where(sql`external_ref IS NOT NULL`),
     dateIdx: index('hearings_date_idx').on(table.hearingDate),
     // Hatırlatma taraması (her 15 dk) result + hearing_date aralığıyla filtreler;
     // bu bileşik indeks o taramayı hızlandırır. Additive (ensureSchema rev10).
@@ -268,10 +285,15 @@ export const tasks = pgTable(
     adjustedForHoliday: boolean('adjusted_for_holiday').default(false).notNull(),
     legalBasis: varchar('legal_basis', { length: 200 }),
     completionEvidence: text('completion_evidence'),
+    externalRef: varchar('external_ref', { length: 200 }),
+    updatedByActor: varchar('updated_by_actor', { length: 20 }).default('avukat').notNull(),
     archivedAt: timestamp('archived_at'),
   },
   (table) => ({
     userIdx: index('tasks_user_idx').on(table.userId),
+    externalRefIdx: uniqueIndex('tasks_user_external_ref_uidx')
+      .on(table.userId, table.externalRef)
+      .where(sql`external_ref IS NOT NULL`),
     statusIdx: index('tasks_status_idx').on(table.status),
     dueDateIdx: index('tasks_due_date_idx').on(table.dueDate),
     deadlineIdx: index('tasks_deadline_idx').on(table.isDeadline, table.dueDate),
@@ -477,12 +499,16 @@ export const mediationFiles = pgTable(
     agreedFee: decimal('agreed_fee', { precision: 12, scale: 2 }),
     currency: varchar('currency', { length: 3 }).default('TRY').notNull(),
     notes: text('notes'),
+    externalRef: varchar('external_ref', { length: 200 }),
     archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
     userIdx: index('mediation_files_user_idx').on(table.userId),
+    externalRefIdx: uniqueIndex('mediation_files_user_external_ref_uidx')
+      .on(table.userId, table.externalRef)
+      .where(sql`external_ref IS NOT NULL`),
     statusIdx: index('mediation_files_status_idx').on(table.status),
   })
 )
@@ -592,12 +618,17 @@ export const caseDiaryEntries = pgTable(
     // Otomatik girdinin bağlı olduğu kaynak kayıt (hearing/task/expense/collection/document/note id'si)
     linkedEntityType: varchar('linked_entity_type', { length: 32 }),
     linkedEntityId: uuid('linked_entity_id'),
+    externalRef: varchar('external_ref', { length: 200 }),
+    updatedByActor: varchar('updated_by_actor', { length: 20 }).default('avukat').notNull(),
     archivedAt: timestamp('archived_at'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => ({
     caseIdx: index('case_diary_case_idx').on(table.caseId),
+    externalRefIdx: uniqueIndex('case_diary_case_external_ref_uidx')
+      .on(table.caseId, table.externalRef)
+      .where(sql`external_ref IS NOT NULL`),
     occurredIdx: index('case_diary_occurred_idx').on(table.occurredAt),
     nextStepOpenIdx: index('case_diary_next_step_open_idx').on(
       table.caseId,
@@ -608,3 +639,127 @@ export const caseDiaryEntries = pgTable(
 
 export type CaseDiaryEntry = typeof caseDiaryEntries.$inferSelect
 export type NewCaseDiaryEntry = typeof caseDiaryEntries.$inferInsert
+
+
+// ─── Asistan entegrasyonu (rev14) ─────────────────────────────────────────────
+// Dış asistan (Python betikleri + MCP sunucusu) veriyi API anahtarıyla okur ve
+// yalnızca ÖNERİ yazar. Hiçbir öneri avukatın onayı olmadan kayda dokunmaz.
+// Tamamen additive: yeni tablolar + mevcut tablolara nullable/default'lu kolonlar.
+
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .references(() => users.id, { onDelete: 'restrict' })
+      .notNull(),
+    name: varchar('name', { length: 100 }).notNull(),
+    keyPrefix: varchar('key_prefix', { length: 32 }).notNull(),
+    // sha256(anahtar) hex — anahtarın kendisi hiçbir yerde saklanmaz.
+    keyHash: varchar('key_hash', { length: 64 }).notNull(),
+    // 'read' | 'propose'
+    scopes: text('scopes').array().notNull().default(sql`ARRAY[]::text[]`),
+    lastUsedAt: timestamp('last_used_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    revokedAt: timestamp('revoked_at'),
+  },
+  (table) => ({
+    userIdx: index('api_keys_user_idx').on(table.userId),
+    prefixIdx: index('api_keys_prefix_idx').on(table.keyPrefix),
+    hashIdx: uniqueIndex('api_keys_hash_uidx').on(table.keyHash),
+  })
+)
+
+export const assistantProposals = pgTable(
+  'assistant_proposals',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .references(() => users.id, { onDelete: 'restrict' })
+      .notNull(),
+    // case_upsert | hearing_upsert | deadline_upsert | diary_add | enforcement_upsert
+    // | task_add | next_step | status_change
+    kind: varchar('kind', { length: 40 }).notNull(),
+    caseId: uuid('case_id').references(() => cases.id, { onDelete: 'restrict' }),
+    // Öneri gönderildiğinde dava henüz yoksa (ör. aynı partide case_upsert) dava
+    // referansı burada saklanır ve onay anında yeniden çözülür.
+    caseRef: jsonb('case_ref'),
+    targetType: varchar('target_type', { length: 40 }),
+    targetId: uuid('target_id'),
+    externalRef: varchar('external_ref', { length: 200 }).notNull(),
+    payload: jsonb('payload').notNull(),
+    before: jsonb('before'),
+    conflict: boolean('conflict').default(false).notNull(),
+    summary: text('summary').notNull(),
+    reason: text('reason'),
+    // uyap | kalkan | icra_ozet | asistan
+    source: varchar('source', { length: 20 }).notNull(),
+    // pending | approved | rejected | applied | superseded | failed
+    status: varchar('status', { length: 20 }).default('pending').notNull(),
+    requestId: varchar('request_id', { length: 100 }).notNull(),
+    apiKeyId: uuid('api_key_id').references(() => apiKeys.id, { onDelete: 'restrict' }),
+    decidedNote: text('decided_note'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    decidedAt: timestamp('decided_at'),
+    appliedAt: timestamp('applied_at'),
+    appliedTargetId: uuid('applied_target_id'),
+    error: text('error'),
+  },
+  (table) => ({
+    requestIdx: uniqueIndex('assistant_proposals_request_uidx').on(table.requestId),
+    // Aynı (kullanıcı, tür, dış anahtar) için tek bekleyen öneri olur; yenisi onu günceller.
+    pendingIdx: uniqueIndex('assistant_proposals_pending_uidx')
+      .on(table.userId, table.kind, table.externalRef)
+      .where(sql`status = 'pending'`),
+    userStatusIdx: index('assistant_proposals_user_status_idx').on(
+      table.userId,
+      table.status,
+      table.createdAt
+    ),
+    caseIdx: index('assistant_proposals_case_idx').on(table.caseId),
+  })
+)
+
+export const integrationEvents = pgTable(
+  'integration_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .references(() => users.id, { onDelete: 'restrict' })
+      .notNull(),
+    // 'asistan' | 'avukat'
+    actor: varchar('actor', { length: 20 }).notNull(),
+    apiKeyId: uuid('api_key_id').references(() => apiKeys.id, { onDelete: 'restrict' }),
+    action: varchar('action', { length: 60 }).notNull(),
+    targetType: varchar('target_type', { length: 40 }),
+    targetId: uuid('target_id'),
+    proposalId: uuid('proposal_id').references(() => assistantProposals.id, {
+      onDelete: 'restrict',
+    }),
+    details: jsonb('details'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userCreatedIdx: index('integration_events_user_created_idx').on(table.userId, table.createdAt),
+    proposalIdx: index('integration_events_proposal_idx').on(table.proposalId),
+  })
+)
+
+export const caseEnforcement = pgTable('case_enforcement', {
+  caseId: uuid('case_id')
+    .primaryKey()
+    .references(() => cases.id, { onDelete: 'restrict' }),
+  // alacakli, borclu, rolumuz, alacak, tahsilat, odeme_emri, itiraz, kesinlesme,
+  // son_islem, tasinmaz, arac, banka, sgk, fiili, sorgu_onerisi, not
+  data: jsonb('data').notNull().default(sql`'{}'::jsonb`),
+  sourceRef: varchar('source_ref', { length: 200 }),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  updatedByActor: varchar('updated_by_actor', { length: 20 }).default('asistan').notNull(),
+})
+
+export type ApiKey = typeof apiKeys.$inferSelect
+export type AssistantProposal = typeof assistantProposals.$inferSelect
+export type NewAssistantProposal = typeof assistantProposals.$inferInsert
+export type IntegrationEvent = typeof integrationEvents.$inferSelect
+export type CaseEnforcement = typeof caseEnforcement.$inferSelect
