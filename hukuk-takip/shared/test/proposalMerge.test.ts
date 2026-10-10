@@ -35,6 +35,16 @@ describe('planFieldUpdates', () => {
     expect(plan.changes).toEqual({ a: 1 })
   })
 
+  it('H1: boş/yalnız boşluk/null öneri değeri dolu alana yazılmaz (avukat değeri korunur)', () => {
+    const plan = planFieldUpdates(
+      { notes: 'AVUKAT NOTU', courtRoom: 'Salon 1', judge: 'Hakim', dueDate: '2026-10-20T06:00:00.000Z' },
+      { notes: '', courtRoom: '   ', judge: null, dueDate: null }
+    )
+    expect(plan.changes).toEqual({})
+    expect(plan.overwritten).toEqual([])
+    expect(detectConflict('avukat', plan)).toBe(false)
+  })
+
   it('merges json data keeping untouched keys', () => {
     expect(mergeJsonData({ alacak: 100, borclu: 'X' }, { alacak: 200, banka: 'haciz' })).toEqual({ alacak: 200, borclu: 'X', banka: 'haciz' })
   })
@@ -52,6 +62,15 @@ describe('proposal payload schemas', () => {
     expect(parseProposalPayload('hearing_upsert', { hearing_date: '2026-10-20T10:00:00+03:00', foo: 1 }).success).toBe(false)
     expect(parseProposalPayload('enforcement_upsert', { data: { alacak: 1, bilinmeyen: 2 } }).success).toBe(false)
     expect(parseProposalPayload('enforcement_upsert', { data: { alacak: { asil: 1000, faiz: 50 }, banka: ['A', 'B'] } }).success).toBe(true)
+  })
+
+  it('H1: trim sonrası boş kalan metin alanı undefined olur (öneriye boş değer girmez)', () => {
+    const parsed = parseProposalPayload('hearing_upsert', { hearing_date: '2026-12-10T10:00:00+03:00', notes: '', court_room: '   ', judge: ' Hakim ' })
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data).toEqual({ hearing_date: '2026-12-10T10:00:00+03:00', judge: 'Hakim' })
+    const task = parseProposalPayload('task_add', { title: 'Görev', description: '  ' })
+    expect(task.success).toBe(true)
+    expect(task.success && task.data.description).toBeUndefined()
   })
 
   it('validates case refs and items', () => {

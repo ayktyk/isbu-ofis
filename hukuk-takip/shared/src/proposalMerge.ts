@@ -63,6 +63,9 @@ export function planFieldUpdates(
   const overwrite = new Set(options.overwrite ?? [])
   for (const [key, value] of Object.entries(proposed)) {
     if (value === undefined) continue
+    // Boş/yalnız boşluk/null öneri değeri hiçbir alana yazılmaz: dolu değeri silmek
+    // asistanın yetkisinde değildir (avukat elle temizler).
+    if (isEmptyValue(value)) continue
     const current = before ? before[key] : undefined
     if (before && valuesEqual(current, value)) continue
     if (!before || isEmptyValue(current)) {

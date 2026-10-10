@@ -46,7 +46,15 @@ export const proposalKindLabels: Record<ProposalKind, string> = {
 
 const dateOnly = z.string().date('Tarih YYYY-AA-GG biçiminde olmalı')
 const dateTime = z.string().datetime({ offset: true, message: 'Tarih-saat ISO 8601 (saat dilimli) olmalı' })
-const optionalText = (max: number) => z.string().trim().max(max).optional()
+// Trim sonrası boş kalan metin "değer yok" sayılır (undefined): asistanın boş
+// gönderdiği alan avukatın dolu değerini silemez.
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .transform((v) => (v === '' ? undefined : v))
+    .optional()
 const priority = z.enum(['low', 'medium', 'high', 'urgent'])
 
 export const caseRefSchema = z
