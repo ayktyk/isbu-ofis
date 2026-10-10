@@ -231,9 +231,11 @@ Hesap saf fonksiyondur: `shared/src/casePulse.ts`.
 | L1 ret sürümü | Düzeltildi: istemci retlerde `expected_updated_at` gönderir |
 | L2 request_id ifşası | Düzeltildi: kullanıcı kapsamı + genel hata; yeni indeks gerekmedi (rev15 ifade indeksi yeterli) |
 | L4 `last_used_at` yazım yükü | Düzeltildi: dakikada en çok bir yazım |
-| L3, L5 | Belgelenecek: inceleme metni bu turda elde değildi (aşağıdaki "Bilinen sınırlar"a eklenmeli) |
+| L3, L5 | Belgelendi (aşağıda "Bilinen sınırlar") |
 
 **Bilinen sınırlar**
+- (L3) `case_ref` çözülemeyen öneri `deferred_case` olarak süresiz bekler; onayda 409 döner, başka kullanıcının verisi sızmaz. Yaş sınırı yok: eski bekleyenler arayüzde elle reddedilir.
+- (L5) `/changes` imleci `updated_at` sırasına dayanır; uygulamada `new Date()` ile damgalanıp imleçten sonra commit olan bir yazma atlanabilir (pencere çok dar). İstemci tam eşitlemeyi ara sıra `since` olmadan yapmalıdır.
 - Çakışma "son düzenleyen avukat mı" sorusuna dayanır; satır bazındadır, alan bazında aktör tutulmaz.
   Asistanın yazdığı bir satırda avukatın sonradan düzenlediği tek alan da satırı `avukat` yapar.
 - Eski (düzeltme öncesi) bekleyen önerilerde payload'da boş metin kalmış olabilir; onayda yeniden
