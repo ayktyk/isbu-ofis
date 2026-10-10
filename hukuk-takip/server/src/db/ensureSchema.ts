@@ -432,6 +432,36 @@ CREATE INDEX IF NOT EXISTS "integration_events_request_id_idx"
   WHERE (details->>'request_id') IS NOT NULL;
 `
 
+// M3: rev14/rev15 DDL'i (ALTER TABLE / CREATE INDEX) canlı tablolarda kilit bekler.
+// Uzun bir sorgu kilidi tutarsa açılış takılmasın diye her rev kendi transaction'ında
+// SET LOCAL lock_timeout ile çalışır (ayar transaction bitince sıfırlanır). Hata
+// loglanır, açılış sürer; ensureSchema her açılışta çalıştığından sonraki açılışta
+// yeniden denenir (SQL idempotent).
+export const SCHEMA_LOCK_TIMEOUT_SQL = `SET LOCAL lock_timeout = '5s'`
+
+// Verilen ifadeleri TEK transaction içinde sırayla çalıştırır.
+export type SchemaTransactionRunner = (statements: string[]) => Promise<void>
+
+type SchemaLog = Pick<Console, 'log' | 'error'>
+
+export async function applyIntegrationSchema(runInTransaction: SchemaTransactionRunner, log: SchemaLog = console): Promise<boolean> {
+  const steps: Array<[string, string]> = [
+    ['asistan entegrasyonu (api_keys, assistant_proposals, integration_events, case_enforcement)', REV14_INTEGRATION_SQL],
+    ['rev15 (integration_events request_id indeksi)', REV15_INTEGRATION_SQL],
+  ]
+  for (const [label, statement] of steps) {
+    try {
+      await runInTransaction([SCHEMA_LOCK_TIMEOUT_SQL, statement])
+      log.log(`Schema guard: ${label} hazir.`)
+    } catch (err) {
+      // rev15, rev14 tablolarına bağlı: ilk hatada dur.
+      log.error(`Schema guard hatasi (${label}); sonraki acilista yeniden denenecek:`, err)
+      return false
+    }
+  }
+  return true
+}
+
 export async function ensureSchema() {
   if (!process.env.DATABASE_URL) {
     console.warn('ensureSchema: DATABASE_URL yok, atlaniyor.')
@@ -465,10 +495,11 @@ export async function ensureSchema() {
     console.log('Schema guard: esnek ucret anlasmasi (cases fee_* + case_fee_installments) hazir.')
     await sql.unsafe(REV13_TASK_SORT_ORDER_SQL)
     console.log('Schema guard: tasks.sort_order hazir.')
-    await sql.unsafe(REV14_INTEGRATION_SQL)
-    console.log('Schema guard: asistan entegrasyonu (api_keys, assistant_proposals, integration_events, case_enforcement) hazir.')
-    await sql.unsafe(REV15_INTEGRATION_SQL)
-    console.log('Schema guard: rev15 (integration_events request_id indeksi) hazir.')
+    await applyIntegrationSchema(async (statements) => {
+      await sql.begin(async (tx) => {
+        for (const statement of statements) await tx.unsafe(statement)
+      })
+    })
   } catch (err) {
     console.error('Schema guard hatasi:', err)
   } finally {
