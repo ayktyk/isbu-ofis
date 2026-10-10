@@ -2,7 +2,7 @@
 //   scope 'read'    → okuma uçları
 //   scope 'propose' → öneri gönderme (hiçbir kayıt doğrudan değişmez)
 import { Router } from 'express'
-import { and, asc, desc, eq, gt, gte, inArray, isNull, lte, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, gte, inArray, isNull, lte, or, sql, type AnyColumn } from 'drizzle-orm'
 import { z } from 'zod'
 import { proposalBatchSchema, proposalStatusValues } from '@hukuk-takip/shared'
 import { db } from '../db/index.js'
@@ -206,35 +206,106 @@ router.get('/pulse', requireScope('read'), async (req, res) => {
 })
 
 // Avukatın uygulamada yaptığı değişiklikler (asistan kendi önerilerini tekrar görmesin).
+// Keyset sayfalama: her tablo (updated_at, id) sırasıyla okunur; yanıttaki opak
+// next_cursor bir sonraki çağrıda ?cursor= olarak verilir. Eşit zaman damgalı
+// satırlar atlanmaz/tekrarlanmaz (zaman damgası mikro-saniye hassasiyetle taşınır).
+const ZERO_UUID = '00000000-0000-0000-0000-000000000000'
+const CHANGE_TABLES = ['cases', 'hearings', 'tasks', 'diary'] as const
+type ChangeTable = (typeof CHANGE_TABLES)[number]
+type ChangePos = { t: string; i: string }
+type ChangeCursor = Record<ChangeTable, ChangePos>
+
+const changePosSchema = z.object({
+  t: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?$/),
+  i: z.string().uuid(),
+})
+const changeCursorSchema = z.object({
+  v: z.literal(1),
+  p: z.object({ cases: changePosSchema, hearings: changePosSchema, tasks: changePosSchema, diary: changePosSchema }),
+})
+
+function encodeChangeCursor(cursor: ChangeCursor): string {
+  return Buffer.from(JSON.stringify({ v: 1, p: cursor }), 'utf8').toString('base64url')
+}
+
+function decodeChangeCursor(raw: string): ChangeCursor | null {
+  try {
+    const parsed = changeCursorSchema.safeParse(JSON.parse(Buffer.from(raw, 'base64url').toString('utf8')))
+    return parsed.success ? parsed.data.p : null
+  } catch {
+    return null
+  }
+}
+
+// updated_at "timestamp" (saat dilimsiz, UTC) — mikro-saniyeyi kaybetmeden metne çevrilir.
+const cursorTs = (column: AnyColumn) => sql<string>`to_char(${column}, 'YYYY-MM-DD"T"HH24:MI:SS.US')`
+const afterPos = (updatedAt: AnyColumn, id: AnyColumn, pos: ChangePos) => sql`(${updatedAt}, ${id}) > (${pos.t}::timestamp, ${pos.i}::uuid)`
+
 router.get('/changes', requireScope('read'), async (req, res) => {
   const userId = userOf(req)
-  const raw = getSingleValue(req.query.since)
-  const since = raw ? new Date(raw) : null
-  if (!since || !Number.isFinite(since.getTime())) {
-    res.status(400).json({ error: 'since parametresi ISO tarih olmalı (örn. 2026-10-01T00:00:00Z).' })
-    return
+  const rawCursor = getSingleValue(req.query.cursor)
+  const rawSince = getSingleValue(req.query.since)
+  let start: ChangeCursor
+  let since: Date | null = null
+  if (rawCursor) {
+    const decoded = decodeChangeCursor(rawCursor)
+    if (!decoded) {
+      res.status(400).json({ error: 'cursor geçersiz; bir önceki yanıtın next_cursor değerini olduğu gibi gönderin.' })
+      return
+    }
+    start = decoded
+  } else {
+    since = rawSince ? new Date(rawSince) : null
+    if (!since || !Number.isFinite(since.getTime())) {
+      res.status(400).json({ error: 'since parametresi ISO tarih olmalı (örn. 2026-10-01T00:00:00Z) ya da cursor verilmeli.' })
+      return
+    }
+    const pos = { t: since.toISOString().replace('Z', ''), i: ZERO_UUID }
+    start = { cases: pos, hearings: pos, tasks: pos, diary: pos }
   }
   const until = new Date()
-  const limit = 500
+  const limit = Math.min(getPositiveInt(req.query.limit, 500), 500)
   const [caseRows, hearingRows, taskRows, diaryRows] = await Promise.all([
-    db.select(caseColumns).from(cases).leftJoin(clients, eq(cases.clientId, clients.id))
-      .where(and(eq(cases.userId, userId), eq(cases.updatedByActor, 'avukat'), gt(cases.updatedAt, since)))
-      .orderBy(asc(cases.updatedAt)).limit(limit),
-    db.select({ id: caseHearings.id, caseId: caseHearings.caseId, hearingDate: caseHearings.hearingDate, courtRoom: caseHearings.courtRoom, judge: caseHearings.judge, result: caseHearings.result, notes: caseHearings.notes, externalRef: caseHearings.externalRef, archivedAt: caseHearings.archivedAt, updatedAt: caseHearings.updatedAt })
+    db.select({ ...caseColumns, _ts: cursorTs(cases.updatedAt) }).from(cases).leftJoin(clients, eq(cases.clientId, clients.id))
+      .where(and(eq(cases.userId, userId), eq(cases.updatedByActor, 'avukat'), afterPos(cases.updatedAt, cases.id, start.cases)))
+      .orderBy(asc(cases.updatedAt), asc(cases.id)).limit(limit),
+    db.select({ id: caseHearings.id, caseId: caseHearings.caseId, hearingDate: caseHearings.hearingDate, courtRoom: caseHearings.courtRoom, judge: caseHearings.judge, result: caseHearings.result, notes: caseHearings.notes, externalRef: caseHearings.externalRef, archivedAt: caseHearings.archivedAt, updatedAt: caseHearings.updatedAt, _ts: cursorTs(caseHearings.updatedAt) })
       .from(caseHearings).innerJoin(cases, eq(caseHearings.caseId, cases.id))
-      .where(and(eq(cases.userId, userId), eq(caseHearings.updatedByActor, 'avukat'), gt(caseHearings.updatedAt, since)))
-      .orderBy(asc(caseHearings.updatedAt)).limit(limit),
-    db.select({ id: tasks.id, caseId: tasks.caseId, title: tasks.title, status: tasks.status, dueDate: tasks.dueDate, isDeadline: tasks.isDeadline, externalRef: tasks.externalRef, archivedAt: tasks.archivedAt, updatedAt: tasks.updatedAt })
+      .where(and(eq(cases.userId, userId), eq(caseHearings.updatedByActor, 'avukat'), afterPos(caseHearings.updatedAt, caseHearings.id, start.hearings)))
+      .orderBy(asc(caseHearings.updatedAt), asc(caseHearings.id)).limit(limit),
+    db.select({ id: tasks.id, caseId: tasks.caseId, title: tasks.title, status: tasks.status, dueDate: tasks.dueDate, isDeadline: tasks.isDeadline, externalRef: tasks.externalRef, archivedAt: tasks.archivedAt, updatedAt: tasks.updatedAt, _ts: cursorTs(tasks.updatedAt) })
       .from(tasks)
-      .where(and(eq(tasks.userId, userId), eq(tasks.updatedByActor, 'avukat'), gt(tasks.updatedAt, since)))
-      .orderBy(asc(tasks.updatedAt)).limit(limit),
-    db.select({ id: caseDiaryEntries.id, caseId: caseDiaryEntries.caseId, entryType: caseDiaryEntries.entryType, title: caseDiaryEntries.title, content: caseDiaryEntries.content, nextStep: caseDiaryEntries.nextStep, nextStepDueDate: caseDiaryEntries.nextStepDueDate, nextStepDone: caseDiaryEntries.nextStepDone, occurredAt: caseDiaryEntries.occurredAt, externalRef: caseDiaryEntries.externalRef, archivedAt: caseDiaryEntries.archivedAt, updatedAt: caseDiaryEntries.updatedAt })
+      .where(and(eq(tasks.userId, userId), eq(tasks.updatedByActor, 'avukat'), afterPos(tasks.updatedAt, tasks.id, start.tasks)))
+      .orderBy(asc(tasks.updatedAt), asc(tasks.id)).limit(limit),
+    db.select({ id: caseDiaryEntries.id, caseId: caseDiaryEntries.caseId, entryType: caseDiaryEntries.entryType, title: caseDiaryEntries.title, content: caseDiaryEntries.content, nextStep: caseDiaryEntries.nextStep, nextStepDueDate: caseDiaryEntries.nextStepDueDate, nextStepDone: caseDiaryEntries.nextStepDone, occurredAt: caseDiaryEntries.occurredAt, externalRef: caseDiaryEntries.externalRef, archivedAt: caseDiaryEntries.archivedAt, updatedAt: caseDiaryEntries.updatedAt, _ts: cursorTs(caseDiaryEntries.updatedAt) })
       .from(caseDiaryEntries).innerJoin(cases, eq(caseDiaryEntries.caseId, cases.id))
-      .where(and(eq(cases.userId, userId), eq(caseDiaryEntries.updatedByActor, 'avukat'), gt(caseDiaryEntries.updatedAt, since)))
-      .orderBy(asc(caseDiaryEntries.updatedAt)).limit(limit),
+      .where(and(eq(cases.userId, userId), eq(caseDiaryEntries.updatedByActor, 'avukat'), afterPos(caseDiaryEntries.updatedAt, caseDiaryEntries.id, start.diary)))
+      .orderBy(asc(caseDiaryEntries.updatedAt), asc(caseDiaryEntries.id)).limit(limit),
   ])
+  const lastPos = (rows: Array<{ id: string; _ts: string }>, fallback: ChangePos): ChangePos => {
+    const last = rows[rows.length - 1]
+    return last ? { t: last._ts, i: last.id } : fallback
+  }
+  const next: ChangeCursor = {
+    cases: lastPos(caseRows, start.cases),
+    hearings: lastPos(hearingRows, start.hearings),
+    tasks: lastPos(taskRows, start.tasks),
+    diary: lastPos(diaryRows, start.diary),
+  }
+  const strip = <T extends { _ts: string }>(rows: T[]) => rows.map(({ _ts: _drop, ...rest }) => rest)
   const truncated = [caseRows, hearingRows, taskRows, diaryRows].some((rows) => rows.length === limit)
-  res.json({ since: since.toISOString(), until: until.toISOString(), truncated, cases: caseRows, hearings: hearingRows, tasks: taskRows, diary: diaryRows })
+  res.json({
+    since: since ? since.toISOString() : null,
+    // Geriye uyumluluk: eski istemciler until'i bir sonraki since olarak kullanıyordu.
+    // truncated=true iken bu satır kaçırır; istemciler next_cursor kullanmalı.
+    until: until.toISOString(),
+    truncated,
+    next_cursor: encodeChangeCursor(next),
+    cases: strip(caseRows),
+    hearings: strip(hearingRows),
+    tasks: strip(taskRows),
+    diary: strip(diaryRows),
+  })
 })
 
 router.get('/proposals', requireScope('read'), async (req, res) => {
