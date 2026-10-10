@@ -22,6 +22,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import IntegrationKeysCard from '@/components/integration/IntegrationKeysCard'
 
 function ThemeCard({
   theme,
@@ -771,6 +772,8 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <IntegrationKeysCard canManage={user?.role === 'admin' || user?.role === 'lawyer'} />
 
       {/* Hesap Bilgisi */}
       <Card>
