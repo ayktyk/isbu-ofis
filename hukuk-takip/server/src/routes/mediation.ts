@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import { Router } from 'express'
+import { authenticate } from '../middleware/auth.js'
 
 const execFileAsync = promisify(execFile)
 const router = Router()
@@ -11,9 +12,11 @@ const router = Router()
 // ---------------------------------------------------------------------------
 // POST /mediation/generate-udf
 // Converts plain-text mediation document content to UDF format via udf-cli.
+// Router '/api' altina baglidir; router.use(authenticate) TUM /api isteklerini
+// (login dahil) yakalayacagi icin kimlik dogrulama route bazinda eklenir.
 // ---------------------------------------------------------------------------
 
-router.post('/mediation/generate-udf', async (req, res, next) => {
+router.post('/mediation/generate-udf', authenticate, async (req, res, next) => {
   try {
     const { content, fileName, documentType } = req.body as {
       content?: string
