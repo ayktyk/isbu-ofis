@@ -10,7 +10,7 @@ import { PGlite } from '@electric-sql/pglite'
 import { drizzle } from 'drizzle-orm/pglite'
 import * as schema from '../src/db/schema.js'
 import { setDbForTests } from '../src/db/index.js'
-import { REV14_INTEGRATION_SQL } from '../src/db/ensureSchema.js'
+import { REV14_INTEGRATION_SQL, REV15_INTEGRATION_SQL } from '../src/db/ensureSchema.js'
 
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret'
 process.env.ENABLE_SCHEDULED_JOBS = 'false'
@@ -34,6 +34,7 @@ export async function createTestDatabase() {
   const pg = new PGlite()
   for (const statement of statements) await pg.exec(statement)
   await pg.exec(REV14_INTEGRATION_SQL)
+  await pg.exec(REV15_INTEGRATION_SQL)
   const db = drizzle(pg, { schema })
   setDbForTests(db)
   return { pg, db }

@@ -123,3 +123,14 @@ Aynı SQL: `server/drizzle/migrations/0015_assistant_integration.sql`.
 - [ ] `pg_restore --list` ile okuma doğrulaması; SHA-256 ve satır sayıları buraya
 - [ ] Neon PITR geri dönüş noktası (deploy saatinden önce) not edildi
 
+
+## 2026-10-10 — rev15 entegrasyon indeksi (PLANLI — rev14 ile aynı deploy)
+
+**Kapsam (yalnız ekleme):** `integration_events` üzerinde ifade indeksi
+`integration_events_request_id_idx ((details->>'request_id')) WHERE ... IS NOT NULL`.
+Tablo/kolon/satır değişmez. Tablo yeni olduğundan (rev14) indeks kurulumu anlıktır.
+
+**Uygulama yolu:** `ensureSchema` → `REV15_INTEGRATION_SQL` (REV14'ten hemen sonra, idempotent).
+Aynı SQL: `server/drizzle/migrations/0016_integration_request_id_index.sql`.
+
+**Yedek:** rev14 için alınacak `pre-rev14` dökümü bu adımı da kapsar (aynı deploy).

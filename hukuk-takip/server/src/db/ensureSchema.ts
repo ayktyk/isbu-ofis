@@ -422,6 +422,16 @@ CREATE TABLE IF NOT EXISTS "case_enforcement" (
 );
 `
 
+// Rev15 — entegrasyon inceleme düzeltmeleri (yalnız ekleme, idempotent).
+// request_id tekrar kontrolü integration_events.details->>'request_id' üzerinde
+// tam tarama yapmasın diye ifade indeksi. Kısmi koşul (IS NOT NULL) eşitlik
+// sorgusuyla planlayıcı tarafından karşılanır.
+export const REV15_INTEGRATION_SQL = `
+CREATE INDEX IF NOT EXISTS "integration_events_request_id_idx"
+  ON "integration_events" ((details->>'request_id'))
+  WHERE (details->>'request_id') IS NOT NULL;
+`
+
 export async function ensureSchema() {
   if (!process.env.DATABASE_URL) {
     console.warn('ensureSchema: DATABASE_URL yok, atlaniyor.')
@@ -457,6 +467,8 @@ export async function ensureSchema() {
     console.log('Schema guard: tasks.sort_order hazir.')
     await sql.unsafe(REV14_INTEGRATION_SQL)
     console.log('Schema guard: asistan entegrasyonu (api_keys, assistant_proposals, integration_events, case_enforcement) hazir.')
+    await sql.unsafe(REV15_INTEGRATION_SQL)
+    console.log('Schema guard: rev15 (integration_events request_id indeksi) hazir.')
   } catch (err) {
     console.error('Schema guard hatasi:', err)
   } finally {

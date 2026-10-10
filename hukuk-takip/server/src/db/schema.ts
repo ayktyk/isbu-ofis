@@ -743,6 +743,10 @@ export const integrationEvents = pgTable(
   (table) => ({
     userCreatedIdx: index('integration_events_user_created_idx').on(table.userId, table.createdAt),
     proposalIdx: index('integration_events_proposal_idx').on(table.proposalId),
+    // rev15: request_id tekrar kontrolü için ifade indeksi (ensureSchema REV15)
+    requestIdIdx: index('integration_events_request_id_idx')
+      .on(sql`(${table.details}->>'request_id')`)
+      .where(sql`(details->>'request_id') IS NOT NULL`),
   })
 )
 
