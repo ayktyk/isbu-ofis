@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectConflict, mergeJsonData, planFieldUpdates, valuesEqual } from '../src/proposalMerge'
+import { detectConflict, detectTargetChange, mergeJsonData, planFieldUpdates, valuesEqual } from '../src/proposalMerge'
 import { parseProposalPayload, proposalItemSchema, caseRefSchema } from '../src/integration'
 
 describe('planFieldUpdates', () => {
@@ -58,5 +58,37 @@ describe('proposal payload schemas', () => {
     expect(caseRefSchema.safeParse({ case_number: '2026/1' }).success).toBe(false)
     expect(caseRefSchema.safeParse({ case_number: '2026/1', court_name: 'X' }).success).toBe(true)
     expect(proposalItemSchema.safeParse({ kind: 'diary_add', external_ref: 'e', payload: {}, summary: 's', source: 'uyap', request_id: 'short' }).success).toBe(false)
+  })
+})
+
+describe('detectTargetChange (onay anı)', () => {
+  const before = { courtRoom: 'Salon 4', notes: null, hearingDate: '2026-11-20T07:00:00.000Z', updatedByActor: 'asistan', updatedAt: '2026-10-10T08:00:00.000Z' }
+
+  it('does not block when the target is untouched since the proposal', () => {
+    const r = detectTargetChange(before, { ...before }, 'asistan', ['courtRoom'])
+    expect(r).toEqual({ changed: false, blocking: false, changedFields: [] })
+  })
+
+  it('blocks any later edit by the lawyer, even on other fields', () => {
+    const current = { ...before, notes: 'Avukat notu', updatedByActor: 'avukat', updatedAt: '2026-10-10T09:00:00.000Z' }
+    const r = detectTargetChange(before, current, 'avukat', ['courtRoom'])
+    expect(r).toMatchObject({ changed: true, blocking: true, changedFields: ['notes'] })
+  })
+
+  it('blocks when only updatedAt moved and the lawyer is the last editor', () => {
+    const r = detectTargetChange(before, { ...before, updatedAt: '2026-10-10T09:00:00.000Z' }, 'avukat', [])
+    expect(r.blocking).toBe(true)
+  })
+
+  it('ignores unrelated changes made by the assistant but blocks on touched fields', () => {
+    const unrelated = { ...before, notes: 'asistan', updatedAt: '2026-10-10T09:00:00.000Z' }
+    expect(detectTargetChange(before, unrelated, 'asistan', ['courtRoom']).blocking).toBe(false)
+    const touched = { ...before, courtRoom: 'Salon 9', updatedAt: '2026-10-10T09:00:00.000Z' }
+    expect(detectTargetChange(before, touched, 'asistan', ['courtRoom']).blocking).toBe(true)
+  })
+
+  it('blocks when a target appeared after the proposal was created', () => {
+    expect(detectTargetChange(null, before, 'asistan', []).blocking).toBe(true)
+    expect(detectTargetChange(null, null, null, []).blocking).toBe(false)
   })
 })

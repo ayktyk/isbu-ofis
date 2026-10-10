@@ -266,19 +266,32 @@ export const proposalBatchSchema = z.object({
   items: z.array(z.unknown()).min(1).max(200),
 })
 
+// Avukatın listede gördüğü önerinin updatedAt değeri (ISO). Sunucudaki değerle
+// uyuşmazsa 409 PROPOSAL_CHANGED. Eski istemciler için isteğe bağlı.
+const expectedUpdatedAtSchema = z
+  .string()
+  .trim()
+  .refine((v) => Number.isFinite(Date.parse(v)), 'expected_updated_at ISO tarih-saat olmalı')
+
 export const approveProposalSchema = z.object({
   payload: z.record(z.unknown()).optional(),
   note: z.string().trim().max(2000).optional(),
+  expected_updated_at: expectedUpdatedAtSchema.optional(),
+  // Hedef kayıt öneriden sonra avukatça değiştiyse (409 TARGET_CHANGED) yine de uygula.
+  force_overwrite: z.boolean().optional(),
 })
 
 export const rejectProposalSchema = z.object({
   note: z.string().trim().max(2000).optional(),
+  expected_updated_at: expectedUpdatedAtSchema.optional(),
 })
 
+// Toplu uçta force_overwrite YOKTUR; çakışan kalemler atlanır.
 export const bulkProposalSchema = z.object({
   ids: z.array(z.string().uuid()).min(1).max(200),
   action: z.enum(['approve', 'reject']),
   note: z.string().trim().max(2000).optional(),
+  expected_updated_at: z.record(z.string().uuid(), expectedUpdatedAtSchema).optional(),
 })
 
 export const createApiKeySchema = z.object({

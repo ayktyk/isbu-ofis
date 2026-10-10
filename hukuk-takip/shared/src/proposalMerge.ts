@@ -83,6 +83,41 @@ export function detectConflict(beforeActor: string | null | undefined, plan: Fie
   return (beforeActor ?? 'avukat') === 'avukat' && plan.overwritten.length > 0
 }
 
+// Onay anı koruması: öneri oluşturulduktan sonra hedef kayıt değişti mi?
+// before = öneri anındaki anlık görüntü, current = onay anındaki (aynı anahtar uzayı,
+// meta: updatedByActor/updatedAt). Bloklayıcı sayılır:
+//   - hedef öneriden sonra ortaya çıktıysa (before yok, current var),
+//   - değiştiyse (updatedAt ileri gitti veya bir alan farklı) ve son düzenleyen avukatsa,
+//   - değiştiyse ve önerinin yazacağı alanlardan biri değiştiyse (kim değiştirirse).
+// Asistanın başka bir onaylı önerisiyle ilgisiz alan değişmişse bloklamaz.
+const TARGET_META_KEYS = new Set(['updatedByActor', 'updatedAt', 'revision', '__sourceRef'])
+
+export interface TargetChange {
+  changed: boolean
+  blocking: boolean
+  changedFields: string[]
+}
+
+export function detectTargetChange(
+  before: Record<string, unknown> | null | undefined,
+  current: Record<string, unknown> | null | undefined,
+  currentActor: string | null | undefined,
+  touchedKeys: readonly string[]
+): TargetChange {
+  if (!current) return { changed: false, blocking: false, changedFields: [] }
+  if (!before) return { changed: true, blocking: true, changedFields: [] }
+  const keys = [...new Set([...Object.keys(before), ...Object.keys(current)])].filter((k) => !TARGET_META_KEYS.has(k))
+  const changedFields = keys.filter((k) => !valuesEqual(before[k], current[k]))
+  const tBefore = Date.parse(String(before.updatedAt ?? ''))
+  const tNow = Date.parse(String(current.updatedAt ?? ''))
+  const newer = Number.isFinite(tBefore) && Number.isFinite(tNow) && tNow > tBefore
+  const changed = newer || changedFields.length > 0
+  if (!changed) return { changed, blocking: false, changedFields }
+  const touched = new Set(touchedKeys)
+  const blocking = (currentActor ?? 'avukat') === 'avukat' || changedFields.some((k) => touched.has(k))
+  return { changed, blocking, changedFields }
+}
+
 // JSONB "data" birleştirme (icra özeti): öneride gelen anahtarlar üzerine yazar,
 // diğer anahtarlar korunur.
 export function mergeJsonData(

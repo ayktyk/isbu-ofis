@@ -7,6 +7,7 @@ import { and, desc, eq, inArray, sql } from 'drizzle-orm'
 import {
   caseRefSchema,
   detectConflict,
+  detectTargetChange,
   parseProposalPayload,
   planFieldUpdates,
   proposalItemSchema,
@@ -192,7 +193,41 @@ export interface DecisionResult {
   error?: string
 }
 
-export async function approveProposal(userId: string, proposalId: string, editedPayload?: AnyPayload, note?: string): Promise<DecisionResult> {
+// HIGH2: avukatın gördüğü öneri sürümü (updatedAt) ile sunucudaki aynı mı?
+function assertProposalVersion(proposal: AssistantProposal, expectedUpdatedAt: string | undefined) {
+  if (expectedUpdatedAt === undefined) return // eski istemci: geriye uyumlu
+  if (Date.parse(expectedUpdatedAt) === proposal.updatedAt.getTime()) return
+  throw new HttpError(409, 'Öneri siz incelerken asistan tarafından güncellendi; yeniden inceleyin.', undefined, {
+    code: 'PROPOSAL_CHANGED',
+    current_updated_at: proposal.updatedAt.toISOString(),
+  })
+}
+
+// HIGH1: hedef kayıt öneri anındaki hâlinden (before) sonra değiştiyse uygulanmaz.
+async function assertTargetUnchanged(exec: Exec, userId: string, kind: ProposalKind, proposal: AssistantProposal, payload: AnyPayload, caseRow: Case | null) {
+  if (isInsertOnly(kind, payload)) return // var olan girdiye dokunulmaz
+  const target = await findTarget(exec, userId, kind, proposal.externalRef, payload, caseRow)
+  if (!target.row || target.archived) return
+  const proposed = proposedComparable(kind, payload)
+  const touched = Object.keys(proposed).filter((k) => proposed[k] !== undefined)
+  const before = (proposal.before as Record<string, unknown> | null) ?? null
+  const change = detectTargetChange(before, target.snapshot, target.actor, touched)
+  if (!change.blocking) return
+  throw new HttpError(409, 'Kayıt öneri geldikten sonra değiştirilmiş; üzerine yazmadan önce kontrol edin.', undefined, {
+    code: 'TARGET_CHANGED',
+    current: target.snapshot,
+    before,
+    after: Object.fromEntries(touched.map((k) => [k, proposed[k]])),
+    changed_fields: change.changedFields,
+  })
+}
+
+export interface ApproveOptions {
+  expectedUpdatedAt?: string
+  forceOverwrite?: boolean
+}
+
+export async function approveProposal(userId: string, proposalId: string, editedPayload?: AnyPayload, note?: string, options: ApproveOptions = {}): Promise<DecisionResult> {
   let calendar: ApplyResult['calendar'] | undefined
   let failure: string | null = null
   const result = await db.transaction(async (tx): Promise<DecisionResult | null> => {
@@ -201,6 +236,7 @@ export async function approveProposal(userId: string, proposalId: string, edited
     if (!proposal) throw new HttpError(404, 'Öneri bulunamadı.')
     if (proposal.status === 'applied') return { id: proposal.id, status: 'applied', repeated: true, targetType: proposal.targetType ?? undefined, targetId: proposal.appliedTargetId ?? undefined }
     if (proposal.status !== 'pending') throw new HttpError(409, `Öneri zaten sonuçlanmış (${proposal.status}).`)
+    assertProposalVersion(proposal, options.expectedUpdatedAt)
     const kind = proposal.kind as ProposalKind
     if (!proposalKindValues.includes(kind)) throw new HttpError(422, 'Bilinmeyen öneri türü.')
     const parsed = parseProposalPayload(kind, editedPayload ?? proposal.payload)
@@ -212,6 +248,7 @@ export async function approveProposal(userId: string, proposalId: string, edited
       const applied = await tx.transaction(async (sp) => {
         const caseRow = await loadCaseForProposal(sp, userId, proposal)
         if (KINDS_NEEDING_CASE.has(kind) && !caseRow) throw new ApplyError('Dava bulunamadı.')
+        if (!options.forceOverwrite) await assertTargetUnchanged(sp, userId, kind, proposal, payload, caseRow)
         const res = await applyProposal(sp, { userId, kind, externalRef: proposal.externalRef, payload, caseRow, summary: proposal.summary })
         return { res, caseRow }
       })
@@ -228,7 +265,7 @@ export async function approveProposal(userId: string, proposalId: string, edited
         .where(eq(assistantProposals.id, proposal.id))
       await tx.insert(integrationEvents).values({
         userId, actor: 'avukat', action: 'proposal_applied', targetType: res.targetType, targetId: res.targetId, proposalId: proposal.id,
-        details: { kind, edited: !!editedPayload, original_payload: editedPayload ? proposal.payload : undefined, created: res.created, changed_fields: res.changedFields, overwritten_fields: res.overwrittenFields, conflict: res.conflictAtApply, note: note ?? null },
+        details: { kind, edited: !!editedPayload, original_payload: editedPayload ? proposal.payload : undefined, created: res.created, changed_fields: res.changedFields, overwritten_fields: res.overwrittenFields, conflict: res.conflictAtApply, force_overwrite: options.forceOverwrite || undefined, note: note ?? null },
       })
       return { id: proposal.id, status: 'applied', targetType: res.targetType, targetId: res.targetId, conflict: res.conflictAtApply }
     } catch (error) {
@@ -255,13 +292,14 @@ export async function approveProposal(userId: string, proposalId: string, edited
   return result!
 }
 
-export async function rejectProposal(userId: string, proposalId: string, note?: string): Promise<DecisionResult> {
+export async function rejectProposal(userId: string, proposalId: string, note?: string, expectedUpdatedAt?: string): Promise<DecisionResult> {
   return db.transaction(async (tx) => {
     await assertReviewer(tx, userId)
     const [proposal] = await tx.select().from(assistantProposals).where(and(eq(assistantProposals.id, proposalId), eq(assistantProposals.userId, userId))).for('update')
     if (!proposal) throw new HttpError(404, 'Öneri bulunamadı.')
     if (proposal.status === 'rejected') return { id: proposal.id, status: 'rejected' as const, repeated: true }
     if (proposal.status !== 'pending') throw new HttpError(409, `Öneri zaten sonuçlanmış (${proposal.status}).`)
+    assertProposalVersion(proposal, expectedUpdatedAt)
     const now = new Date()
     await tx.update(assistantProposals).set({ status: 'rejected', decidedAt: now, updatedAt: now, decidedNote: note ?? null }).where(eq(assistantProposals.id, proposal.id))
     await tx.insert(integrationEvents).values({ userId, actor: 'avukat', action: 'proposal_rejected', targetType: proposal.targetType, targetId: proposal.targetId, proposalId: proposal.id, details: { kind: proposal.kind, note: note ?? null } })
@@ -271,20 +309,35 @@ export async function rejectProposal(userId: string, proposalId: string, note?: 
 
 const KIND_ORDER: Record<string, number> = { case_upsert: 0, status_change: 1 }
 
-export async function bulkDecide(userId: string, ids: string[], action: 'approve' | 'reject', note?: string) {
+export interface BulkErrorRow {
+  id: string
+  status: 'error'
+  ok: false
+  code?: string
+  error: string
+}
+
+// Toplu karar: force_overwrite YOKTUR. Sürümü uyuşmayan (PROPOSAL_CHANGED) veya hedefi
+// avukatça değişmiş (TARGET_CHANGED) kalemler atlanır; diğerleri uygulanır.
+export async function bulkDecide(userId: string, ids: string[], action: 'approve' | 'reject', note?: string, expectedUpdatedAt?: Record<string, string>) {
   const rows = await db.select({ id: assistantProposals.id, kind: assistantProposals.kind, createdAt: assistantProposals.createdAt }).from(assistantProposals).where(and(eq(assistantProposals.userId, userId), inArray(assistantProposals.id, ids)))
   // Davalar önce: aynı partideki duruşma/süre önerileri yeni davayı bulabilsin.
   const ordered = [...rows].sort((a, b) => (KIND_ORDER[a.kind] ?? 9) - (KIND_ORDER[b.kind] ?? 9) || a.createdAt.getTime() - b.createdAt.getTime())
-  const results: Array<DecisionResult | { id: string; status: 'error'; error: string }> = []
+  const results: Array<(DecisionResult & { ok: boolean }) | BulkErrorRow> = []
   for (const row of ordered) {
+    const expected = expectedUpdatedAt?.[row.id]
     try {
-      results.push(action === 'approve' ? await approveProposal(userId, row.id, undefined, note) : await rejectProposal(userId, row.id, note))
+      const result = action === 'approve'
+        ? await approveProposal(userId, row.id, undefined, note, { expectedUpdatedAt: expected })
+        : await rejectProposal(userId, row.id, note, expected)
+      results.push({ ...result, ok: result.status !== 'failed' })
     } catch (error) {
-      results.push({ id: row.id, status: 'error', error: error instanceof Error ? error.message : String(error) })
+      const code = error instanceof HttpError ? error.code : undefined
+      results.push({ id: row.id, status: 'error', ok: false, ...(code ? { code } : {}), error: error instanceof Error ? error.message : String(error) })
     }
   }
   const found = new Set(rows.map((r) => r.id))
-  for (const id of ids) if (!found.has(id)) results.push({ id, status: 'error', error: 'Öneri bulunamadı.' })
+  for (const id of ids) if (!found.has(id)) results.push({ id, status: 'error', ok: false, code: 'NOT_FOUND', error: 'Öneri bulunamadı.' })
   return results
 }
 

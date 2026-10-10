@@ -19,8 +19,11 @@ export type Exec = PgDatabase<any, any, any>
 export type AnyPayload = Record<string, any>
 
 export class HttpError extends Error {
-  constructor(public status: number, message: string, public details?: unknown) {
+  constructor(public status: number, message: string, public details?: unknown, public extra?: Record<string, unknown>) {
     super(message)
+  }
+  get code(): string | undefined {
+    return typeof this.extra?.code === 'string' ? this.extra.code : undefined
   }
 }
 

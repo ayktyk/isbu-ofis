@@ -18,7 +18,7 @@ router.use(authenticate)
 
 export function sendHttpError(res: Response, error: unknown) {
   if (error instanceof HttpError) {
-    res.status(error.status).json({ error: error.message, ...(error.details ? { details: error.details } : {}) })
+    res.status(error.status).json({ error: error.message, ...(error.details ? { details: error.details } : {}), ...(error.extra ?? {}) })
     return
   }
   throw error
@@ -44,8 +44,8 @@ router.get('/', async (req, res) => {
 })
 
 router.post('/bulk', validate(bulkProposalSchema), async (req, res) => {
-  const { ids, action, note } = bulkProposalSchema.parse(req.body)
-  res.json({ results: await bulkDecide(req.user!.userId, ids, action, note) })
+  const { ids, action, note, expected_updated_at } = bulkProposalSchema.parse(req.body)
+  res.json({ results: await bulkDecide(req.user!.userId, ids, action, note, expected_updated_at) })
 })
 
 router.post('/:id/approve', validate(approveProposalSchema), async (req, res) => {
@@ -56,7 +56,10 @@ router.post('/:id/approve', validate(approveProposalSchema), async (req, res) =>
   }
   const body = approveProposalSchema.parse(req.body)
   try {
-    const result = await approveProposal(req.user!.userId, id.data, body.payload, body.note)
+    const result = await approveProposal(req.user!.userId, id.data, body.payload, body.note, {
+      expectedUpdatedAt: body.expected_updated_at,
+      forceOverwrite: body.force_overwrite === true,
+    })
     res.status(result.status === 'failed' ? 422 : 200).json(result)
   } catch (error) {
     sendHttpError(res, error)
@@ -70,7 +73,8 @@ router.post('/:id/reject', validate(rejectProposalSchema), async (req, res) => {
     return
   }
   try {
-    res.json(await rejectProposal(req.user!.userId, id.data, rejectProposalSchema.parse(req.body).note))
+    const body = rejectProposalSchema.parse(req.body)
+    res.json(await rejectProposal(req.user!.userId, id.data, body.note, body.expected_updated_at))
   } catch (error) {
     sendHttpError(res, error)
   }
