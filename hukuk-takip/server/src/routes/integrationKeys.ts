@@ -9,6 +9,7 @@ import { apiKeys, integrationEvents, users } from '../db/schema.js'
 import { authenticate } from '../middleware/auth.js'
 import { validate } from '../middleware/validate.js'
 import { generateApiKey } from '../utils/apiKeys.js'
+import { schemaNotReadyHandler } from '../middleware/schemaGuard.js'
 
 const router = Router()
 router.use(authenticate)
@@ -100,5 +101,8 @@ router.post('/:id/revoke', async (req, res) => {
   })
   res.json(row)
 })
+
+// Dağıtım penceresinde (rev14/rev15 henüz kurulmadıysa) 503 SCHEMA_NOT_READY.
+router.use(schemaNotReadyHandler)
 
 export default router

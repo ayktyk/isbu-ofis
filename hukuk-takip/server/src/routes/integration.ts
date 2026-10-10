@@ -23,6 +23,7 @@ import { listProposals, submitProposals } from '../services/proposalService.js'
 import { getOutstandingCaseFees, getOutstandingMediationFees, sumOutstanding } from '../utils/outstandingFees.js'
 import { loadCasePulse } from '../utils/pulseLoader.js'
 import { getPositiveInt, getSingleValue } from '../utils/request.js'
+import { schemaNotReadyHandler } from '../middleware/schemaGuard.js'
 
 const router = Router()
 router.use(authenticateApiKey)
@@ -331,5 +332,8 @@ router.post('/proposals', requireScope('propose'), validate(proposalBatchSchema)
   const counts = results.reduce<Record<string, number>>((acc, r) => ({ ...acc, [r.status]: (acc[r.status] ?? 0) + 1 }), {})
   res.status(results.some((r) => r.status === 'error') ? 207 : 200).json({ counts, results })
 })
+
+// Dağıtım penceresinde (rev14/rev15 henüz kurulmadıysa) 503 SCHEMA_NOT_READY.
+router.use(schemaNotReadyHandler)
 
 export default router

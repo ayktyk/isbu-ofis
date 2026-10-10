@@ -12,6 +12,7 @@ import { validate } from '../middleware/validate.js'
 import { approveProposal, bulkDecide, listProposals, rejectProposal } from '../services/proposalService.js'
 import { HttpError } from '../services/proposalTargets.js'
 import { getSingleValue } from '../utils/request.js'
+import { schemaNotReadyHandler } from '../middleware/schemaGuard.js'
 
 const router = Router()
 router.use(authenticate)
@@ -79,5 +80,8 @@ router.post('/:id/reject', validate(rejectProposalSchema), async (req, res) => {
     sendHttpError(res, error)
   }
 })
+
+// Dağıtım penceresinde (rev14/rev15 henüz kurulmadıysa) 503 SCHEMA_NOT_READY.
+router.use(schemaNotReadyHandler)
 
 export default router

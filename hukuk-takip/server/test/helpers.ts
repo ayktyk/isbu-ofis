@@ -28,13 +28,15 @@ export const NEW_TABLES = ['api_keys', 'assistant_proposals', 'integration_event
 // Rev14 öncesi şema (yeni tablolar hariç) Drizzle tanımından üretilir, sonra
 // üretimde boot'ta çalışan REV14 SQL'i uygulanır. Böylece yeni tablolar gerçekten
 // ensureSchema'daki DDL ile oluşur.
-export async function createTestDatabase() {
+export async function createTestDatabase(options: { integrationSchema?: boolean } = {}) {
   const { apiKeys: _a, assistantProposals: _b, integrationEvents: _c, caseEnforcement: _d, ...base } = schema
   const statements = await generateMigration(generateDrizzleJson({}), generateDrizzleJson(base))
   const pg = new PGlite()
   for (const statement of statements) await pg.exec(statement)
-  await pg.exec(REV14_INTEGRATION_SQL)
-  await pg.exec(REV15_INTEGRATION_SQL)
+  if (options.integrationSchema !== false) {
+    await pg.exec(REV14_INTEGRATION_SQL)
+    await pg.exec(REV15_INTEGRATION_SQL)
+  }
   const db = drizzle(pg, { schema })
   setDbForTests(db)
   return { pg, db }
