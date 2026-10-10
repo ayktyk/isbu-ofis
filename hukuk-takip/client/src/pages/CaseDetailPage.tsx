@@ -43,6 +43,7 @@ import { useCreateTask, useUpdateTaskStatus } from '@/hooks/useTasks'
 import { useAuth } from '@/hooks/useAuth'
 import { compareDueDates, getOpenWork } from '@/lib/caseWorkspace'
 import CaseWorkSummary from '@/components/cases/CaseWorkSummary'
+import CasePulsePanel from '@/components/integration/CasePulsePanel'
 import { NewLegalDeadlineForm } from '@/components/deadlines/NewLegalDeadlineForm'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import {
@@ -405,6 +406,7 @@ export default function CaseDetailPage() {
       </Dialog>
       <TabsContent forceMount value="overview" className="space-y-4 data-[state=inactive]:hidden">
       {id && user?.id && <><button className="min-h-11 rounded-xl border px-4 text-sm" aria-pressed={shortcuts.pinned.includes(id)} onClick={() => shortcuts.toggle(id)}>{shortcuts.pinned.includes(id) ? '★ Sabitlendi · Kaldır' : '☆ Dosyayı sabitle'}</button><WorkflowPanel caseId={id} userId={user.id} canWrite={canWrite} /></>}
+      {id && <CasePulsePanel caseId={id} />}
       <CaseWorkSummary tasks={tasks} diary={diaryEntries} hearings={hearings} notes={notes} diaryLoading={diaryLoading} diaryError={diaryError} onWork={target => jumpTo(target || 'case-tasks')} onDiary={() => jumpTo('case-diary')} />
       {caseData.description && (
         <Card className="border-0 shadow-sm">

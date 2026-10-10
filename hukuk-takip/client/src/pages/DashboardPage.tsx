@@ -1,6 +1,7 @@
 import { caseRecordHref, taskHref } from '@/lib/recordLinks'
 import { useCallback, useState } from 'react'
 import DailyDesk from '@/components/cases/DailyDesk'
+import PulseSummaryCard from '@/components/integration/PulseSummaryCard'
 import { useNavigate } from 'react-router-dom'
 import {
   AlertOctagon,
@@ -360,6 +361,8 @@ export default function DashboardPage() {
           visible={moneyVisible}
         />
       </div>
+
+      <PulseSummaryCard />
 
       {/* Bu Ay Özeti */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
