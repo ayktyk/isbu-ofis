@@ -362,6 +362,7 @@ router.post('/', validate(createTaskSchema), async (req: Request, res: Response)
       calculatedDueDate: calculatedDueDate || null,
       adjustedForHoliday: adjustedForHoliday === true,
       legalBasis: legalBasis || null,
+      updatedByActor: 'avukat',
     })
     .returning()
 
@@ -421,7 +422,7 @@ router.put('/:id', validate(updateTaskSchema), async (req: Request, res: Respons
     completionEvidence,
     ...rest
   } = req.body
-  const updateData: Record<string, unknown> = { ...rest, updatedAt: new Date() }
+  const updateData: Record<string, unknown> = { ...rest, updatedAt: new Date(), updatedByActor: 'avukat' }
 
   if ('caseId' in req.body) updateData.caseId = caseId || null
   if ('label' in req.body) updateData.label = label || null
@@ -499,7 +500,7 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     return
   }
 
-  const updateData: Record<string, unknown> = { status, updatedAt: new Date() }
+  const updateData: Record<string, unknown> = { status, updatedAt: new Date(), updatedByActor: 'avukat' }
   if (status === 'completed') updateData.completedAt = new Date()
   if (status && status !== 'completed') updateData.completedAt = null
   if (completionEvidence !== undefined) updateData.completionEvidence = trimmedCompletionEvidence || null
@@ -577,7 +578,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
   const [deleted] = await db
     .update(tasks)
-    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .set({ archivedAt: new Date(), updatedAt: new Date(), updatedByActor: 'avukat' })
     .where(and(eq(tasks.id, taskId), eq(tasks.userId, req.user!.userId), isNull(tasks.archivedAt)))
     .returning()
 

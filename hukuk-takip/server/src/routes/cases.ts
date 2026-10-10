@@ -111,7 +111,7 @@ router.post('/backfill-cmk', async (req, res) => {
 
   await db
     .update(cases)
-    .set({ isCmkAssignment: true, updatedAt: new Date() })
+    .set({ isCmkAssignment: true, updatedAt: new Date(), updatedByActor: 'avukat' })
     .where(
       and(
         eq(cases.userId, req.user!.userId),
@@ -446,6 +446,7 @@ router.post('/', validate(createCaseSchema), async (req, res) => {
     .values({
       ...normalizeCasePayload(req.body),
       userId: req.user!.userId,
+      updatedByActor: 'avukat',
     })
     .returning()
 
@@ -472,6 +473,7 @@ router.put('/:id', validate(updateCaseSchema), async (req, res) => {
     .set({
       ...normalizeCasePayload(req.body),
       updatedAt: new Date(),
+      updatedByActor: 'avukat',
     })
     .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId), isNull(cases.archivedAt)))
     .returning()
@@ -509,7 +511,7 @@ router.delete('/:id', async (req, res) => {
 
   const [deleted] = await db
     .update(cases)
-    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .set({ archivedAt: new Date(), updatedAt: new Date(), updatedByActor: 'avukat' })
     .where(and(eq(cases.id, caseId), eq(cases.userId, req.user!.userId), isNull(cases.archivedAt)))
     .returning()
 
@@ -520,8 +522,8 @@ router.delete('/:id', async (req, res) => {
 
   const archivedAt = deleted.archivedAt || new Date()
   await Promise.all([
-    db.update(caseHearings).set({ archivedAt, updatedAt: new Date() }).where(and(eq(caseHearings.caseId, caseId), isNull(caseHearings.archivedAt))),
-    db.update(tasks).set({ archivedAt, updatedAt: new Date() }).where(and(eq(tasks.caseId, caseId), isNull(tasks.archivedAt))),
+    db.update(caseHearings).set({ archivedAt, updatedAt: new Date(), updatedByActor: 'avukat' }).where(and(eq(caseHearings.caseId, caseId), isNull(caseHearings.archivedAt))),
+    db.update(tasks).set({ archivedAt, updatedAt: new Date(), updatedByActor: 'avukat' }).where(and(eq(tasks.caseId, caseId), isNull(tasks.archivedAt))),
     db.update(expenses).set({ archivedAt }).where(and(eq(expenses.caseId, caseId), isNull(expenses.archivedAt))),
     db.update(collections).set({ archivedAt }).where(and(eq(collections.caseId, caseId), isNull(collections.archivedAt))),
     db.update(notes).set({ archivedAt, updatedAt: new Date() }).where(and(eq(notes.caseId, caseId), isNull(notes.archivedAt))),

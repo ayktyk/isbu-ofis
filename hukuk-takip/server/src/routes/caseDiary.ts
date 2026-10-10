@@ -126,6 +126,7 @@ router.post('/cases/:caseId/diary', validate(createDiaryEntrySchema), async (req
       nextStep: normalizeOptional(req.body.nextStep),
       nextStepDueDate: normalizeDate(req.body.nextStepDueDate),
       occurredAt: occurredAt ?? new Date(),
+      updatedByActor: 'avukat',
     })
     .returning()
 
@@ -163,7 +164,7 @@ router.put('/diary/:entryId', validate(updateDiaryEntrySchema), async (req, res)
     return
   }
 
-  const updates: Record<string, unknown> = { updatedAt: new Date() }
+  const updates: Record<string, unknown> = { updatedAt: new Date(), updatedByActor: 'avukat' }
   if (req.body.title !== undefined) updates.title = normalizeOptional(req.body.title)
   if (req.body.content !== undefined) updates.content = normalizeOptional(req.body.content)
   if (req.body.nextStep !== undefined) updates.nextStep = normalizeOptional(req.body.nextStep)
@@ -219,7 +220,7 @@ router.patch(
 
     const [updated] = await db
       .update(caseDiaryEntries)
-      .set({ nextStepDone: !!req.body.done, updatedAt: new Date() })
+      .set({ nextStepDone: !!req.body.done, updatedAt: new Date(), updatedByActor: 'avukat' })
       .where(eq(caseDiaryEntries.id, entryId))
       .returning()
 
@@ -260,7 +261,7 @@ router.delete('/diary/:entryId', async (req, res) => {
 
   const [archived] = await db
     .update(caseDiaryEntries)
-    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .set({ archivedAt: new Date(), updatedAt: new Date(), updatedByActor: 'avukat' })
     .where(eq(caseDiaryEntries.id, entryId))
     .returning()
 

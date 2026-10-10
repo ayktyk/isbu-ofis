@@ -59,7 +59,7 @@ router.post('/hearings/:id/review', validate(hearingReviewSchema), async (req, r
     }
     if (hearing.result !== 'pending') throw Object.assign(new Error('Bu duruşmanın sonucu zaten kaydedilmiş.'), { status: 409 })
     if (input.nextDate && new Date(input.nextDate) <= hearing.hearingDate) throw Object.assign(new Error('Sonraki duruşma mevcut duruşmadan sonra olmalı.'), { status: 400 })
-    await tx.update(caseHearings).set({ result: input.result, nextHearingDate: input.nextDate ? new Date(input.nextDate) : null, updatedAt: new Date() }).where(eq(caseHearings.id, id))
+    await tx.update(caseHearings).set({ result: input.result, nextHearingDate: input.nextDate ? new Date(input.nextDate) : null, updatedAt: new Date(), updatedByActor: 'avukat' }).where(eq(caseHearings.id, id))
     if (input.nextDate) await tx.insert(caseHearings).values({ caseId: hearing.caseId, hearingDate: new Date(input.nextDate), courtRoom: hearing.courtRoom })
     if (input.tasks.length) await tx.insert(tasks).values(input.tasks.map(task => ({ caseId: hearing.caseId, userId: req.user!.userId, title: task.title, dueDate: task.dueDate ? new Date(task.dueDate) : null })))
     await tx.insert(caseDiaryEntries).values({ caseId: hearing.caseId, userId: req.user!.userId, entryType: 'hearing_completed', title: 'Duruşma sonrası kayıt', content: input.note, linkedEntityType: 'hearing_review', linkedEntityId: input.requestId })

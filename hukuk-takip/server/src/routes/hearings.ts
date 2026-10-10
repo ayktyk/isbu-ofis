@@ -7,41 +7,11 @@ import { validate } from '../middleware/validate.js'
 import { createHearingSchema, updateHearingSchema } from '../../../shared/dist/index.js'
 import { getOwnedCase, getOwnedHearing } from '../utils/ownership.js'
 import { getSingleValue } from '../utils/request.js'
-import { syncHearingToGoogleCalendar } from '../utils/googleCalendar.js'
+import { syncHearingCalendarSafe } from '../utils/hearingCalendar.js'
 import { logDiaryEntry } from '../utils/diaryLog.js'
 
 const router = Router()
 router.use(authenticate)
-
-async function getHearingCalendarContext(userId: string, hearingId: string) {
-  const [hearingRow] = await db
-    .select({
-      id: caseHearings.id,
-      hearingDate: caseHearings.hearingDate,
-      result: caseHearings.result,
-      notes: caseHearings.notes,
-      courtRoom: caseHearings.courtRoom,
-      judge: caseHearings.judge,
-      caseTitle: cases.title,
-      caseNumber: cases.caseNumber,
-      courtName: cases.courtName,
-      clientName: clients.fullName,
-    })
-    .from(caseHearings)
-    .innerJoin(cases, eq(caseHearings.caseId, cases.id))
-    .leftJoin(clients, eq(cases.clientId, clients.id))
-    .where(
-      and(
-        eq(caseHearings.id, hearingId),
-        eq(cases.userId, userId),
-        isNull(caseHearings.archivedAt),
-        isNull(cases.archivedAt)
-      )
-    )
-    .limit(1)
-
-  return hearingRow ?? null
-}
 
 router.get('/', async (req: Request, res: Response) => {
   const upcoming = getSingleValue(req.query.upcoming)
@@ -95,6 +65,7 @@ router.post('/', validate(createHearingSchema), async (req: Request, res: Respon
       caseId,
       hearingDate: new Date(hearingDate),
       ...rest,
+      updatedByActor: 'avukat',
     })
     .returning()
 
@@ -111,25 +82,7 @@ router.post('/', validate(createHearingSchema), async (req: Request, res: Respon
     occurredAt: hearing.createdAt ?? new Date(),
   })
 
-  try {
-    const hearingContext = await getHearingCalendarContext(req.user!.userId, hearing.id)
-    if (hearingContext) {
-      await syncHearingToGoogleCalendar({
-        hearingId: hearingContext.id,
-        hearingDate: hearingContext.hearingDate,
-        result: hearingContext.result,
-        notes: hearingContext.notes,
-        courtRoom: hearingContext.courtRoom,
-        judge: hearingContext.judge,
-        caseTitle: hearingContext.caseTitle,
-        caseNumber: hearingContext.caseNumber,
-        courtName: hearingContext.courtName,
-        clientName: hearingContext.clientName,
-      })
-    }
-  } catch (error) {
-    console.error('[GoogleCalendar] Hearing create sync failed', hearing.id, error)
-  }
+  await syncHearingCalendarSafe(req.user!.userId, hearing.id, 'create')
 
   res.status(201).json(hearing)
 })
@@ -163,7 +116,7 @@ router.put('/:id', validate(updateHearingSchema), async (req: Request, res: Resp
     .where(eq(caseHearings.id, hearingId))
     .limit(1)
 
-  const updateData: Record<string, unknown> = { ...req.body, updatedAt: new Date() }
+  const updateData: Record<string, unknown> = { ...req.body, updatedAt: new Date(), updatedByActor: 'avukat' }
 
   if (req.body.hearingDate) {
     updateData.hearingDate = new Date(req.body.hearingDate)
@@ -197,25 +150,7 @@ router.put('/:id', validate(updateHearingSchema), async (req: Request, res: Resp
     })
   }
 
-  try {
-    const hearingContext = await getHearingCalendarContext(req.user!.userId, updated.id)
-    if (hearingContext) {
-      await syncHearingToGoogleCalendar({
-        hearingId: hearingContext.id,
-        hearingDate: hearingContext.hearingDate,
-        result: hearingContext.result,
-        notes: hearingContext.notes,
-        courtRoom: hearingContext.courtRoom,
-        judge: hearingContext.judge,
-        caseTitle: hearingContext.caseTitle,
-        caseNumber: hearingContext.caseNumber,
-        courtName: hearingContext.courtName,
-        clientName: hearingContext.clientName,
-      })
-    }
-  } catch (error) {
-    console.error('[GoogleCalendar] Hearing update sync failed', updated.id, error)
-  }
+  await syncHearingCalendarSafe(req.user!.userId, updated.id, 'update')
 
   res.json(updated)
 })
@@ -236,7 +171,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
   const [deleted] = await db
     .update(caseHearings)
-    .set({ archivedAt: new Date(), updatedAt: new Date() })
+    .set({ archivedAt: new Date(), updatedAt: new Date(), updatedByActor: 'avukat' })
     .where(and(eq(caseHearings.id, hearingId), isNull(caseHearings.archivedAt)))
     .returning()
 
