@@ -38,7 +38,7 @@ Okuma (`read`):
 | `GET /deadlines?days=60` | Açık süreli işler (tarihsiz/koşullu olanlar dahil) |
 | `GET /collections/outstanding` | Bekleyen dava + arabuluculuk ücretleri ve toplam |
 | `GET /pulse` | Dosya nabzı (bkz. §5) |
-| `GET /changes?since=ISO` | `since`'ten sonra **avukatın** değiştirdiği dava/duruşma/görev/günlük satırları (arşivlenenler dahil). Yanıttaki `until` bir sonraki çağrının `since`'i olur; `truncated=true` ise tablo başına 500 sınırına ulaşılmıştır. |
+| `GET /changes?since=ISO` · `GET /changes?cursor=…` | **Avukatın** değiştirdiği dava/duruşma/görev/günlük satırları (arşivlenenler dahil), tablo başına `(updated_at, id)` sırasıyla. İlk çağrı `since` ile; sonrakiler yanıttaki opak **`next_cursor`** ile (`?cursor=`). `truncated=true` ise en az bir tablo sayfa sınırına (`?limit=`, en çok 500) ulaşmıştır, hemen `next_cursor` ile devam edin. İmleç eşit zaman damgalı satırları atlamaz/tekrarlamaz. `until` yalnız geriye uyumluluk içindir: `truncated=true` iken `until`'i `since` olarak kullanmak satır kaçırır. |
 | `GET /proposals?status=&since=` | Asistanın kendi önerilerinin durumu |
 
 Yazma (`propose`): `POST /proposals`
@@ -62,6 +62,13 @@ Yazma (`propose`): `POST /proposals`
   `request_id` daha önce işlendi), `no_change` (kayıt zaten güncel, öneri açılmadı),
   `skipped` (hedef avukat tarafından arşivlenmiş), `error` (doğrulama/referans hatası).
 - `deferred_case: true`: dava henüz yok (ör. aynı partide `case_upsert`); dava onay anında yeniden aranır.
+- **`external_ref`'siz kayıtla eşleşme:** `external_ref` ile hedef bulunamazsa avukatın elle girdiği
+  kayıt doğal anahtarla aranır — duruşmada aynı dava + aynı gün/saat (dakika); süre/görevde aynı dava
+  (davasızsa davasız) + başlık (büyük/küçük harf duyarsız) + aynı vade günü (İstanbul; koşullu sürede
+  ikisi de tarihsiz). Tek eşleşme varsa yeni kayıt açılmaz: öneri o kaydı hedefler (`before` onun
+  anlık görüntüsü, avukatın dolu değerini değiştirecekse `conflict=true`) ve onayda kayda öneri
+  `external_ref`'i yazılır. Değer değişmese de bağlantı için öneri açılır (`no_change` dönmez).
+  Olay kaydında `matched_without_ref: true`.
 
 ### Öneri türleri (payload snake_case, bilinmeyen alan reddedilir)
 
@@ -94,12 +101,31 @@ pending ──onay──> applied            (uygulandı; applied_target_id dolu
 - **`before` + `conflict`:** öneri anındaki hedef satırın anlık görüntüsü saklanır. Hedefi en son
   avukat düzenlemişse (`updated_by_actor='avukat'`) ve öneri **dolu** bir değeri değiştirecekse
   `conflict=true`. Mevcut tüm satırlar `avukat` kabul edilir. Onay listesi çakışmalıları üstte gösterir.
-- **Onay** (`POST /api/proposals/:id/approve { payload?, note? }`): düzenlenmiş payload yeniden
-  doğrulanır (geçersizse 422, öneri `pending` kalır). Uygulama tek transaction + savepoint içinde;
-  iş kuralı hatasında öneri `failed` olur ve yanıt 422 döner. Davası henüz olmayan öneri 409 alır,
-  durum değişmez. Aynı öneriyi tekrar onaylamak `repeated: true` döner.
-- **Toplu:** `POST /api/proposals/bulk { ids, action: approve|reject, note? }` — `case_upsert`
-  önce işlenir ki aynı partideki duruşma/süre önerileri yeni davayı bulsun.
+- **Onay** (`POST /api/proposals/:id/approve { payload?, note?, expected_updated_at, force_overwrite? }`):
+  düzenlenmiş payload yeniden doğrulanır (geçersizse 422, öneri `pending` kalır). Uygulama tek
+  transaction + savepoint içinde; iş kuralı hatasında öneri `failed` olur ve yanıt 422 döner. Davası
+  henüz olmayan öneri 409 alır, durum değişmez. Aynı öneriyi tekrar onaylamak `repeated: true` döner.
+- **Eşzamanlılık sözleşmesi (ZORUNLU):** istemci, avukatın listede gördüğü önerinin `updatedAt`
+  değerini **`expected_updated_at`** (ISO) olarak gönderir. Sunucudaki değer farklıysa (asistan
+  öneriyi o arada güncellediyse) **409 `{ code: 'PROPOSAL_CHANGED', current_updated_at }`**; hiçbir
+  şey yazılmaz, liste yenilenip yeniden incelenir. Alan gönderilmezse kontrol atlanır — bu yalnızca
+  eski istemcilerle geriye uyumluluk içindir; yeni istemciler alanı **her zaman** göndermelidir.
+  Ret (`/reject`) da aynı alanı kabul eder.
+- **Hedef değişikliği koruması:** onay anında hedef kayıt yeniden okunur ve öneri anındaki `before`
+  ile karşılaştırılır (`shared` → `detectTargetChange`). Kayıt o zamandan beri değiştiyse (`updated_at`
+  ileri gitti veya bir alan farklı) **ve** son düzenleyen avukatsa ya da önerinin yazacağı alanlardan
+  biri değiştiyse — veya hedef öneriden sonra ortaya çıktıysa — **409 `{ code: 'TARGET_CHANGED',
+  current, before, after, changed_fields }`** döner (`current`/`before` hedef anlık görüntüsü, `after`
+  önerinin yazacağı değerler). Hiçbir şey yazılmaz, öneri `pending` kalır. Avukat açıkça "yine de
+  üzerine yaz" derse aynı istek **`force_overwrite: true`** ile tekrarlanır; olay kaydına
+  `force_overwrite: true` düşer. Asistanın başka bir onaylı önerisiyle ilgisiz alan değişmişse
+  (ör. aynı partide dava bilgisi + durum değişikliği) bloklanmaz. Yalnız ekleyen türlerde
+  (`diary_add`, `next_step` günlük hedefi) kontrol yoktur.
+- **Toplu:** `POST /api/proposals/bulk { ids, action: approve|reject, note?, expected_updated_at: { [id]: updatedAt } }`
+  — `case_upsert` önce işlenir ki aynı partideki duruşma/süre önerileri yeni davayı bulsun. Toplu
+  uçta **`force_overwrite` yoktur** (gönderilirse yok sayılır). Sürümü uyuşmayan veya hedefi değişmiş
+  kalemler atlanır ve sonuç satırında `{ id, ok: false, status: 'error', code: 'PROPOSAL_CHANGED' |
+  'TARGET_CHANGED' | 'NOT_FOUND', error }` döner; diğerleri uygulanır (`{ id, ok: true, status, … }`).
 - **Liste:** `GET /api/proposals?status=pending|...|all&kind=&caseId=`.
 
 Avukatın mevcut yazma uçları (dava, duruşma, görev, günlük, duruşma sonrası kayıt) artık
@@ -119,7 +145,14 @@ sonrası bekleyen duruşma, açık görev/süre, çalışma planı kontrol tarih
 en erkeni; tarihsiz açık iş de sayılır), `openBalance` (anlaşılan ücret − tahsilat),
 `overdueInstallments`, bayraklar: `atil` (sırada iş yok ve son hareket > 30 gün), `sirada_is_yok`,
 `tahsilat_bekliyor`, `kapanmaya_hazir` (won/lost/settled, açık iş ve alacak yok), `sure_yaklasiyor`
-(süreli iş ≤ 7 gün, gecikmiş dahil), `gecikmis` (gecikmiş iş veya taksit), `cmk`.
+(süreli iş ≤ 7 gün, gecikmiş dahil), `gecikmis` (gecikmiş iş, gecikmiş taksit veya günü geçmiş ama
+sonucu girilmemiş duruşma — `nextItem` "Duruşma sonucu girilmedi", `overdue: true`), `cmk`.
+- **Son hareket** içerik değişikliklerine dayanır: görev sürükle-bırak sıralaması `updated_at`'i
+  değiştirmez, nabzı ve `/changes` akışını şişirmez.
+- **Arabuluculuk dosyaları** (bağlı görev/duruşma yok) sıradaki işi kendi tarihlerinden alır: bitiş
+  tarihi ileride → o gün kontrol; bitiş geçmiş ve dosya hâlâ aktif → "Arabuluculuk sonucu girilmedi"
+  (`gecikmis`); yalnız başlangıç tarihi → "son tutanak bekleniyor" (tarihsiz açık iş). Yasal süre
+  varsayımı yapılmaz. Hiç tarih yoksa `sirada_is_yok` kalır.
 Aciliyete göre sıralıdır (gecikmiş → süre yaklaşıyor → atıl → sırada iş yok → planlı → diğer).
 Hesap saf fonksiyondur: `shared/src/casePulse.ts`.
 
@@ -134,6 +167,9 @@ Hesap saf fonksiyondur: `shared/src/casePulse.ts`.
 - DROP / DELETE / tip daraltma yok. Mevcut satırlarda yalnızca `updated_by_actor` default değeri oluşur.
 - Kaynak: `server/src/db/ensureSchema.ts` → `REV14_INTEGRATION_SQL`; aynısı
   `server/drizzle/migrations/0015_assistant_integration.sql` (0013/0014 gibi elle, journal dışı).
+- **rev15 (yalnız ekleme):** `integration_events_request_id_idx` — `((details->>'request_id')) WHERE ... IS NOT NULL`
+  ifade indeksi; `request_id` tekrar kontrolü tam tarama yapmaz. `REV15_INTEGRATION_SQL` (REV14'ten
+  hemen sonra, `IF NOT EXISTS`) ve `server/drizzle/migrations/0016_integration_request_id_index.sql`.
 
 ## 7. Deploy adımları (CLAUDE.md veri koruma kuralı)
 
@@ -147,10 +183,13 @@ Hesap saf fonksiyondur: `shared/src/casePulse.ts`.
    Hata olursa log'a `Schema guard hatasi` düşer ve sunucu çalışmaya devam eder. **Dikkat:** Drizzle
    `select()` sorguları yeni kolonları (`buro_kodu`, `external_ref`, `updated_by_actor`) adıyla
    istediği için REV14 uygulanmadan dava/duruşma/görev/günlük okuma-yazmaları da hata verir
-   (rev12'deki `cases.fee_*` kolonlarıyla aynı risk). İlk açılıştaki birkaç saniyelik pencere ve
-   REV14 hatası bu yüzden izlenmeli; hata görülürse önceki commit'e geri dönülür (eklenen kolonlar
+   (rev12'deki `cases.fee_*` kolonlarıyla aynı risk). Entegrasyon (`/api/integration/*`,
+   `/api/integration-keys`), öneri (`/api/proposals`) ve nabız (`/api/pulse`) uçları bu pencerede
+   eksik tablo/kolon hatasını (42P01/42703) yakalayıp **503 `{ code: 'SCHEMA_NOT_READY' }`** +
+   `Retry-After: 30` döner; asistan betiği bu kodda bekleyip yeniden denemelidir. Diğer (mevcut)
+   uçlar bu korumaya sahip değildir. İlk açılıştaki birkaç saniyelik pencere ve REV14 hatası bu yüzden izlenmeli; hata görülürse önceki commit'e geri dönülür (eklenen kolonlar
    eski kodu bozmaz).
-4. Render log'unda `Schema guard: asistan entegrasyonu ... hazir.` satırını görün.
+4. Render log'unda `Schema guard: asistan entegrasyonu ... hazir.` ve `Schema guard: rev15 ... hazir.` satırlarını görün.
 5. Doğrulama: `GET /api/health`; uygulamada oturumla `POST /api/integration-keys` →
    `GET /api/integration/pulse` (Bearer anahtar) 200 dönmeli.
 6. `db:push` / `db:migrate` **çalıştırılmaz**; `render.yaml`/`vercel.json` değiştirilmedi.
@@ -159,5 +198,6 @@ Hesap saf fonksiyondur: `shared/src/casePulse.ts`.
 
 - `npm test --workspace=shared` — nabız, birleştirme/çakışma, payload şemaları (vitest).
 - `npm test --workspace=server` — anahtar özetleme + uçtan uca akış. Veritabanı **süreç içi PGlite**
-  (WASM Postgres); taban şema Drizzle tanımından üretilir, yeni tablolar REV14 SQL'iyle kurulur.
+  (WASM Postgres); taban şema Drizzle tanımından üretilir, yeni tablolar REV14 + REV15 SQL'iyle kurulur
+  (`schemaNotReady.test.ts` bilerek REV14'süz kurar).
   Hiçbir uzak veritabanına bağlanılmaz. Önce `npm run build --workspace=shared` gerekir.
