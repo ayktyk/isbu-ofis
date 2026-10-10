@@ -297,8 +297,9 @@ router.patch('/reorder', validate(reorderTasksSchema), async (req: Request, res:
   await db
     .update(tasks)
     .set({
+      // updatedAt bilerek dokunulmaz: sıralama içerik değişikliği değildir;
+      // dosya nabzındaki "son hareket"i ve asistanın /changes akışını şişirmesin.
       sortOrder: sql`CASE ${tasks.id} ${cases_} ELSE ${tasks.sortOrder} END`,
-      updatedAt: new Date(),
     })
     .where(
       and(eq(tasks.userId, userId), isNull(tasks.archivedAt), inArray(tasks.id, orderedOwnedIds)),
