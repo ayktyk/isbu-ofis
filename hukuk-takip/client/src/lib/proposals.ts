@@ -471,14 +471,55 @@ export function proposalErrorMessage(error: unknown, fallback: string): string {
 //   409 code=PROPOSAL_CHANGED → öneri o arada değişti; liste yenilenir, yeniden incelenir
 //   409 code=TARGET_CHANGED   → hedef kayıt öneriden sonra avukatça düzenlendi;
 //                                avukat açıkça "Yine de üzerine yaz" derse force_overwrite=true
-// Toplu işlemde hiçbir zaman force gönderilmez; atlananlar listelenir.
+//   409 code=CONFLICT_REVIEW_REQUIRED → öneri avukatın girdiği dolu bir değerin üzerine
+//                                yazacak; aynı "Yine de üzerine yaz" onayı gerekir
+// Toplu işlemde hiçbir zaman force gönderilmez; atlananlar kodu ve nedeniyle listelenir.
+// Ret de expected_updated_at taşır (görülmemiş sürüm reddedilmez).
 
-export type ProposalConflictCode = 'PROPOSAL_CHANGED' | 'TARGET_CHANGED'
+export type ProposalConflictCode = 'PROPOSAL_CHANGED' | 'TARGET_CHANGED' | 'CONFLICT_REVIEW_REQUIRED'
+
+const CONFLICT_CODES: readonly string[] = ['PROPOSAL_CHANGED', 'TARGET_CHANGED', 'CONFLICT_REVIEW_REQUIRED']
 
 export function proposalErrorCode(error: unknown): ProposalConflictCode | null {
   const response = (error as { response?: { status?: number; data?: { code?: unknown } } })?.response
   const code = response?.data?.code
-  return code === 'PROPOSAL_CHANGED' || code === 'TARGET_CHANGED' ? code : null
+  return typeof code === 'string' && CONFLICT_CODES.includes(code) ? (code as ProposalConflictCode) : null
+}
+
+// Bu kodlar avukatın açık "Yine de üzerine yaz" onayıyla (force_overwrite) aşılabilir.
+export function needsOverwriteConfirmation(code: ProposalConflictCode | null): code is 'TARGET_CHANGED' | 'CONFLICT_REVIEW_REQUIRED' {
+  return code === 'TARGET_CHANGED' || code === 'CONFLICT_REVIEW_REQUIRED'
+}
+
+export function overwriteDialogText(code: 'TARGET_CHANGED' | 'CONFLICT_REVIEW_REQUIRED'): { title: string; explanation: string } {
+  if (code === 'CONFLICT_REVIEW_REQUIRED') {
+    return {
+      title: 'Girdiğiniz değerin üzerine yazılacak',
+      explanation: 'Bu öneri sizin girdiğiniz dolu bir değeri değiştiriyor. Aşağıda kaydın güncel hâli ve önerinin yazacağı değerler var.',
+    }
+  }
+  return {
+    title: 'Kayıt siz tarafından değiştirilmiş',
+    explanation: 'Öneri geldikten sonra bu kayıt değişti. Aşağıda kaydın güncel (yoksa öneri anındaki) hâli ve önerinin yazacağı değerler var.',
+  }
+}
+
+export function buildRejectBody(proposal: Pick<ProposalRow, 'updatedAt'>, note?: string): Record<string, unknown> {
+  const body: Record<string, unknown> = { expected_updated_at: proposal.updatedAt }
+  const trimmed = note?.trim()
+  if (trimmed) body.note = trimmed
+  return body
+}
+
+// Toplu onay onay-penceresi metni: sunucunun gerçekten yaptığını söyler.
+export function bulkApproveDescription(rows: Array<Pick<ProposalRow, 'conflict'>>): string {
+  const conflicts = rows.filter((r) => r.conflict).length
+  const parts = ['Seçili öneriler kayıtlara işlenecek.']
+  if (conflicts) parts.push(`Seçimdeki ${conflicts} çakışmalı öneri uygulanmayacak; bunları tek tek inceleyin.`)
+  parts.push(
+    'Girdiğiniz dolu bir değerin üzerine yazacak veya siz incelerken değişen öneriler toplu onayda uygulanmaz, atlanır; sonuçta nedeniyle listelenir. Toplu işlemde hiçbir kayıt zorla üzerine yazılmaz.'
+  )
+  return parts.join(' ')
 }
 
 export function buildApproveBody(
@@ -518,6 +559,8 @@ export interface BulkResultRow {
 const BULK_CODE_LABELS: Record<string, string> = {
   PROPOSAL_CHANGED: 'öneri güncellendi, yeniden inceleyin',
   TARGET_CHANGED: 'kaydı siz düzenlemiştiniz, tek tek inceleyin',
+  CONFLICT_REVIEW_REQUIRED: 'girdiğiniz dolu bir değerin üzerine yazacak; tekli incelemeyle onaylayın',
+  NOT_FOUND: 'öneri bulunamadı',
 }
 
 // Toplu sonucu özetler: kaç tanesi uygulandı/reddedildi, hangileri atlandı ve neden.
@@ -527,6 +570,7 @@ export function summarizeBulkResults(results: BulkResultRow[]) {
     .filter((r) => r.status !== 'applied' && r.status !== 'rejected')
     .map((r) => ({
       id: r.id,
+      ...(r.code ? { code: r.code } : {}),
       reason: (r.code && BULK_CODE_LABELS[r.code]) || r.error || (r.status === 'failed' ? 'uygulanamadı' : 'atlandı'),
     }))
   return { done, skipped }

@@ -4,6 +4,10 @@ import {
   buildApproveBody,
   buildBulkBody,
   buildProposalDiff,
+  buildRejectBody,
+  bulkApproveDescription,
+  needsOverwriteConfirmation,
+  overwriteDialogText,
   formatProposalDate,
   groupProposals,
   proposalErrorCode,
@@ -104,6 +108,46 @@ describe('edit and approve', () => {
   })
 })
 
+describe('ikinci inceleme: çakışma incelemesi ve ret sürümü', () => {
+  it('L1: ret isteği expected_updated_at taşır', () => {
+    expect(buildRejectBody({ updatedAt: 'T1' })).toEqual({ expected_updated_at: 'T1' })
+    expect(buildRejectBody({ updatedAt: 'T1' }, '  yanlış  ')).toEqual({ expected_updated_at: 'T1', note: 'yanlış' })
+  })
+
+  it('H1c: CONFLICT_REVIEW_REQUIRED kodu okunur ve "Yine de üzerine yaz" diyaloğunu açar', () => {
+    const err = { response: { status: 409, data: { error: 'x', code: 'CONFLICT_REVIEW_REQUIRED' } } }
+    expect(proposalErrorCode(err)).toBe('CONFLICT_REVIEW_REQUIRED')
+    expect(needsOverwriteConfirmation('CONFLICT_REVIEW_REQUIRED')).toBe(true)
+    expect(needsOverwriteConfirmation('TARGET_CHANGED')).toBe(true)
+    expect(needsOverwriteConfirmation('PROPOSAL_CHANGED')).toBe(false)
+    expect(needsOverwriteConfirmation(null)).toBe(false)
+    expect(overwriteDialogText('CONFLICT_REVIEW_REQUIRED').title).toBe('Girdiğiniz değerin üzerine yazılacak')
+    expect(overwriteDialogText('TARGET_CHANGED').title).toBe('Kayıt siz tarafından değiştirilmiş')
+  })
+
+  it('H1: toplu onay atlanan çakışmalı kalemi kodu ve nedeniyle gösterir', () => {
+    expect(
+      summarizeBulkResults([
+        { id: 'a', status: 'applied' },
+        { id: 'b', status: 'error', code: 'CONFLICT_REVIEW_REQUIRED', error: 'Tekli incelemeyle onaylayın' },
+      ])
+    ).toEqual({
+      done: 1,
+      skipped: [{ id: 'b', code: 'CONFLICT_REVIEW_REQUIRED', reason: 'girdiğiniz dolu bir değerin üzerine yazacak; tekli incelemeyle onaylayın' }],
+    })
+  })
+
+  it('H1: toplu onay metni gerçeği söyler (çakışmalılar uygulanmaz, atlanır)', () => {
+    const plain = bulkApproveDescription([{ conflict: false }, { conflict: false }])
+    expect(plain).toContain('Seçili öneriler kayıtlara işlenecek.')
+    expect(plain).toContain('uygulanmaz, atlanır')
+    expect(plain).not.toContain('Seçimdeki')
+    const mixed = bulkApproveDescription([{ conflict: true }, { conflict: false }, { conflict: true }])
+    expect(mixed).toContain('Seçimdeki 2 çakışmalı öneri uygulanmayacak')
+    expect(mixed).not.toContain('sunucu bunları atlarsa')
+  })
+})
+
 describe('server responses', () => {
   it('reads conflict codes and readable error messages', () => {
     const err = { response: { status: 409, data: { error: 'Değişti', code: 'TARGET_CHANGED' } } }
@@ -127,7 +171,7 @@ describe('server responses', () => {
     ).toEqual({
       done: 1,
       skipped: [
-        { id: 'b', reason: 'kaydı siz düzenlemiştiniz, tek tek inceleyin' },
+        { id: 'b', code: 'TARGET_CHANGED', reason: 'kaydı siz düzenlemiştiniz, tek tek inceleyin' },
         { id: 'c', reason: 'Müvekkil yok' },
       ],
     })

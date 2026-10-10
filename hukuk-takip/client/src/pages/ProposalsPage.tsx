@@ -18,6 +18,8 @@ import {
   PROPOSAL_STATUS_TABS,
   groupProposals,
   proposalErrorCode,
+  needsOverwriteConfirmation,
+  bulkApproveDescription,
   proposalErrorMessage,
   summarizeBulkResults,
   type ProposalRow,
@@ -29,7 +31,7 @@ const STATUS_VALUES = PROPOSAL_STATUS_TABS.map((t) => t.value)
 interface BulkReport {
   action: 'approve' | 'reject'
   done: number
-  skipped: Array<{ id: string; reason: string; summary: string; caseTitle: string | null }>
+  skipped: Array<{ id: string; code?: string; reason: string; summary: string; caseTitle: string | null }>
 }
 
 export default function ProposalsPage() {
@@ -100,10 +102,12 @@ export default function ProposalsPage() {
         setTargetChanged(null)
         toast.warning('Öneri güncellendi, yeniden inceleyin.')
         void refetch()
-      } else if (code === 'TARGET_CHANGED') {
+      } else if (needsOverwriteConfirmation(code)) {
+        // TARGET_CHANGED veya CONFLICT_REVIEW_REQUIRED: avukatın açık "Yine de üzerine yaz" onayı gerekir.
         setEditing(null)
         const current = (response?.data?.current ?? response?.data?.before ?? null) as Record<string, unknown> | null
         setTargetChanged({
+          code,
           proposal,
           payload: opts.payload,
           note: opts.note,
@@ -222,7 +226,10 @@ export default function ProposalsPage() {
                   <li key={s.id} className="rounded bg-white/70 p-2">
                     <span className="font-medium">{s.summary}</span>
                     {s.caseTitle ? <span className="text-muted-foreground"> · {s.caseTitle}</span> : null}
-                    <span className="block text-amber-900">{s.reason}</span>
+                    <span className="block text-amber-900">
+                      {s.reason}
+                      {s.code ? <span className="ml-1 font-mono text-[10px] text-amber-700">({s.code})</span> : null}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -331,7 +338,7 @@ export default function ProposalsPage() {
         open={bulkAction === 'approve'}
         onOpenChange={(open) => !open && setBulkAction(null)}
         title={`${selectedRows.length} öneri onaylansın mı?`}
-        description={`Seçili öneriler kayıtlara işlenecek.${selectedRows.some((p) => p.conflict) ? ' Seçimde sizin düzenlediğiniz kayıtlar var; sunucu bunları atlarsa tek tek inceleyin.' : ''} Toplu işlemde hiçbir kayıt zorla üzerine yazılmaz.`}
+        description={bulkApproveDescription(selectedRows)}
         loading={bulk.isPending}
         onConfirm={() => void runBulk('approve')}
       />

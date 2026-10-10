@@ -6,6 +6,7 @@ import { api } from '@/lib/axios'
 import {
   buildApproveBody,
   buildBulkBody,
+  buildRejectBody,
   type BulkResultRow,
   type ProposalRow,
   type ProposalStatusFilter,
@@ -68,7 +69,7 @@ export function useRejectProposal() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: async ({ proposal, note }: { proposal: ProposalRow; note?: string }) =>
-      (await api.post(`/proposals/${proposal.id}/reject`, note?.trim() ? { note: note.trim() } : {})).data,
+      (await api.post(`/proposals/${proposal.id}/reject`, buildRejectBody(proposal, note))).data,
     onSettled: () => invalidateAfterDecision(qc),
   })
 }

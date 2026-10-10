@@ -5,6 +5,7 @@ import {
   applyEdits,
   buildProposalDiff,
   editFieldsFor,
+  overwriteDialogText,
   toEditValue,
   type ProposalRow,
 } from '@/lib/proposals'
@@ -188,9 +189,12 @@ export function RejectDialog({
   )
 }
 
-// ─── 409 TARGET_CHANGED: hedef kayıt öneriden sonra avukatça düzenlendi ─────
+// ─── 409 TARGET_CHANGED / CONFLICT_REVIEW_REQUIRED: açık "üzerine yaz" onayı ─────
+// TARGET_CHANGED: hedef kayıt öneriden sonra avukatça düzenlendi.
+// CONFLICT_REVIEW_REQUIRED: öneri avukatın girdiği dolu bir değerin üzerine yazacak.
 
 export interface TargetChangedState {
+  code: 'TARGET_CHANGED' | 'CONFLICT_REVIEW_REQUIRED'
   proposal: ProposalRow
   payload?: Record<string, unknown>
   note?: string
@@ -212,19 +216,19 @@ export function TargetChangedDialog({
   const rows = state
     ? buildProposalDiff(state.proposal.kind, state.payload ?? state.proposal.payload, state.current ?? state.proposal.before)
     : []
+  const text = overwriteDialogText(state?.code ?? 'TARGET_CHANGED')
   return (
     <Dialog open={!!state} onOpenChange={(v) => !v && !busy && onClose()}>
       <DialogContent className="max-h-[90dvh] max-w-lg overflow-y-auto rounded-xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-amber-600" />
-            Kayıt siz tarafından değiştirilmiş
+            {text.title}
           </DialogTitle>
           <DialogDescription>{state?.message}</DialogDescription>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Öneri geldikten sonra bu kaydı düzenlediniz. Aşağıda kaydın {state?.current ? 'güncel' : 'öneri anındaki'} hâli ve önerinin yazacağı değerler var.
-          Emin değilseniz vazgeçip kaydı açarak kontrol edin.
+          {text.explanation} Emin değilseniz vazgeçip kaydı açarak kontrol edin.
         </p>
         <ProposalDiff rows={rows} />
         <DialogFooter className="gap-2">
