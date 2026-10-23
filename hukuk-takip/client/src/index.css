@@ -350,6 +350,20 @@ html.theme-chamber {
     will-change: scroll-position;
   }
 
+  /* Uygulama iskeleti (h-screen yerine). body'nin üst güvenli alan payı düşülür
+     ve görünen alan (dvh) kullanılır; aksi halde iskeletin altı ekran dışına
+     taşıyor, son satırlar (ör. sayfalama) alt menünün arkasında kalıyordu.
+     dvh desteklemeyen eski tarayıcılar 100vh'ye düşer. */
+  .app-shell {
+    height: calc(100vh - env(safe-area-inset-top, 0px));
+  }
+
+  @supports (height: 100dvh) {
+    .app-shell {
+      height: calc(100dvh - env(safe-area-inset-top, 0px));
+    }
+  }
+
   /* Yatay scroll'lu tablolar (CasesPage, CMK, vb) — parmak yatay/dikey arası
      kararsız kalırken yatay scroll dikeyi bloklamasın. Dikey kaydırma her
      zaman önce çalışır. */

@@ -467,14 +467,16 @@ export default function CasesPage() {
                     <p className="text-xs text-muted-foreground">
                       {(page - 1) * pageSize + 1}-{Math.min(page * pageSize, total)} / {total}
                     </p>
+                    {/* Mobilde 44px dokunma hedefi; md ve üstünde eski 28px görünüm korunur. */}
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
                         onClick={() => setPage((currentPage) => Math.max(1, currentPage - 1))}
                         disabled={page === 1}
-                        className="rounded p-1.5 text-muted-foreground transition hover:bg-muted disabled:opacity-30"
+                        aria-label="Önceki sayfa"
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-lg border text-muted-foreground transition hover:bg-muted active:bg-muted disabled:opacity-30 md:h-7 md:w-7 md:rounded md:border-0"
                       >
-                        <ChevronLeft className="h-4 w-4" />
+                        <ChevronLeft className="h-5 w-5 md:h-4 md:w-4" />
                       </button>
                       <span className="px-2 text-xs font-medium">
                         {page} / {totalPages}
@@ -483,9 +485,10 @@ export default function CasesPage() {
                         type="button"
                         onClick={() => setPage((currentPage) => Math.min(totalPages, currentPage + 1))}
                         disabled={page === totalPages}
-                        className="rounded p-1.5 text-muted-foreground transition hover:bg-muted disabled:opacity-30"
+                        aria-label="Sonraki sayfa"
+                        className="inline-flex h-11 w-11 items-center justify-center rounded-lg border text-muted-foreground transition hover:bg-muted active:bg-muted disabled:opacity-30 md:h-7 md:w-7 md:rounded md:border-0"
                       >
-                        <ChevronRight className="h-4 w-4" />
+                        <ChevronRight className="h-5 w-5 md:h-4 md:w-4" />
                       </button>
                     </div>
                   </div>

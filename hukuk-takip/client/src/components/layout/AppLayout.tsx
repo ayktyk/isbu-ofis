@@ -193,13 +193,18 @@ export default function AppLayout() {
   useSidebarSwipe(sidebarOpen, openSidebar, closeSidebar)
 
   return (
-    <div className="flex h-screen overflow-hidden bg-background">
+    <div className="app-shell flex overflow-hidden bg-background">
       <RefreshBar />
       <Sidebar open={sidebarOpen} onClose={closeSidebar} />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header onMenuToggle={toggleSidebar} />
         <ConnectionStatus />
-        <main id="app-scroll-main" className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-[calc(64px+env(safe-area-inset-bottom)+16px)] sm:p-4 md:p-6 md:pb-6">
+        {/* Mobil alt boşluk: MobileBottomNav ~71px + güvenli alan; 4.5rem (72px) + 1rem
+            pay son satırı (ör. sayfalama) menünün üstünde tutar. Menü de çoğunlukla rem
+            ile ölçülü; tarayıcıda büyük yazı seçilince ikisi birlikte büyür. sm'de p-4
+            yerine px/pt verilir, yoksa menü hâlâ görünürken (md altı) bu boşluk 16px'e
+            eziliyordu. */}
+        <main id="app-scroll-main" className="flex-1 overflow-y-auto overflow-x-hidden p-3 pb-[calc(4.5rem+env(safe-area-inset-bottom)+1rem)] sm:px-4 sm:pt-4 md:p-6 md:pb-6">
           {/* Ic Suspense: sekme degistiginde layout kalir, yalnizca icerik
               alani skeleton gosterir — bos/titrek ekran olmaz. */}
           <Suspense fallback={<InlinePageLoader />}>
