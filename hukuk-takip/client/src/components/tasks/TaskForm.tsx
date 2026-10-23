@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import {
   createTaskSchema,
@@ -9,15 +9,20 @@ import {
   type CreateTaskInput,
   type UpdateTaskInput,
 } from '@hukuk-takip/shared'
-import { AlertTriangle, Loader2, Plus, Save } from 'lucide-react'
+import { AlertTriangle, Lightbulb, Loader2, Plus, Save } from 'lucide-react'
 import { useCreateTask, useUpdateTask } from '@/hooks/useTasks'
 import { taskPriorityLabels, taskStatusLabels } from '@/lib/utils'
 import { taskCategoryOptions } from '@/lib/taskCategory'
 import { findDuplicateTitle } from '@/lib/textSearch'
+import { STRONG_SUGGESTION_SCORE, suggestCases, type CaseOption } from '@/lib/caseSuggest'
 import { Card, CardContent } from '@/components/ui/card'
+import CaseCombobox, { type CaseListStatus } from '@/components/shared/CaseCombobox'
 import QuickAddCaseDialog from '@/components/shared/QuickAddCaseDialog'
+import CaseSuggestionChips from './CaseSuggestionChips'
 
 type TaskFormValues = CreateTaskInput & Pick<UpdateTaskInput, 'status'>
+
+const NO_CASES: CaseOption[] = []
 
 /**
  * Gorev ekleme ve duzenleme formu — TEK kaynak.
@@ -32,14 +37,20 @@ export default function TaskForm({
   task,
   casesList,
   cmkList,
+  caseTotal,
+  casesStatus = 'ready',
   existingTasks,
   onDone,
   onCancel,
 }: {
   mode: 'create' | 'edit'
   task?: any
-  casesList: any[]
-  cmkList: any[]
+  casesList: CaseOption[]
+  cmkList: CaseOption[]
+  // Sunucudaki toplam dava sayisi (yuklenenden fazlaysa secicide not cikar) ve
+  // listenin durumu (yuklenirken secici "dava yok" demesin).
+  caseTotal?: number
+  casesStatus?: CaseListStatus
   existingTasks: Array<{ id: string; title: string }>
   onDone: () => void
   onCancel?: () => void
@@ -51,9 +62,11 @@ export default function TaskForm({
 
   const {
     register,
+    control,
     handleSubmit,
     reset,
     watch,
+    getValues,
     setValue,
     formState: { errors },
   } = useForm<TaskFormValues>({
@@ -72,12 +85,89 @@ export default function TaskForm({
 
   const selectedCategory = watch('category')
   const watchedTitle = watch('title') || ''
+  const watchedDescription = watch('description') || ''
+  const selectedCaseId = watch('caseId') || ''
   const showCaseSelect = selectedCategory === 'dava' || selectedCategory === 'cmk'
   const isCmkCategory = selectedCategory === 'cmk'
 
   // Ayni baslikta gorev zaten varsa uyarilir — ENGELLENMEZ. Avukat bilerek
   // benzer gorev ekleyebilir; amac yanlislikla iki kez yazmayi onlemek.
   const duplicate = findDuplicateTitle(watchedTitle, existingTasks, isEdit ? task?.id : undefined)
+
+  // Oneri metni baslik + aciklama. useDeferredValue: 1000 davalik tarama
+  // yazarken klavyeyi bekletmesin — harf hemen basilir, oneri bosta hesaplanir.
+  const suggestionText = useDeferredValue(`${watchedTitle} ${watchedDescription}`)
+
+  // 'genel'de iki liste de taranir: gorev aslinda bir dosyayla ilgiliyse ipucu
+  // verilir. 'arabuluculuk' davaya baglanmaz (avukat karari) — oneri de yok.
+  const suggestionPool = useMemo(() => {
+    if (selectedCategory === 'dava') return casesList
+    if (selectedCategory === 'cmk') return cmkList
+    if (selectedCategory === 'genel') return [...casesList, ...cmkList]
+    return NO_CASES
+  }, [selectedCategory, casesList, cmkList])
+
+  const suggestions = useMemo(
+    () => suggestCases(suggestionText, suggestionPool),
+    [suggestionText, suggestionPool]
+  )
+  const suggestedCases = useMemo(() => suggestions.map((item) => item.case), [suggestions])
+  const strongSuggestions = useMemo(
+    () =>
+      suggestions
+        .filter((item) => item.score >= STRONG_SUGGESTION_SCORE)
+        .slice(0, 2)
+        .map((item) => item.case),
+    [suggestions]
+  )
+
+  // Kategori dava/cmk'ya gecince secili dava yeni listede yoksa ama oteki
+  // listedeyse baglanti temizlenir: normal dava CMK seciminde (ya da tersi)
+  // gorunmez sekilde secili kalmasin. Ilk acilista calismaz (onceki kategori
+  // ref'te); listelerde hic olmayan (arsivlenmis) baglantiya dokunulmaz.
+  // Listeler henuz gelmediyse kontrol bekler, gelince bir kez yapilir.
+  const previousCategory = useRef(selectedCategory)
+  const pendingCaseCheck = useRef(false)
+  useEffect(() => {
+    const changed = previousCategory.current !== selectedCategory
+    previousCategory.current = selectedCategory
+    if (!changed && !pendingCaseCheck.current) return
+    pendingCaseCheck.current = false
+    if (selectedCategory !== 'dava' && selectedCategory !== 'cmk') return
+    pendingCaseCheck.current = casesStatus !== 'ready'
+    if (pendingCaseCheck.current) return
+
+    const caseId = getValues('caseId')
+    if (!caseId) return
+    const nextList = selectedCategory === 'cmk' ? cmkList : casesList
+    const otherList = selectedCategory === 'cmk' ? casesList : cmkList
+    const inNext = nextList.some((item) => item.id === caseId)
+    if (!inNext && otherList.some((item) => item.id === caseId)) {
+      setValue('caseId', '', { shouldDirty: true })
+    }
+  }, [selectedCategory, casesList, cmkList, casesStatus, getValues, setValue])
+
+  // Secili dava acik listede yoksa (arsivlenmis, ya da + ile yeni eklenmis ve
+  // liste henuz yenilenmemis) secicide gosterilecek ad. Gorevin eski dava adi
+  // yalniz o dava hala seciliyse kullanilir; yoksa yeni dava eski adla gorunurdu.
+  const fallbackLabel = useMemo(() => {
+    if (!selectedCaseId) return null
+    const known =
+      casesList.find((item) => item.id === selectedCaseId) ??
+      cmkList.find((item) => item.id === selectedCaseId)
+    if (known) return known.title
+    return task?.caseId === selectedCaseId ? task?.caseTitle ?? null : null
+  }, [selectedCaseId, casesList, cmkList, task])
+
+  function pickSuggestedCase(item: CaseOption) {
+    setValue('caseId', item.id, { shouldDirty: true })
+  }
+
+  // 'genel' ipucundan secim: kategori de davanin turune gore degisir.
+  function pickCategorySuggestion(item: CaseOption) {
+    setValue('category', item.isCmkAssignment ? 'cmk' : 'dava', { shouldDirty: true })
+    setValue('caseId', item.id, { shouldDirty: true })
+  }
 
   const isPending = isEdit ? updateTask.isPending : createTask.isPending
 
@@ -151,6 +241,17 @@ export default function TaskForm({
                   </label>
                 ))}
               </div>
+
+              {/* Oneri yalniz ipucu: dokunulmadikca kategori ve dava degismez. */}
+              {selectedCategory === 'genel' && strongSuggestions.length > 0 && (
+                <div className="mt-2 rounded-lg border border-dashed border-accent/40 bg-background/70 p-2.5">
+                  <p className="mb-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Lightbulb className="h-3.5 w-3.5 flex-shrink-0" />
+                    Bu görev şu dosyayla ilgili olabilir:
+                  </p>
+                  <CaseSuggestionChips items={strongSuggestions} onPick={pickCategorySuggestion} />
+                </div>
+              )}
             </div>
 
             {showCaseSelect && (
@@ -159,23 +260,42 @@ export default function TaskForm({
                   {isCmkCategory ? 'İlgili CMK Dosyası' : 'İlgili Dava'}
                 </label>
                 <div className="flex gap-2">
-                  <select {...register('caseId')} className={inputClass}>
-                    <option value="">Seçilmedi</option>
-                    {(isCmkCategory ? cmkList : casesList).map((item: any) => (
-                      <option key={item.id} value={item.id}>
-                        {item.title}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="min-w-0 flex-1">
+                    <Controller
+                      control={control}
+                      name="caseId"
+                      render={({ field }) => (
+                        <CaseCombobox
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          cases={isCmkCategory ? cmkList : casesList}
+                          suggestions={suggestedCases}
+                          fallbackLabel={fallbackLabel}
+                          totalAvailable={caseTotal}
+                          loadedCount={casesList.length + cmkList.length}
+                          status={casesStatus}
+                          kind={isCmkCategory ? 'cmk' : 'dava'}
+                          ariaLabel={isCmkCategory ? 'İlgili CMK dosyası' : 'İlgili dava'}
+                        />
+                      )}
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => setCaseDialogOpen(true)}
-                    className="flex-shrink-0 rounded-lg border px-3 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                    className="flex min-h-11 min-w-11 flex-shrink-0 items-center justify-center rounded-lg border text-muted-foreground transition hover:bg-muted hover:text-foreground"
                     title={isCmkCategory ? 'Yeni CMK dosyası ekle' : 'Yeni dava ekle'}
+                    aria-label={isCmkCategory ? 'Yeni CMK dosyası ekle' : 'Yeni dava ekle'}
                   >
                     <Plus className="h-4 w-4" />
                   </button>
                 </div>
+                {/* Yer ayrilir: aciklama yazilirken cip cikip kaybolunca alttaki alanlar oynamasin. */}
+                {!selectedCaseId && (
+                  <div className="mt-2 min-h-11 sm:min-h-9">
+                    <CaseSuggestionChips items={suggestedCases} onPick={pickSuggestedCase} label="Önerilen:" />
+                  </div>
+                )}
               </div>
             )}
 
@@ -264,11 +384,13 @@ export default function TaskForm({
         </CardContent>
       </Card>
 
+      {/* key: diyalog CMK kutusunu ilk kurulusta okur; kategori degisince yeniden kurulsun. */}
       <QuickAddCaseDialog
+        key={isCmkCategory ? 'cmk' : 'dava'}
         open={caseDialogOpen}
         onOpenChange={setCaseDialogOpen}
         defaultCmk={isCmkCategory}
-        onCreated={(newCaseId) => setValue('caseId', newCaseId)}
+        onCreated={(newCaseId) => setValue('caseId', newCaseId, { shouldDirty: true })}
       />
     </>
   )

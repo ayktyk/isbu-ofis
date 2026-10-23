@@ -62,6 +62,9 @@ const groupLabels: Record<number, string> = {
   2: 'Tamamlananlar',
 }
 
+// Sabit bos dizi: her render'da yeni [] TaskForm'daki useMemo'lari bosuna calistirirdi.
+const NO_CASES: any[] = []
+
 export default function TasksPage() {
   const [params] = useSearchParams()
   const focusedTask = params.get('task')
@@ -78,19 +81,20 @@ export default function TasksPage() {
     isDeadline: focusedTask ? undefined : false,
   })
 
-  // Normal davalar ve CMK dosyalari ayri cekilir: gorev formunda kategori
-  // secimine gore dogru liste gosterilir. (Onceden yalnizca normal davalar
-  // cekiliyordu — bir gorev CMK dosyasina hic baglanamiyordu.)
-  const { data: casesData } = useCases({ pageSize: 100 })
-  const { data: cmkData } = useCases({ isCmk: 'only', pageSize: 100 })
+  // Normal + CMK davalar TEK istekte (isCmk: 'include') gelir, asagida ayrilir. pageSize
+  // 1000: eski 100 sinirinda fazlasi secicide cikmiyordu (sessiz kesme); arama istemcide.
+  const { data: casesData, isError: casesError } = useCases({ isCmk: 'include', pageSize: 1000 })
+  const casesStatus = casesData ? 'ready' : casesError ? 'error' : 'loading'
 
   const updateStatus = useUpdateTaskStatus()
   const deleteTask = useDeleteTask()
   const reorderTasks = useReorderTasks()
 
   const tasks = Array.isArray(data) ? data : data?.data || []
-  const casesList = casesData?.data || []
-  const cmkList = cmkData?.data || []
+  const allCases: any[] = casesData?.data ?? NO_CASES
+  const casesList = useMemo(() => allCases.filter((c: any) => !c.isCmkAssignment), [allCases])
+  const cmkList = useMemo(() => allCases.filter((c: any) => c.isCmkAssignment), [allCases])
+  const caseTotal: number | undefined = casesData?.total
 
   // Arama ve kategori filtresi istemci tarafinda: liste zaten tek istekte
   // geliyor, sunucuya gitmeden aninda daraliyor.
@@ -220,6 +224,8 @@ export default function TasksPage() {
           mode="create"
           casesList={casesList}
           cmkList={cmkList}
+          caseTotal={caseTotal}
+          casesStatus={casesStatus}
           existingTasks={existingTasks}
           onDone={() => setShowForm(false)}
         />
@@ -384,6 +390,8 @@ export default function TasksPage() {
                               task={task}
                               casesList={casesList}
                               cmkList={cmkList}
+                              caseTotal={caseTotal}
+                              casesStatus={casesStatus}
                               existingTasks={existingTasks}
                               onDone={() => setEditingId(null)}
                               onCancel={() => setEditingId(null)}
